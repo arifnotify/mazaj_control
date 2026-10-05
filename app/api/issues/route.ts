@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Issue from "@/models/Issue";
 
+// GET: সব issues
 export async function GET() {
   try {
     await connectDB();
@@ -12,15 +13,20 @@ export async function GET() {
 
     return NextResponse.json(issues);
   } catch (error) {
-    console.error(error);
+    console.error("GET ISSUES ERROR:", error);
 
     return NextResponse.json(
-      { error: "Failed to fetch issues" },
-      { status: 500 }
+      {
+        error: "Failed to fetch issues",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
 
+// POST: নতুন issue তৈরি
 export async function POST(request: Request) {
   try {
     await connectDB();
@@ -56,13 +62,19 @@ export async function POST(request: Request) {
       status: "open",
     });
 
-    return NextResponse.json(issue, { status: 201 });
+    return NextResponse.json(issue, {
+      status: 201,
+    });
   } catch (error) {
-    console.error(error);
+    console.error("CREATE ISSUE ERROR:", error);
 
     return NextResponse.json(
-      { error: "Failed to create issue" },
-      { status: 500 }
+      {
+        error: "Failed to create issue",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
