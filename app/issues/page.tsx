@@ -46,6 +46,7 @@ const statusLabels: Record<string, string> = {
 export default function IssuesPage() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
 
   async function loadIssues() {
@@ -53,14 +54,9 @@ export default function IssuesPage() {
       setLoading(true);
 
       const response = await fetch("/api/issues");
-
       const data = await response.json();
 
-      if (Array.isArray(data)) {
-        setIssues(data);
-      } else {
-        setIssues([]);
-      }
+      setIssues(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to load issues:", error);
     } finally {
@@ -71,6 +67,43 @@ export default function IssuesPage() {
   useEffect(() => {
     loadIssues();
   }, []);
+
+  async function updateStatus(
+    issueId: string,
+    status: Issue["status"]
+  ) {
+    try {
+      setUpdating(issueId);
+
+      const response = await fetch(`/api/issues/${issueId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Failed to update issue");
+        return;
+      }
+
+      setIssues((currentIssues) =>
+        currentIssues.map((issue) =>
+          issue._id === issueId ? data : issue
+        )
+      );
+    } catch (error) {
+      console.error("Update issue error:", error);
+      alert("Failed to update issue");
+    } finally {
+      setUpdating(null);
+    }
+  }
 
   const filteredIssues =
     filter === "all"
@@ -123,44 +156,32 @@ export default function IssuesPage() {
           </button>
         </div>
 
-        {/* Statistics */}
+        {/* Stats */}
         <div className="grid grid-cols-4 gap-5 mb-8">
 
           <div className="bg-white rounded-xl shadow-sm p-6">
-            <p className="text-gray-500">
-              Total Issues
-            </p>
-
+            <p className="text-gray-500">Total Issues</p>
             <p className="text-3xl font-bold mt-2">
               {issues.length}
             </p>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm p-6">
-            <p className="text-gray-500">
-              Open
-            </p>
-
+            <p className="text-gray-500">Open</p>
             <p className="text-3xl font-bold text-red-600 mt-2">
               {openCount}
             </p>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm p-6">
-            <p className="text-gray-500">
-              In Progress
-            </p>
-
+            <p className="text-gray-500">In Progress</p>
             <p className="text-3xl font-bold text-orange-500 mt-2">
               {progressCount}
             </p>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm p-6">
-            <p className="text-gray-500">
-              Fixed
-            </p>
-
+            <p className="text-gray-500">Fixed</p>
             <p className="text-3xl font-bold text-green-600 mt-2">
               {fixedCount}
             </p>
@@ -170,51 +191,28 @@ export default function IssuesPage() {
 
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
 
-            <button
-              onClick={() => setFilter("all")}
-              className={`px-4 py-2 rounded-lg ${
-                filter === "all"
-                  ? "bg-black text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              All
-            </button>
-
-            <button
-              onClick={() => setFilter("open")}
-              className={`px-4 py-2 rounded-lg ${
-                filter === "open"
-                  ? "bg-black text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              Open
-            </button>
-
-            <button
-              onClick={() => setFilter("in_progress")}
-              className={`px-4 py-2 rounded-lg ${
-                filter === "in_progress"
-                  ? "bg-black text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              In Progress
-            </button>
-
-            <button
-              onClick={() => setFilter("fixed")}
-              className={`px-4 py-2 rounded-lg ${
-                filter === "fixed"
-                  ? "bg-black text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              Fixed
-            </button>
+            {[
+              ["all", "All"],
+              ["open", "Open"],
+              ["in_progress", "In Progress"],
+              ["fixed", "Fixed"],
+              ["verified", "Verified"],
+              ["closed", "Closed"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setFilter(value)}
+                className={`px-4 py-2 rounded-lg ${
+                  filter === value
+                    ? "bg-black text-white"
+                    : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
 
           </div>
         </div>
@@ -238,21 +236,22 @@ export default function IssuesPage() {
             </div>
           ) : (
             filteredIssues.map((issue) => (
+
               <div
                 key={issue._id}
                 className="bg-white rounded-xl shadow-sm p-6"
               >
+
+                {/* Top */}
                 <div className="flex items-start justify-between">
 
                   <div>
                     <h2 className="text-xl font-bold">
-                      {issue.productId?.name ||
-                        "Unknown Product"}
+                      {issue.productId?.name || "Unknown Product"}
                     </h2>
 
                     <p className="text-sm text-gray-500 mt-1">
-                      SKU:{" "}
-                      {issue.productId?.sku || "-"}
+                      SKU: {issue.productId?.sku || "-"}
                     </p>
                   </div>
 
@@ -265,12 +264,12 @@ export default function IssuesPage() {
                         : "bg-green-100 text-green-700"
                     }`}
                   >
-                    {statusLabels[issue.status] ||
-                      issue.status}
+                    {statusLabels[issue.status]}
                   </div>
 
                 </div>
 
+                {/* Details */}
                 <div className="grid grid-cols-3 gap-4 mt-6">
 
                   <div className="border rounded-lg p-4">
@@ -289,8 +288,7 @@ export default function IssuesPage() {
                     </p>
 
                     <p className="font-semibold mt-1">
-                      {issueLabels[issue.type] ||
-                        issue.type}
+                      {issueLabels[issue.type] || issue.type}
                     </p>
                   </div>
 
@@ -308,6 +306,7 @@ export default function IssuesPage() {
 
                 </div>
 
+                {/* Note */}
                 {issue.note && (
                   <div className="mt-4 bg-gray-50 rounded-lg p-4">
                     <p className="text-sm text-gray-500">
@@ -320,12 +319,91 @@ export default function IssuesPage() {
                   </div>
                 )}
 
+                {/* Status Actions */}
+                <div className="mt-6 border-t pt-5">
+
+                  <p className="text-sm font-semibold text-gray-700 mb-3">
+                    Update Status
+                  </p>
+
+                  <div className="flex gap-3 flex-wrap">
+
+                    {issue.status === "open" && (
+                      <button
+                        disabled={updating === issue._id}
+                        onClick={() =>
+                          updateStatus(
+                            issue._id,
+                            "in_progress"
+                          )
+                        }
+                        className="rounded-lg bg-orange-500 px-4 py-2 text-white font-medium hover:bg-orange-600 disabled:opacity-50"
+                      >
+                        {updating === issue._id
+                          ? "Updating..."
+                          : "Start Work"}
+                      </button>
+                    )}
+
+                    {issue.status === "in_progress" && (
+                      <button
+                        disabled={updating === issue._id}
+                        onClick={() =>
+                          updateStatus(
+                            issue._id,
+                            "fixed"
+                          )
+                        }
+                        className="rounded-lg bg-green-600 px-4 py-2 text-white font-medium hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {updating === issue._id
+                          ? "Updating..."
+                          : "Mark Fixed"}
+                      </button>
+                    )}
+
+                    {issue.status === "fixed" && (
+                      <button
+                        disabled={updating === issue._id}
+                        onClick={() =>
+                          updateStatus(
+                            issue._id,
+                            "verified"
+                          )
+                        }
+                        className="rounded-lg bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {updating === issue._id
+                          ? "Updating..."
+                          : "Verify"}
+                      </button>
+                    )}
+
+                    {issue.status === "verified" && (
+                      <button
+                        disabled={updating === issue._id}
+                        onClick={() =>
+                          updateStatus(
+                            issue._id,
+                            "closed"
+                          )
+                        }
+                        className="rounded-lg bg-gray-800 px-4 py-2 text-white font-medium hover:bg-black disabled:opacity-50"
+                      >
+                        {updating === issue._id
+                          ? "Updating..."
+                          : "Close Issue"}
+                      </button>
+                    )}
+
+                  </div>
+                </div>
+
               </div>
             ))
           )}
 
         </div>
-
       </div>
     </main>
   );
