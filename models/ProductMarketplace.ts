@@ -41,7 +41,12 @@ const ProductMarketplaceSchema = new Schema(
 
     syncStatus: {
       type: String,
-      enum: ["synced", "pending", "failed", "not_connected"],
+      enum: [
+        "synced",
+        "pending",
+        "failed",
+        "not_connected",
+      ],
       default: "not_connected",
     },
   },
@@ -50,5 +55,19 @@ const ProductMarketplaceSchema = new Schema(
   }
 );
 
+// একই product + marketplace যেন duplicate না হয়
+ProductMarketplaceSchema.index(
+  {
+    productId: 1,
+    marketplace: 1,
+  },
+  {
+    unique: true,
+  }
+);
+
 export default models.ProductMarketplace ||
-  model("ProductMarketplace", ProductMarketplaceSchema);
+  model(
+    "ProductMarketplace",
+    ProductMarketplaceSchema
+  );

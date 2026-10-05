@@ -2,53 +2,223 @@
 
 import { useEffect, useState } from "react";
 
-const marketplaces = ["Talabat", "Snoonu", "Rafeeq", "Keeta"];
+type Product = {
+  _id: string;
+  sku: string;
+  name: string;
+  description: string;
+  image: string;
+  category: string;
+  price: number;
+  stock: number;
+  active: boolean;
+};
 
-const issueTypes = [
-  ["price", "Price"],
-  ["name", "Name"],
-  ["description", "Description"],
-  ["image", "Image"],
-  ["category", "Category"],
-  ["availability", "Availability"],
+type MarketplaceName =
+  | "Talabat"
+  | "Snoonu"
+  | "Rafeeq"
+  | "Keeta";
+
+type Marketplace = {
+  _id?: string;
+  productId: string;
+  marketplace: MarketplaceName;
+  available: boolean;
+  price: number;
+  name: string;
+  description: string;
+  image: string;
+  syncStatus: string;
+};
+
+const marketplaceNames: MarketplaceName[] = [
+  "Talabat",
+  "Snoonu",
+  "Rafeeq",
+  "Keeta",
 ];
 
-export default function ProductDetails({
+const issueTypes = [
+  {
+    key: "price",
+    label: "Price",
+  },
+  {
+    key: "name",
+    label: "Name",
+  },
+  {
+    key: "description",
+    label: "Description",
+  },
+  {
+    key: "image",
+    label: "Image",
+  },
+  {
+    key: "category",
+    label: "Category",
+  },
+  {
+    key: "availability",
+    label: "Availability",
+  },
+];
+
+export default function ProductDetailsPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const [productId, setProductId] = useState("");
-  const [product, setProduct] = useState<any>(null);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [marketplaces, setMarketplaces] = useState<
+    Marketplace[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
-  const [selectedMarketplace, setSelectedMarketplace] = useState("Talabat");
-  const [selectedIssues, setSelectedIssues] = useState<string[]>([]);
-  const [message, setMessage] = useState("");
+  const [savingMarketplace, setSavingMarketplace] =
+    useState<string | null>(null);
+
+  const [selectedMarketplace, setSelectedMarketplace] =
+    useState<MarketplaceName>("Talabat");
+
+  const [selectedIssues, setSelectedIssues] = useState<
+    string[]
+  >([]);
+
+  const [productId, setProductId] = useState("");
 
   useEffect(() => {
-    params.then((p) => {
-      setProductId(p.id);
+    async function loadData() {
+      try {
+        const { id } = await params;
 
-      fetch(`/api/products/${p.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setProduct(data);
-          setLoading(false);
-        })
-        .catch(() => setLoading(false));
-    });
-  }, [params]);
+        setProductId(id);
 
-  function toggleIssue(type: string) {
-    setSelectedIssues((current) =>
-      current.includes(type)
-        ? current.filter((x) => x !== type)
-        : [...current, type]
+        const productResponse = await fetch(
+          `/api/products/${id}`
+        );
+
+        const productData = await productResponse.json();
+
+        if (productResponse.ok) {
+          setProduct(productData);
+        }
+
+        const marketplaceResponse = await fetch(
+          `/api/marketplaces?productId=${id}`
+        );
+
+        const marketplaceData =
+          await marketplaceResponse.json();
+
+        if (
+          marketplaceResponse.ok &&
+          Array.isArray(marketplaceData)
+        ) {
+          setMarketplaces(marketplaceData);
+        }
+      } catch (error) {
+        console.error(
+          "Failed to load product:",
+          error
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
+  }, []);
+
+  function getMarketplace(
+    marketplace: MarketplaceName
+  ) {
+    return marketplaces.find(
+      (item) => item.marketplace === marketplace
     );
   }
 
-  async function reportProblems() {
-    if (!productId || selectedIssues.length === 0) return;
+  async function toggleMarketplace(
+    marketplace: MarketplaceName
+  ) {
+    if (!product) return;
+
+    const current = getMarketplace(marketplace);
+
+    try {
+      setSavingMarketplace(marketplace);
+
+      const response = await fetch(
+        "/api/marketplaces",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            productId: product._id,
+            marketplace,
+            available: current
+              ? !current.available
+              : true,
+            price: product.price,
+            name: product.name,
+            description: product.description,
+            image: product.image,
+            syncStatus: "pending",
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(
+          data.error ||
+            "Failed to update marketplace"
+        );
+        return;
+      }
+
+      setMarketplaces((currentList) => {
+        const exists = currentList.some(
+          (item) =>
+            item.marketplace === marketplace
+        );
+
+        if (exists) {
+          return currentList.map((item) =>
+            item.marketplace === marketplace
+              ? data
+              : item
+          );
+        }
+
+        return [...currentList, data];
+      });
+    } catch (error) {
+      console.error(
+        "Marketplace update error:",
+        error
+      );
+
+      alert(
+        "Failed to update marketplace"
+      );
+    } finally {
+      setSavingMarketplace(null);
+    }
+  }
+
+  async function reportIssues() {
+    if (!product) return;
+
+    if (selectedIssues.length === 0) {
+      alert("Please select at least one issue.");
+      return;
+    }
 
     try {
       for (const type of selectedIssues) {
@@ -58,150 +228,350 @@ export default function ProductDetails({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            productId,
-            marketplace: selectedMarketplace,
+            productId: product._id,
+            marketplace:
+              selectedMarketplace,
             type,
             note: "",
           }),
         });
       }
 
-      setMessage("Problem reported successfully.");
+      alert("Issue(s) reported successfully.");
+
       setSelectedIssues([]);
-    } catch {
-      setMessage("Failed to report problem.");
+    } catch (error) {
+      console.error(
+        "Report issue error:",
+        error
+      );
+
+      alert("Failed to report issue.");
     }
   }
 
+  function toggleIssue(type: string) {
+    setSelectedIssues((current) =>
+      current.includes(type)
+        ? current.filter(
+            (item) => item !== type
+          )
+        : [...current, type]
+    );
+  }
+
   if (loading) {
-    return <div className="p-8">Loading...</div>;
+    return (
+      <main className="min-h-screen bg-gray-100 p-8">
+        <div className="max-w-6xl mx-auto bg-white rounded-xl p-10 text-center">
+          Loading product...
+        </div>
+      </main>
+    );
   }
 
   if (!product) {
-    return <div className="p-8">Product not found.</div>;
+    return (
+      <main className="min-h-screen bg-gray-100 p-8">
+        <div className="max-w-6xl mx-auto bg-white rounded-xl p-10 text-center">
+          <h1 className="text-2xl font-bold">
+            Product not found
+          </h1>
+
+          <a
+            href="/products"
+            className="inline-block mt-5 bg-black text-white px-5 py-3 rounded-lg"
+          >
+            Back to Products
+          </a>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-6xl mx-auto">
 
-        <a href="/products" className="text-gray-500">
-          ← Back to Products
-        </a>
+        {/* Header */}
+        <div className="mb-8">
+          <a
+            href="/products"
+            className="text-sm text-gray-500 hover:text-black"
+          >
+            ← Products
+          </a>
 
-        <div className="mt-5 bg-white rounded-xl shadow p-6">
-          <h1 className="text-3xl font-bold">
+          <h1 className="text-3xl font-bold mt-3">
             {product.name}
           </h1>
 
           <p className="text-gray-500 mt-1">
             SKU: {product.sku}
           </p>
+        </div>
 
-          <div className="grid grid-cols-4 gap-4 mt-6">
+        {/* Master Product */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
 
-            <div className="border rounded-lg p-4">
-              <p className="text-gray-500">Category</p>
+          <h2 className="text-xl font-bold mb-5">
+            Master Product
+          </h2>
+
+          <div className="grid grid-cols-2 gap-5">
+
+            <div>
+              <p className="text-sm text-gray-500">
+                Product Name
+              </p>
+              <p className="font-semibold mt-1">
+                {product.name}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-500">
+                SKU
+              </p>
+              <p className="font-semibold mt-1">
+                {product.sku}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-500">
+                Category
+              </p>
               <p className="font-semibold mt-1">
                 {product.category || "-"}
               </p>
             </div>
 
-            <div className="border rounded-lg p-4">
-              <p className="text-gray-500">Price</p>
+            <div>
+              <p className="text-sm text-gray-500">
+                Price
+              </p>
               <p className="font-semibold mt-1">
-                QAR {product.price}
+                QAR {Number(product.price).toFixed(2)}
               </p>
             </div>
 
-            <div className="border rounded-lg p-4">
-              <p className="text-gray-500">Stock</p>
+            <div>
+              <p className="text-sm text-gray-500">
+                Stock
+              </p>
               <p className="font-semibold mt-1">
                 {product.stock}
               </p>
             </div>
 
-            <div className="border rounded-lg p-4">
-              <p className="text-gray-500">Status</p>
-              <p className="font-semibold text-green-600 mt-1">
-                {product.active ? "Active" : "Inactive"}
+            <div>
+              <p className="text-sm text-gray-500">
+                Status
+              </p>
+
+              <p className="font-semibold mt-1">
+                {product.active
+                  ? "Active"
+                  : "Inactive"}
               </p>
             </div>
 
           </div>
+
+          {product.description && (
+            <div className="mt-5">
+              <p className="text-sm text-gray-500">
+                Description
+              </p>
+
+              <p className="mt-1">
+                {product.description}
+              </p>
+            </div>
+          )}
+
         </div>
 
-        {/* Marketplace */}
-        <div className="mt-6 bg-white rounded-xl shadow p-6">
+        {/* Marketplace Status */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+
           <h2 className="text-xl font-bold">
             Marketplace Status
           </h2>
 
-          <div className="grid grid-cols-4 gap-4 mt-5">
-            {marketplaces.map((marketplace) => (
-              <button
-                key={marketplace}
-                onClick={() =>
-                  setSelectedMarketplace(marketplace)
-                }
-                className={`border rounded-lg p-5 text-left ${
-                  selectedMarketplace === marketplace
-                    ? "border-black bg-gray-50"
-                    : ""
-                }`}
-              >
-                <h3 className="font-bold">
-                  {marketplace}
-                </h3>
+          <p className="text-gray-500 mt-1 mb-6">
+            Control product availability on each marketplace.
+          </p>
 
-                <p className="text-gray-500 mt-2">
-                  Status not connected yet
-                </p>
-              </button>
-            ))}
+          <div className="grid grid-cols-4 gap-4">
+
+            {marketplaceNames.map(
+              (marketplace) => {
+                const data =
+                  getMarketplace(
+                    marketplace
+                  );
+
+                const available =
+                  data?.available ?? false;
+
+                const saving =
+                  savingMarketplace ===
+                  marketplace;
+
+                return (
+                  <div
+                    key={marketplace}
+                    className="border rounded-xl p-5"
+                  >
+
+                    <div className="flex items-center justify-between">
+
+                      <h3 className="font-bold">
+                        {marketplace}
+                      </h3>
+
+                      <span
+                        className={`w-3 h-3 rounded-full ${
+                          available
+                            ? "bg-green-500"
+                            : "bg-red-500"
+                        }`}
+                      />
+                    </div>
+
+                    <p
+                      className={`mt-3 text-sm font-medium ${
+                        available
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {available
+                        ? "Available"
+                        : "Unavailable"}
+                    </p>
+
+                    <button
+                      disabled={saving}
+                      onClick={() =>
+                        toggleMarketplace(
+                          marketplace
+                        )
+                      }
+                      className={`w-full mt-4 rounded-lg px-4 py-2 text-white font-medium disabled:opacity-50 ${
+                        available
+                          ? "bg-red-500 hover:bg-red-600"
+                          : "bg-green-600 hover:bg-green-700"
+                      }`}
+                    >
+                      {saving
+                        ? "Saving..."
+                        : available
+                        ? "Turn OFF"
+                        : "Turn ON"}
+                    </button>
+
+                    <p className="text-xs text-gray-400 mt-3">
+                      Sync:{" "}
+                      {data?.syncStatus ||
+                        "not_connected"}
+                    </p>
+
+                  </div>
+                );
+              }
+            )}
+
           </div>
         </div>
 
-        {/* Report Issue */}
-        <div className="mt-6 bg-white rounded-xl shadow p-6">
+        {/* Issue Report */}
+        <div className="bg-white rounded-xl shadow-sm p-6">
+
           <h2 className="text-xl font-bold">
-            Report Product Problem
+            Report Marketplace Issue
           </h2>
 
           <p className="text-gray-500 mt-1">
-            Marketplace: {selectedMarketplace}
+            Select marketplace and check the fields that are wrong.
           </p>
 
-          <div className="grid grid-cols-3 gap-3 mt-5">
-            {issueTypes.map(([value, label]) => (
-              <label
-                key={value}
-                className="border rounded-lg p-4 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIssues.includes(value)}
-                  onChange={() => toggleIssue(value)}
-                  className="mr-3"
-                />
-                {label}
-              </label>
-            ))}
+          {/* Marketplace */}
+          <div className="mt-6">
+
+            <p className="text-sm font-semibold mb-3">
+              Marketplace
+            </p>
+
+            <div className="flex gap-3 flex-wrap">
+
+              {marketplaceNames.map(
+                (marketplace) => (
+                  <button
+                    key={marketplace}
+                    onClick={() =>
+                      setSelectedMarketplace(
+                        marketplace
+                      )
+                    }
+                    className={`px-4 py-2 rounded-lg ${
+                      selectedMarketplace ===
+                      marketplace
+                        ? "bg-black text-white"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    {marketplace}
+                  </button>
+                )
+              )}
+
+            </div>
+          </div>
+
+          {/* Issues */}
+          <div className="mt-6">
+
+            <p className="text-sm font-semibold mb-3">
+              What is wrong?
+            </p>
+
+            <div className="grid grid-cols-3 gap-3">
+
+              {issueTypes.map((issue) => (
+                <label
+                  key={issue.key}
+                  className="border rounded-lg p-4 cursor-pointer hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIssues.includes(
+                      issue.key
+                    )}
+                    onChange={() =>
+                      toggleIssue(
+                        issue.key
+                      )
+                    }
+                    className="mr-3"
+                  />
+
+                  {issue.label}
+                </label>
+              ))}
+
+            </div>
           </div>
 
           <button
-            onClick={reportProblems}
-            disabled={selectedIssues.length === 0}
-            className="mt-5 bg-black text-white px-6 py-3 rounded-lg disabled:opacity-40"
+            onClick={reportIssues}
+            className="mt-6 rounded-lg bg-black px-6 py-3 text-white font-medium hover:bg-gray-800"
           >
-            Report Problem
+            Report Issue
           </button>
 
-          {message && (
-            <p className="mt-4 text-green-600">
-              {message}
-            </p>
-          )}
         </div>
 
       </div>
