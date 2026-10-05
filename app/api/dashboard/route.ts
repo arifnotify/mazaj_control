@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
-import ProductMarketplace from "@/models/ProductMarketplace";
+import Category from "@/models/Category";
 import Issue from "@/models/Issue";
 
 export async function GET() {
@@ -10,100 +10,100 @@ export async function GET() {
 
     const [
       totalProducts,
+      activeProducts,
+      inactiveProducts,
+      totalCategories,
       openIssues,
-      marketplaceData,
+      inProgressIssues,
+      fixedIssues,
+      verifiedIssues,
+      closedIssues,
+      marketplaceIssues,
     ] = await Promise.all([
       Product.countDocuments(),
 
-      Issue.countDocuments({
-        status: {
-          $in: ["open", "in_progress"],
-        },
+      Product.countDocuments({
+        active: true,
       }),
 
-      ProductMarketplace.find({
-        marketplace: {
-          $in: [
-            "Talabat",
-            "Snoonu",
-            "Rafeeq",
-            "Keeta",
-          ],
-        },
+      Product.countDocuments({
+        active: false,
       }),
+
+      Category.countDocuments(),
+
+      Issue.countDocuments({
+        status: "open",
+      }),
+
+      Issue.countDocuments({
+        status: "in_progress",
+      }),
+
+      Issue.countDocuments({
+        status: "fixed",
+      }),
+
+      Issue.countDocuments({
+        status: "verified",
+      }),
+
+      Issue.countDocuments({
+        status: "closed",
+      }),
+
+      Issue.aggregate([
+        {
+          $group: {
+            _id: "$marketplace",
+            count: {
+              $sum: 1,
+            },
+          },
+        },
+        {
+          $sort: {
+            count: -1,
+          },
+        },
+      ]),
     ]);
 
-    const problemProductIds =
-      await Issue.distinct("productId", {
-        status: {
-          $in: ["open", "in_progress"],
-        },
-      });
-
-    const problemProducts =
-      problemProductIds.length;
-
-    const healthyProducts = Math.max(
-      totalProducts - problemProducts,
-      0
-    );
-
-    const marketplaceStatus = {
-      Talabat: {
-        total: 0,
-        available: 0,
-      },
-
-      Snoonu: {
-        total: 0,
-        available: 0,
-      },
-
-      Rafeeq: {
-        total: 0,
-        available: 0,
-      },
-
-      Keeta: {
-        total: 0,
-        available: 0,
-      },
-    };
-
-    marketplaceData.forEach((item) => {
-      const marketplace =
-        item.marketplace as keyof typeof marketplaceStatus;
-
-      if (
-        marketplaceStatus[marketplace]
-      ) {
-        marketplaceStatus[marketplace].total += 1;
-
-        if (item.available) {
-          marketplaceStatus[
-            marketplace
-          ].available += 1;
-        }
-      }
-    });
+    const totalIssues =
+      openIssues +
+      inProgressIssues +
+      fixedIssues +
+      verifiedIssues +
+      closedIssues;
 
     return NextResponse.json({
-      totalProducts,
-      healthyProducts,
-      problemProducts,
-      openIssues,
-      marketplaceStatus,
+      products: {
+        total: totalProducts,
+        active: activeProducts,
+        inactive: inactiveProducts,
+      },
+
+      categories: {
+        total: totalCategories,
+      },
+
+      issues: {
+        total: totalIssues,
+        open: openIssues,
+        in_progress: inProgressIssues,
+        fixed: fixedIssues,
+        verified: verifiedIssues,
+        closed: closedIssues,
+      },
+
+      marketplaceIssues,
     });
   } catch (error) {
-    console.error(
-      "DASHBOARD API ERROR:",
-      error
-    );
+    console.error("DASHBOARD API ERROR:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Failed to load dashboard data",
+        error: "Failed to load dashboard statistics",
       },
       {
         status: 500,
