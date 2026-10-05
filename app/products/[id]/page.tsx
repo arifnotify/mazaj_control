@@ -310,6 +310,21 @@ export default function ProductDetailsPage({
             SKU: {product.sku}
           </p>
         </div>
+<div className="mt-5 flex gap-3">
+  <a
+    href={`/products/${product._id}/edit`}
+    className="rounded-lg bg-black px-5 py-3 text-white font-medium hover:bg-gray-800"
+  >
+    Edit Product
+  </a>
+
+  <a
+    href="/products"
+    className="rounded-lg border bg-white px-5 py-3 font-medium hover:bg-gray-50"
+  >
+    Back to Products
+  </a>
+</div>
 
         {/* Master Product */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
