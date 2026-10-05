@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Product = {
   _id: string;
-  name: string;
   sku: string;
+  name: string;
 };
 
 type Issue = {
   _id: string;
-  productId: Product;
+  productId: Product | null;
   marketplace: "Talabat" | "Snoonu" | "Rafeeq" | "Keeta";
   type:
     | "price"
@@ -23,42 +23,116 @@ type Issue = {
   status: "open" | "in_progress" | "fixed" | "verified" | "closed";
   note: string;
   createdAt: string;
+  updatedAt: string;
 };
 
-const issueLabels: Record<string, string> = {
-  price: "Price",
-  name: "Name",
-  description: "Description",
-  image: "Image",
-  category: "Category",
-  availability: "Availability",
-  other: "Other",
-};
+const marketplaces = [
+  "All",
+  "Talabat",
+  "Snoonu",
+  "Rafeeq",
+  "Keeta",
+];
 
-const statusLabels: Record<string, string> = {
-  open: "Open",
-  in_progress: "In Progress",
-  fixed: "Fixed",
-  verified: "Verified",
-  closed: "Closed",
-};
+const issueTypes = [
+  "All",
+  "price",
+  "name",
+  "description",
+  "image",
+  "category",
+  "availability",
+  "other",
+];
+
+const statuses = [
+  "All",
+  "open",
+  "in_progress",
+  "fixed",
+  "verified",
+  "closed",
+];
+
+function formatType(type: string) {
+  return type
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatStatus(status: string) {
+  switch (status) {
+    case "in_progress":
+      return "In Progress";
+    case "fixed":
+      return "Fixed";
+    case "verified":
+      return "Verified";
+    case "closed":
+      return "Closed";
+    default:
+      return "Open";
+  }
+}
+
+function getStatusClass(status: string) {
+  switch (status) {
+    case "open":
+      return "bg-red-100 text-red-700";
+
+    case "in_progress":
+      return "bg-yellow-100 text-yellow-700";
+
+    case "fixed":
+      return "bg-blue-100 text-blue-700";
+
+    case "verified":
+      return "bg-purple-100 text-purple-700";
+
+    case "closed":
+      return "bg-green-100 text-green-700";
+
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
+}
 
 export default function IssuesPage() {
   const [issues, setIssues] = useState<Issue[]>([]);
+
+  const [marketplaceFilter, setMarketplaceFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
+
   const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState<string | null>(null);
-  const [filter, setFilter] = useState("all");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   async function loadIssues() {
     try {
       setLoading(true);
+      setError("");
 
       const response = await fetch("/api/issues");
+
+      if (!response.ok) {
+        throw new Error("Failed to load issues");
+      }
+
       const data = await response.json();
 
       setIssues(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Failed to load issues:", error);
+      console.error(error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Issues load করা যায়নি"
+      );
     } finally {
       setLoading(false);
     }
@@ -73,7 +147,9 @@ export default function IssuesPage() {
     status: Issue["status"]
   ) {
     try {
-      setUpdating(issueId);
+      setUpdatingId(issueId);
+      setError("");
+      setSuccess("");
 
       const response = await fetch(`/api/issues/${issueId}`, {
         method: "PUT",
@@ -88,27 +164,62 @@ export default function IssuesPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        alert(data.error || "Failed to update issue");
-        return;
+        throw new Error(
+          data.error || "Failed to update issue"
+        );
       }
+
+      setSuccess("Issue status updated successfully");
 
       setIssues((currentIssues) =>
         currentIssues.map((issue) =>
-          issue._id === issueId ? data : issue
+          issue._id === issueId
+            ? {
+                ...issue,
+                status,
+              }
+            : issue
         )
       );
     } catch (error) {
-      console.error("Update issue error:", error);
-      alert("Failed to update issue");
+      console.error(error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Issue update করা যায়নি"
+      );
     } finally {
-      setUpdating(null);
+      setUpdatingId(null);
     }
   }
 
-  const filteredIssues =
-    filter === "all"
-      ? issues
-      : issues.filter((issue) => issue.status === filter);
+  const filteredIssues = useMemo(() => {
+    return issues.filter((issue) => {
+      const marketplaceMatch =
+        marketplaceFilter === "All" ||
+        issue.marketplace === marketplaceFilter;
+
+      const typeMatch =
+        typeFilter === "All" ||
+        issue.type === typeFilter;
+
+      const statusMatch =
+        statusFilter === "All" ||
+        issue.status === statusFilter;
+
+      return (
+        marketplaceMatch &&
+        typeMatch &&
+        statusMatch
+      );
+    });
+  }, [
+    issues,
+    marketplaceFilter,
+    typeFilter,
+    statusFilter,
+  ]);
 
   const openCount = issues.filter(
     (issue) => issue.status === "open"
@@ -121,288 +232,338 @@ export default function IssuesPage() {
   const fixedCount = issues.filter(
     (issue) =>
       issue.status === "fixed" ||
-      issue.status === "verified" ||
-      issue.status === "closed"
+      issue.status === "verified"
+  ).length;
+
+  const closedCount = issues.filter(
+    (issue) => issue.status === "closed"
   ).length;
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-7xl mx-auto">
+    <main className="min-h-screen bg-gray-50 p-6">
+      <div className="mx-auto max-w-7xl">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <a
-              href="/"
-              className="text-sm text-gray-500 hover:text-black"
-            >
-              ← Dashboard
-            </a>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            Issues
+          </h1>
 
-            <h1 className="text-3xl font-bold text-gray-900 mt-3">
-              Issues
-            </h1>
-
-            <p className="text-gray-500 mt-1">
-              Manage product problems reported by employees
-            </p>
-          </div>
-
-          <button
-            onClick={loadIssues}
-            className="rounded-lg border bg-white px-5 py-3 font-medium hover:bg-gray-50"
-          >
-            Refresh
-          </button>
+          <p className="mt-2 text-gray-500">
+            Manage product and marketplace issues
+          </p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-5 mb-8">
-
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <p className="text-gray-500">Total Issues</p>
-            <p className="text-3xl font-bold mt-2">
-              {issues.length}
-            </p>
+        {/* Messages */}
+        {error && (
+          <div className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+            {error}
           </div>
+        )}
 
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <p className="text-gray-500">Open</p>
-            <p className="text-3xl font-bold text-red-600 mt-2">
+        {success && (
+          <div className="mb-5 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-600">
+            {success}
+          </div>
+        )}
+
+        {/* Summary */}
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">
+              Open
+            </p>
+
+            <p className="mt-2 text-3xl font-bold text-red-600">
               {openCount}
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <p className="text-gray-500">In Progress</p>
-            <p className="text-3xl font-bold text-orange-500 mt-2">
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">
+              In Progress
+            </p>
+
+            <p className="mt-2 text-3xl font-bold text-yellow-600">
               {progressCount}
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <p className="text-gray-500">Fixed</p>
-            <p className="text-3xl font-bold text-green-600 mt-2">
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">
+              Fixed / Verified
+            </p>
+
+            <p className="mt-2 text-3xl font-bold text-blue-600">
               {fixedCount}
             </p>
           </div>
 
-        </div>
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">
+              Closed
+            </p>
 
-        {/* Filters */}
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-          <div className="flex gap-3 flex-wrap">
-
-            {[
-              ["all", "All"],
-              ["open", "Open"],
-              ["in_progress", "In Progress"],
-              ["fixed", "Fixed"],
-              ["verified", "Verified"],
-              ["closed", "Closed"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                onClick={() => setFilter(value)}
-                className={`px-4 py-2 rounded-lg ${
-                  filter === value
-                    ? "bg-black text-white"
-                    : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-
+            <p className="mt-2 text-3xl font-bold text-green-600">
+              {closedCount}
+            </p>
           </div>
         </div>
 
-        {/* Issues */}
-        <div className="space-y-4">
+        {/* Filters */}
+        <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
+
+          <div className="mb-4">
+            <h2 className="font-semibold text-gray-900">
+              Filters
+            </h2>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+
+            {/* Marketplace */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Marketplace
+              </label>
+
+              <select
+                value={marketplaceFilter}
+                onChange={(e) =>
+                  setMarketplaceFilter(e.target.value)
+                }
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-black"
+              >
+                {marketplaces.map((marketplace) => (
+                  <option
+                    key={marketplace}
+                    value={marketplace}
+                  >
+                    {marketplace}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Type */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Issue Type
+              </label>
+
+              <select
+                value={typeFilter}
+                onChange={(e) =>
+                  setTypeFilter(e.target.value)
+                }
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-black"
+              >
+                {issueTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type === "All"
+                      ? "All"
+                      : formatType(type)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Status
+              </label>
+
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value)
+                }
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-black"
+              >
+                {statuses.map((status) => (
+                  <option
+                    key={status}
+                    value={status}
+                  >
+                    {status === "All"
+                      ? "All"
+                      : formatStatus(status)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Issues Table */}
+        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+
+          <div className="flex items-center justify-between border-b px-6 py-5">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                All Issues
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Showing {filteredIssues.length} of{" "}
+                {issues.length} issues
+              </p>
+            </div>
+          </div>
 
           {loading ? (
-            <div className="bg-white rounded-xl shadow-sm p-10 text-center text-gray-500">
+            <div className="p-10 text-center text-gray-500">
               Loading issues...
             </div>
           ) : filteredIssues.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-              <h2 className="text-xl font-semibold">
-                No issues found
-              </h2>
-
-              <p className="text-gray-500 mt-2">
-                There are no reported problems in this category.
-              </p>
+            <div className="p-10 text-center text-gray-500">
+              No issues found.
             </div>
           ) : (
-            filteredIssues.map((issue) => (
+            <div className="overflow-x-auto">
 
-              <div
-                key={issue._id}
-                className="bg-white rounded-xl shadow-sm p-6"
-              >
+              <table className="w-full text-left">
 
-                {/* Top */}
-                <div className="flex items-start justify-between">
+                <thead className="bg-gray-50 text-sm text-gray-600">
+                  <tr>
+                    <th className="px-6 py-4 font-medium">
+                      Product
+                    </th>
 
-                  <div>
-                    <h2 className="text-xl font-bold">
-                      {issue.productId?.name || "Unknown Product"}
-                    </h2>
-
-                    <p className="text-sm text-gray-500 mt-1">
-                      SKU: {issue.productId?.sku || "-"}
-                    </p>
-                  </div>
-
-                  <div
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      issue.status === "open"
-                        ? "bg-red-100 text-red-700"
-                        : issue.status === "in_progress"
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-green-100 text-green-700"
-                    }`}
-                  >
-                    {statusLabels[issue.status]}
-                  </div>
-
-                </div>
-
-                {/* Details */}
-                <div className="grid grid-cols-3 gap-4 mt-6">
-
-                  <div className="border rounded-lg p-4">
-                    <p className="text-sm text-gray-500">
+                    <th className="px-6 py-4 font-medium">
                       Marketplace
-                    </p>
+                    </th>
 
-                    <p className="font-semibold mt-1">
-                      {issue.marketplace}
-                    </p>
-                  </div>
+                    <th className="px-6 py-4 font-medium">
+                      Issue
+                    </th>
 
-                  <div className="border rounded-lg p-4">
-                    <p className="text-sm text-gray-500">
-                      Problem
-                    </p>
+                    <th className="px-6 py-4 font-medium">
+                      Status
+                    </th>
 
-                    <p className="font-semibold mt-1">
-                      {issueLabels[issue.type] || issue.type}
-                    </p>
-                  </div>
+                    <th className="px-6 py-4 font-medium">
+                      Created
+                    </th>
 
-                  <div className="border rounded-lg p-4">
-                    <p className="text-sm text-gray-500">
-                      Reported
-                    </p>
+                    <th className="px-6 py-4 font-medium">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
 
-                    <p className="font-semibold mt-1">
-                      {new Date(
-                        issue.createdAt
-                      ).toLocaleString()}
-                    </p>
-                  </div>
+                <tbody className="divide-y">
 
-                </div>
+                  {filteredIssues.map((issue) => (
+                    <tr
+                      key={issue._id}
+                      className="hover:bg-gray-50"
+                    >
 
-                {/* Note */}
-                {issue.note && (
-                  <div className="mt-4 bg-gray-50 rounded-lg p-4">
-                    <p className="text-sm text-gray-500">
-                      Note
-                    </p>
+                      {/* Product */}
+                      <td className="px-6 py-5">
+                        {issue.productId ? (
+                          <div>
+                            <div className="font-semibold text-gray-900">
+                              {issue.productId.name}
+                            </div>
 
-                    <p className="mt-1">
-                      {issue.note}
-                    </p>
-                  </div>
-                )}
+                            <div className="mt-1 text-xs text-gray-500">
+                              SKU: {issue.productId.sku}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">
+                            Product not found
+                          </span>
+                        )}
+                      </td>
 
-                {/* Status Actions */}
-                <div className="mt-6 border-t pt-5">
+                      {/* Marketplace */}
+                      <td className="px-6 py-5">
+                        <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700">
+                          {issue.marketplace}
+                        </span>
+                      </td>
 
-                  <p className="text-sm font-semibold text-gray-700 mb-3">
-                    Update Status
-                  </p>
+                      {/* Issue Type */}
+                      <td className="px-6 py-5">
+                        <span className="font-medium text-gray-900">
+                          {formatType(issue.type)}
+                        </span>
 
-                  <div className="flex gap-3 flex-wrap">
+                        {issue.note && (
+                          <p className="mt-1 max-w-xs truncate text-xs text-gray-500">
+                            {issue.note}
+                          </p>
+                        )}
+                      </td>
 
-                    {issue.status === "open" && (
-                      <button
-                        disabled={updating === issue._id}
-                        onClick={() =>
-                          updateStatus(
-                            issue._id,
-                            "in_progress"
-                          )
-                        }
-                        className="rounded-lg bg-orange-500 px-4 py-2 text-white font-medium hover:bg-orange-600 disabled:opacity-50"
-                      >
-                        {updating === issue._id
-                          ? "Updating..."
-                          : "Start Work"}
-                      </button>
-                    )}
+                      {/* Status */}
+                      <td className="px-6 py-5">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusClass(
+                            issue.status
+                          )}`}
+                        >
+                          {formatStatus(issue.status)}
+                        </span>
+                      </td>
 
-                    {issue.status === "in_progress" && (
-                      <button
-                        disabled={updating === issue._id}
-                        onClick={() =>
-                          updateStatus(
-                            issue._id,
-                            "fixed"
-                          )
-                        }
-                        className="rounded-lg bg-green-600 px-4 py-2 text-white font-medium hover:bg-green-700 disabled:opacity-50"
-                      >
-                        {updating === issue._id
-                          ? "Updating..."
-                          : "Mark Fixed"}
-                      </button>
-                    )}
+                      {/* Created */}
+                      <td className="whitespace-nowrap px-6 py-5 text-sm text-gray-500">
+                        {new Date(
+                          issue.createdAt
+                        ).toLocaleDateString()}
+                      </td>
 
-                    {issue.status === "fixed" && (
-                      <button
-                        disabled={updating === issue._id}
-                        onClick={() =>
-                          updateStatus(
-                            issue._id,
-                            "verified"
-                          )
-                        }
-                        className="rounded-lg bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {updating === issue._id
-                          ? "Updating..."
-                          : "Verify"}
-                      </button>
-                    )}
+                      {/* Action */}
+                      <td className="px-6 py-5">
 
-                    {issue.status === "verified" && (
-                      <button
-                        disabled={updating === issue._id}
-                        onClick={() =>
-                          updateStatus(
-                            issue._id,
-                            "closed"
-                          )
-                        }
-                        className="rounded-lg bg-gray-800 px-4 py-2 text-white font-medium hover:bg-black disabled:opacity-50"
-                      >
-                        {updating === issue._id
-                          ? "Updating..."
-                          : "Close Issue"}
-                      </button>
-                    )}
+                        <select
+                          value={issue.status}
+                          disabled={
+                            updatingId === issue._id
+                          }
+                          onChange={(e) =>
+                            updateStatus(
+                              issue._id,
+                              e.target.value as Issue["status"]
+                            )
+                          }
+                          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-black disabled:opacity-50"
+                        >
+                          <option value="open">
+                            Open
+                          </option>
 
-                  </div>
-                </div>
+                          <option value="in_progress">
+                            In Progress
+                          </option>
 
-              </div>
-            ))
+                          <option value="fixed">
+                            Fixed
+                          </option>
+
+                          <option value="verified">
+                            Verified
+                          </option>
+
+                          <option value="closed">
+                            Closed
+                          </option>
+                        </select>
+
+                      </td>
+                    </tr>
+                  ))}
+
+                </tbody>
+              </table>
+            </div>
           )}
-
         </div>
       </div>
     </main>

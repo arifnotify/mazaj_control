@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
-import Issue from "@/models/Issue";
-
-const validStatuses = [
-  "open",
-  "in_progress",
-  "fixed",
-  "verified",
-  "closed",
-];
+import Category from "@/models/Category";
 
 export async function PUT(
   request: Request,
@@ -22,55 +14,63 @@ export async function PUT(
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
-        { error: "Invalid issue ID" },
+        { error: "Invalid category ID" },
         { status: 400 }
       );
     }
 
     const body = await request.json();
 
-    if (
-      body.status !== undefined &&
-      !validStatuses.includes(body.status)
-    ) {
+    const name = String(body.name || "").trim();
+    const description = String(body.description || "").trim();
+
+    if (!name) {
       return NextResponse.json(
-        { error: "Invalid issue status" },
+        { error: "Category name is required" },
         { status: 400 }
       );
     }
 
-    const updateData: Record<string, unknown> = {};
+    const duplicate = await Category.findOne({
+      _id: { $ne: id },
+      name: { $regex: `^${name}$`, $options: "i" },
+    });
 
-    if (body.status !== undefined) {
-      updateData.status = body.status;
+    if (duplicate) {
+      return NextResponse.json(
+        { error: "Category already exists" },
+        { status: 409 }
+      );
     }
 
-    if (body.note !== undefined) {
-      updateData.note = String(body.note);
-    }
-
-    const issue = await Issue.findByIdAndUpdate(
+    const category = await Category.findByIdAndUpdate(
       id,
-      updateData,
+      {
+        name,
+        description,
+        ...(body.active !== undefined && {
+          active: Boolean(body.active),
+        }),
+      },
       {
         new: true,
         runValidators: true,
       }
-    ).populate("productId");
+    );
 
-    if (!issue) {
+    if (!category) {
       return NextResponse.json(
-        { error: "Issue not found" },
+        { error: "Category not found" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(issue);
+    return NextResponse.json(category);
   } catch (error) {
-    console.error("UPDATE ISSUE ERROR:", error);
+    console.error("UPDATE CATEGORY ERROR:", error);
 
     return NextResponse.json(
-      { error: "Failed to update issue" },
+      { error: "Failed to update category" },
       { status: 500 }
     );
   }
@@ -87,29 +87,29 @@ export async function DELETE(
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
-        { error: "Invalid issue ID" },
+        { error: "Invalid category ID" },
         { status: 400 }
       );
     }
 
-    const issue = await Issue.findByIdAndDelete(id);
+    const category = await Category.findByIdAndDelete(id);
 
-    if (!issue) {
+    if (!category) {
       return NextResponse.json(
-        { error: "Issue not found" },
+        { error: "Category not found" },
         { status: 404 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: "Issue deleted successfully",
+      message: "Category deleted successfully",
     });
   } catch (error) {
-    console.error("DELETE ISSUE ERROR:", error);
+    console.error("DELETE CATEGORY ERROR:", error);
 
     return NextResponse.json(
-      { error: "Failed to delete issue" },
+      { error: "Failed to delete category" },
       { status: 500 }
     );
   }

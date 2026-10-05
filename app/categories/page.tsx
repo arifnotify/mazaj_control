@@ -11,10 +11,15 @@ type Category = {
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -29,9 +34,10 @@ export default function CategoriesPage() {
       }
 
       const data = await response.json();
-      setCategories(data);
-    } catch (err) {
-      console.error(err);
+
+      setCategories(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
       setError("Categories load করা যায়নি");
     } finally {
       setLoading(false);
@@ -41,6 +47,26 @@ export default function CategoriesPage() {
   useEffect(() => {
     loadCategories();
   }, []);
+
+  function resetForm() {
+    setName("");
+    setDescription("");
+    setEditingId(null);
+  }
+
+  function startEdit(category: Category) {
+    setEditingId(category._id);
+    setName(category.name);
+    setDescription(category.description || "");
+
+    setError("");
+    setSuccess("");
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,8 +82,14 @@ export default function CategoriesPage() {
     try {
       setSaving(true);
 
-      const response = await fetch("/api/categories", {
-        method: "POST",
+      const url = editingId
+        ? `/api/categories/${editingId}`
+        : "/api/categories";
+
+      const method = editingId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
@@ -70,29 +102,116 @@ export default function CategoriesPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to create category");
+        throw new Error(
+          data.error ||
+            (editingId
+              ? "Failed to update category"
+              : "Failed to create category")
+        );
       }
 
-      setSuccess("Category successfully added");
+      setSuccess(
+        editingId
+          ? "Category successfully updated"
+          : "Category successfully added"
+      );
 
-      setName("");
-      setDescription("");
+      resetForm();
 
       await loadCategories();
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
+    } catch (error) {
+      if (error instanceof Error) {
+        setError(error.message);
       } else {
-        setError("Category create করা যায়নি");
+        setError("Something went wrong");
       }
     } finally {
       setSaving(false);
     }
   }
 
+  async function toggleActive(category: Category) {
+    try {
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(`/api/categories/${category._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: category.name,
+          description: category.description,
+          active: !category.active,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update category");
+      }
+
+      setSuccess(
+        `${category.name} is now ${
+          !category.active ? "Active" : "Inactive"
+        }`
+      );
+
+      await loadCategories();
+    } catch (error) {
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError("Category update করা যায়নি");
+      }
+    }
+  }
+
+  async function deleteCategory(category: Category) {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${category.name}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(`/api/categories/${category._id}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete category");
+      }
+
+      setSuccess(`${category.name} deleted successfully`);
+
+      if (editingId === category._id) {
+        resetForm();
+      }
+
+      await loadCategories();
+    } catch (error) {
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError("Category delete করা যায়নি");
+      }
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl">
+
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
@@ -105,13 +224,29 @@ export default function CategoriesPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Add Category */}
+
+          {/* Form */}
           <div className="rounded-xl border bg-white p-6 shadow-sm">
-            <h2 className="mb-5 text-xl font-semibold text-gray-900">
-              Add Category
-            </h2>
+
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">
+                {editingId ? "Edit Category" : "Add Category"}
+              </h2>
+
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="text-sm text-gray-500 hover:text-black"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+
+              {/* Name */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">
                   Category Name
@@ -126,6 +261,7 @@ export default function CategoriesPage() {
                 />
               </div>
 
+              {/* Description */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">
                   Description
@@ -140,31 +276,40 @@ export default function CategoriesPage() {
                 />
               </div>
 
+              {/* Error */}
               {error && (
                 <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
                   {error}
                 </div>
               )}
 
+              {/* Success */}
               {success && (
                 <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-600">
                   {success}
                 </div>
               )}
 
+              {/* Button */}
               <button
                 type="submit"
                 disabled={saving}
                 className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {saving ? "Adding..." : "Add Category"}
+                {saving
+                  ? "Saving..."
+                  : editingId
+                  ? "Update Category"
+                  : "Add Category"}
               </button>
             </form>
           </div>
 
           {/* Category List */}
           <div className="lg:col-span-2">
+
             <div className="rounded-xl border bg-white shadow-sm">
+
               <div className="flex items-center justify-between border-b px-6 py-5">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">
@@ -187,12 +332,16 @@ export default function CategoriesPage() {
                 </div>
               ) : (
                 <div className="divide-y">
+
                   {categories.map((category, index) => (
                     <div
                       key={category._id}
-                      className="flex items-center justify-between px-6 py-5"
+                      className="flex items-center justify-between gap-4 px-6 py-5"
                     >
+
+                      {/* Left */}
                       <div className="flex items-center gap-4">
+
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 font-semibold text-gray-700">
                           {index + 1}
                         </div>
@@ -207,20 +356,50 @@ export default function CategoriesPage() {
                               {category.description}
                             </p>
                           )}
+
+                          <span
+                            className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-medium ${
+                              category.active
+                                ? "bg-green-100 text-green-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {category.active ? "Active" : "Inactive"}
+                          </span>
                         </div>
                       </div>
 
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-medium ${
-                          category.active
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {category.active ? "Active" : "Inactive"}
-                      </span>
+                      {/* Actions */}
+                      <div className="flex items-center gap-2">
+
+                        <button
+                          type="button"
+                          onClick={() => startEdit(category)}
+                          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleActive(category)}
+                          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+                        >
+                          {category.active ? "Disable" : "Enable"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => deleteCategory(category)}
+                          className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
+                        >
+                          Delete
+                        </button>
+
+                      </div>
                     </div>
                   ))}
+
                 </div>
               )}
             </div>
