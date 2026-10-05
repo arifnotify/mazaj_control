@@ -12,6 +12,7 @@ type DashboardData = {
   healthyProducts: number;
   problemProducts: number;
   openIssues: number;
+
   marketplaceStatus: {
     Talabat: MarketplaceStatus;
     Snoonu: MarketplaceStatus;
@@ -20,45 +21,56 @@ type DashboardData = {
   };
 };
 
-const marketplaces = [
-  "Talabat",
-  "Snoonu",
-  "Rafeeq",
-  "Keeta",
-] as const;
+const defaultData: DashboardData = {
+  totalProducts: 0,
+  healthyProducts: 0,
+  problemProducts: 0,
+  openIssues: 0,
+
+  marketplaceStatus: {
+    Talabat: {
+      total: 0,
+      available: 0,
+    },
+
+    Snoonu: {
+      total: 0,
+      available: 0,
+    },
+
+    Rafeeq: {
+      total: 0,
+      available: 0,
+    },
+
+    Keeta: {
+      total: 0,
+      available: 0,
+    },
+  },
+};
 
 export default function Dashboard() {
-  const [data, setData] =
-    useState<DashboardData | null>(null);
-
+  const [data, setData] = useState<DashboardData>(defaultData);
   const [loading, setLoading] = useState(true);
 
   async function loadDashboard() {
     try {
       setLoading(true);
 
-      const response = await fetch(
-        "/api/dashboard",
-        {
-          cache: "no-store",
-        }
-      );
+      const response = await fetch("/api/dashboard", {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to load dashboard");
+      }
 
       const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(
-          result.error ||
-            "Failed to load dashboard"
-        );
-      }
-
       setData(result);
     } catch (error) {
-      console.error(
-        "Dashboard error:",
-        error
-      );
+      console.error("Dashboard error:", error);
     } finally {
       setLoading(false);
     }
@@ -68,276 +80,235 @@ export default function Dashboard() {
     loadDashboard();
   }, []);
 
+  function getPercentage(
+    available: number,
+    total: number
+  ) {
+    if (!total) return 0;
+
+    return Math.round((available / total) * 100);
+  }
+
+  const marketplaces = [
+    {
+      name: "Talabat",
+      data: data.marketplaceStatus.Talabat,
+    },
+    {
+      name: "Snoonu",
+      data: data.marketplaceStatus.Snoonu,
+    },
+    {
+      name: "Rafeeq",
+      data: data.marketplaceStatus.Rafeeq,
+    },
+    {
+      name: "Keeta",
+      data: data.marketplaceStatus.Keeta,
+    },
+  ];
+
   return (
-    <main className="min-h-screen bg-gray-100">
-
+    <div className="min-h-screen">
       {/* Header */}
-      <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-8 py-5 flex items-center justify-between">
+      <header className="flex items-center justify-between border-b bg-white px-8 py-5">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Dashboard
+          </h1>
 
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Mazaj Control
-            </h1>
-
-            <p className="text-sm text-gray-500 mt-1">
-              Product Management Dashboard
-            </p>
-          </div>
-
-          <button
-            onClick={loadDashboard}
-            className="rounded-lg bg-black px-5 py-2.5 text-white font-medium hover:bg-gray-800"
-          >
-            Refresh
-          </button>
-
+          <p className="mt-1 text-sm text-gray-500">
+            Product management overview
+          </p>
         </div>
+
+        <button
+          onClick={loadDashboard}
+          className="rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+        >
+          Refresh
+        </button>
       </header>
 
-      <div className="max-w-7xl mx-auto p-8">
+      {/* Main */}
+      <div className="p-8">
 
-        {/* Navigation */}
-        <div className="grid grid-cols-5 gap-4 mb-8">
+        {/* Stats */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
 
-          <a
-            href="/"
-            className="bg-black text-white rounded-xl p-4 font-medium"
-          >
-            Dashboard
-          </a>
+          {/* Total Products */}
+          <div className="rounded-xl border bg-white p-6 shadow-sm">
+            <p className="text-sm font-medium text-gray-500">
+              Total Products
+            </p>
 
-          <a
-            href="/products"
-            className="bg-white rounded-xl p-4 font-medium hover:bg-gray-50"
-          >
-            Products
-          </a>
+            <p className="mt-3 text-3xl font-bold text-gray-900">
+              {loading ? "..." : data.totalProducts}
+            </p>
 
-          <a
-            href="/issues"
-            className="bg-white rounded-xl p-4 font-medium hover:bg-gray-50"
-          >
-            Issues
-          </a>
-
-          <div className="bg-white rounded-xl p-4 font-medium text-gray-400">
-            Categories
+            <p className="mt-2 text-xs text-gray-500">
+              All master products
+            </p>
           </div>
 
-          <div className="bg-white rounded-xl p-4 font-medium text-gray-400">
-            Employees
+          {/* Healthy */}
+          <div className="rounded-xl border bg-white p-6 shadow-sm">
+            <p className="text-sm font-medium text-gray-500">
+              Healthy Products
+            </p>
+
+            <p className="mt-3 text-3xl font-bold text-green-600">
+              {loading ? "..." : data.healthyProducts}
+            </p>
+
+            <p className="mt-2 text-xs text-gray-500">
+              No open problems
+            </p>
           </div>
 
+          {/* Problems */}
+          <div className="rounded-xl border bg-white p-6 shadow-sm">
+            <p className="text-sm font-medium text-gray-500">
+              Problems
+            </p>
+
+            <p className="mt-3 text-3xl font-bold text-red-600">
+              {loading ? "..." : data.problemProducts}
+            </p>
+
+            <p className="mt-2 text-xs text-gray-500">
+              Products with issues
+            </p>
+          </div>
+
+          {/* Issues */}
+          <div className="rounded-xl border bg-white p-6 shadow-sm">
+            <p className="text-sm font-medium text-gray-500">
+              Open Issues
+            </p>
+
+            <p className="mt-3 text-3xl font-bold text-orange-600">
+              {loading ? "..." : data.openIssues}
+            </p>
+
+            <p className="mt-2 text-xs text-gray-500">
+              Need attention
+            </p>
+          </div>
         </div>
 
-        {/* Loading */}
-        {loading ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-            <p className="text-gray-500">
-              Loading dashboard...
-            </p>
-          </div>
-        ) : !data ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+        {/* Marketplace */}
+        <div className="mt-8 rounded-xl border bg-white shadow-sm">
 
-            <h2 className="text-xl font-bold text-red-600">
-              Dashboard data could not be loaded
+          <div className="border-b px-6 py-5">
+            <h2 className="text-lg font-bold text-gray-900">
+              Marketplace Status
             </h2>
 
-            <p className="text-gray-500 mt-2">
-              Check your MongoDB connection and API.
+            <p className="mt-1 text-sm text-gray-500">
+              Product availability across marketplaces
             </p>
+          </div>
 
-            <button
-              onClick={loadDashboard}
-              className="mt-5 bg-black text-white px-5 py-3 rounded-lg"
+          <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2 xl:grid-cols-4">
+
+            {marketplaces.map((marketplace) => {
+              const percentage = getPercentage(
+                marketplace.data.available,
+                marketplace.data.total
+              );
+
+              return (
+                <div
+                  key={marketplace.name}
+                  className="rounded-xl border p-5"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">
+                      {marketplace.name}
+                    </h3>
+
+                    <span className="text-sm font-bold text-gray-700">
+                      {percentage}%
+                    </span>
+                  </div>
+
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-200">
+                    <div
+                      className="h-full rounded-full bg-black transition-all"
+                      style={{
+                        width: `${percentage}%`,
+                      }}
+                    />
+                  </div>
+
+                  <div className="mt-3 flex justify-between text-xs text-gray-500">
+                    <span>
+                      Available: {marketplace.data.available}
+                    </span>
+
+                    <span>
+                      Total: {marketplace.data.total}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mt-8">
+
+          <h2 className="mb-4 text-lg font-bold text-gray-900">
+            Quick Actions
+          </h2>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+
+            <a
+              href="/products/new"
+              className="rounded-xl border bg-white p-6 shadow-sm transition hover:border-black"
             >
-              Try Again
-            </button>
+              <h3 className="font-semibold text-gray-900">
+                Add Product
+              </h3>
+
+              <p className="mt-2 text-sm text-gray-500">
+                Create a new master product
+              </p>
+            </a>
+
+            <a
+              href="/products"
+              className="rounded-xl border bg-white p-6 shadow-sm transition hover:border-black"
+            >
+              <h3 className="font-semibold text-gray-900">
+                Manage Products
+              </h3>
+
+              <p className="mt-2 text-sm text-gray-500">
+                View and manage all products
+              </p>
+            </a>
+
+            <a
+              href="/issues"
+              className="rounded-xl border bg-white p-6 shadow-sm transition hover:border-black"
+            >
+              <h3 className="font-semibold text-gray-900">
+                Manage Issues
+              </h3>
+
+              <p className="mt-2 text-sm text-gray-500">
+                Find and fix marketplace problems
+              </p>
+            </a>
 
           </div>
-        ) : (
-          <>
-            {/* Main Stats */}
-            <div className="grid grid-cols-4 gap-5 mb-8">
-
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-gray-500">
-                  Total Products
-                </p>
-
-                <p className="text-4xl font-bold mt-2">
-                  {data.totalProducts}
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-gray-500">
-                  Healthy Products
-                </p>
-
-                <p className="text-4xl font-bold text-green-600 mt-2">
-                  {data.healthyProducts}
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-gray-500">
-                  Problems
-                </p>
-
-                <p className="text-4xl font-bold text-red-600 mt-2">
-                  {data.problemProducts}
-                </p>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-gray-500">
-                  Open Issues
-                </p>
-
-                <p className="text-4xl font-bold text-orange-500 mt-2">
-                  {data.openIssues}
-                </p>
-              </div>
-
-            </div>
-
-            {/* Marketplace */}
-            <div className="bg-white rounded-xl shadow-sm p-6">
-
-              <div className="flex items-center justify-between mb-6">
-
-                <div>
-                  <h2 className="text-xl font-bold">
-                    Marketplace Status
-                  </h2>
-
-                  <p className="text-gray-500 text-sm mt-1">
-                    Product availability across marketplaces
-                  </p>
-                </div>
-
-              </div>
-
-              <div className="grid grid-cols-4 gap-5">
-
-                {marketplaces.map(
-                  (marketplace) => {
-                    const status =
-                      data.marketplaceStatus[
-                        marketplace
-                      ];
-
-                    const percentage =
-                      status.total > 0
-                        ? Math.round(
-                            (status.available /
-                              status.total) *
-                              100
-                          )
-                        : 0;
-
-                    return (
-                      <div
-                        key={marketplace}
-                        className="border rounded-xl p-5"
-                      >
-
-                        <div className="flex items-center justify-between">
-
-                          <h3 className="font-bold text-lg">
-                            {marketplace}
-                          </h3>
-
-                          <span
-                            className={`w-3 h-3 rounded-full ${
-                              percentage === 100
-                                ? "bg-green-500"
-                                : percentage > 0
-                                ? "bg-orange-500"
-                                : "bg-red-500"
-                            }`}
-                          />
-
-                        </div>
-
-                        <p className="text-3xl font-bold mt-4">
-                          {percentage}%
-                        </p>
-
-                        <p className="text-sm text-gray-500 mt-1">
-                          {status.available} of{" "}
-                          {status.total} products available
-                        </p>
-
-                        <div className="w-full h-2 bg-gray-100 rounded-full mt-4 overflow-hidden">
-
-                          <div
-                            className="h-full bg-green-500"
-                            style={{
-                              width: `${percentage}%`,
-                            }}
-                          />
-
-                        </div>
-
-                      </div>
-                    );
-                  }
-                )}
-
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="mt-8 grid grid-cols-3 gap-5">
-
-              <a
-                href="/products/new"
-                className="bg-black text-white rounded-xl p-6 hover:bg-gray-800"
-              >
-                <p className="text-lg font-bold">
-                  + Add Product
-                </p>
-
-                <p className="text-sm text-gray-300 mt-1">
-                  Create a new master product
-                </p>
-              </a>
-
-              <a
-                href="/products"
-                className="bg-white rounded-xl p-6 hover:bg-gray-50"
-              >
-                <p className="text-lg font-bold">
-                  Manage Products
-                </p>
-
-                <p className="text-sm text-gray-500 mt-1">
-                  View and manage all products
-                </p>
-              </a>
-
-              <a
-                href="/issues"
-                className="bg-white rounded-xl p-6 hover:bg-gray-50"
-              >
-                <p className="text-lg font-bold">
-                  Manage Issues
-                </p>
-
-                <p className="text-sm text-gray-500 mt-1">
-                  Review and fix marketplace problems
-                </p>
-              </a>
-
-            </div>
-          </>
-        )}
+        </div>
 
       </div>
-    </main>
+    </div>
   );
 }
