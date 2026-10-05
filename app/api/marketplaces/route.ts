@@ -15,7 +15,6 @@ const isValidMarketplace = (value: string) => {
 };
 
 // GET
-// Example:
 // /api/marketplaces?productId=PRODUCT_ID
 export async function GET(request: Request) {
   try {
@@ -45,20 +44,32 @@ export async function GET(request: Request) {
         marketplace: 1,
       });
 
-    return NextResponse.json(marketplaceData);
+    return NextResponse.json(
+      marketplaceData
+    );
   } catch (error) {
-    console.error("GET MARKETPLACE ERROR:", error);
+    console.error(
+      "GET MARKETPLACE ERROR:",
+      error
+    );
 
     return NextResponse.json(
-      { error: "Failed to fetch marketplace data" },
-      { status: 500 }
+      {
+        error:
+          "Failed to fetch marketplace data",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
 
 // POST
 // Create or update marketplace data
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
   try {
     await connectDB();
 
@@ -72,37 +83,71 @@ export async function POST(request: Request) {
       name,
       description,
       image,
+      category,
       syncStatus,
     } = body;
 
+    // Product ID
     if (!productId) {
       return NextResponse.json(
-        { error: "Product ID is required" },
-        { status: 400 }
+        {
+          error:
+            "Product ID is required",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    if (!mongoose.Types.ObjectId.isValid(productId)) {
+    // Validate Product ID
+    if (
+      !mongoose.Types.ObjectId.isValid(
+        productId
+      )
+    ) {
       return NextResponse.json(
-        { error: "Invalid product ID" },
-        { status: 400 }
+        {
+          error:
+            "Invalid product ID",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
+    // Marketplace
     if (!marketplace) {
       return NextResponse.json(
-        { error: "Marketplace is required" },
-        { status: 400 }
+        {
+          error:
+            "Marketplace is required",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    if (!isValidMarketplace(marketplace)) {
+    // Validate marketplace
+    if (
+      !isValidMarketplace(
+        marketplace
+      )
+    ) {
       return NextResponse.json(
-        { error: "Invalid marketplace" },
-        { status: 400 }
+        {
+          error:
+            "Invalid marketplace",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
+    // Create or update
     const marketplaceData =
       await ProductMarketplace.findOneAndUpdate(
         {
@@ -112,6 +157,7 @@ export async function POST(request: Request) {
         {
           productId,
           marketplace,
+
           available:
             available !== undefined
               ? Boolean(available)
@@ -126,11 +172,18 @@ export async function POST(request: Request) {
           }),
 
           ...(description !== undefined && {
-            description: String(description),
+            description:
+              String(description),
           }),
 
           ...(image !== undefined && {
             image: String(image),
+          }),
+
+          // Category
+          ...(category !== undefined && {
+            category:
+              String(category),
           }),
 
           ...(syncStatus !== undefined && {
@@ -145,7 +198,9 @@ export async function POST(request: Request) {
         }
       );
 
-    return NextResponse.json(marketplaceData);
+    return NextResponse.json(
+      marketplaceData
+    );
   } catch (error) {
     console.error(
       "SAVE MARKETPLACE ERROR:",
@@ -153,8 +208,13 @@ export async function POST(request: Request) {
     );
 
     return NextResponse.json(
-      { error: "Failed to save marketplace data" },
-      { status: 500 }
+      {
+        error:
+          "Failed to save marketplace data",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }

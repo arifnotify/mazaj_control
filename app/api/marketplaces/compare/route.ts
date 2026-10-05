@@ -17,6 +17,7 @@ const issueTypes = [
   "name",
   "description",
   "image",
+  "category",
   "availability",
 ] as const;
 
@@ -140,6 +141,16 @@ export async function GET(request: Request) {
           }
 
           // -------------------------
+          // CATEGORY
+          // -------------------------
+          if (
+            marketplaceProduct.category !==
+            product.category
+          ) {
+            issues.push("category");
+          }
+
+          // -------------------------
           // AVAILABILITY
           // -------------------------
           if (
@@ -171,11 +182,10 @@ export async function GET(request: Request) {
                   },
                 });
 
-              // Only create if no active issue exists
+              // Create only if active issue does not exist
               if (!existingIssue) {
                 await Issue.create({
-                  productId:
-                    product._id,
+                  productId: product._id,
                   marketplace,
                   type: issueType,
                   note:
@@ -209,6 +219,7 @@ export async function GET(request: Request) {
         description:
           product.description,
         image: product.image,
+        category: product.category,
         active: product.active,
       },
       marketplaces: results,
