@@ -32,6 +32,15 @@ type Marketplace = {
   syncStatus: string;
 };
 
+type CompareResult = {
+  marketplace: MarketplaceName;
+  connected: boolean;
+  healthy: boolean;
+  issues: string[];
+  available?: boolean;
+  syncStatus?: string;
+};
+
 const marketplaceNames: MarketplaceName[] = [
   "Talabat",
   "Snoonu",
@@ -66,49 +75,63 @@ const issueTypes = [
   },
 ];
 
+const issueLabels: Record<string, string> = {
+  price: "Price mismatch",
+  name: "Name mismatch",
+  description: "Description mismatch",
+  image: "Image mismatch",
+  category: "Category mismatch",
+  availability: "Availability mismatch",
+};
+
 export default function ProductDetailsPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const [product, setProduct] = useState<Product | null>(null);
+
   const [marketplaces, setMarketplaces] = useState<
     Marketplace[]
   >([]);
 
+  const [compareResults, setCompareResults] = useState<
+    CompareResult[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
+
   const [savingMarketplace, setSavingMarketplace] =
     useState<string | null>(null);
 
   const [selectedMarketplace, setSelectedMarketplace] =
     useState<MarketplaceName>("Talabat");
 
-  const [selectedIssues, setSelectedIssues] = useState<
-    string[]
-  >([]);
-
-  const [productId, setProductId] = useState("");
+  const [selectedIssues, setSelectedIssues] =
+    useState<string[]>([]);
 
   useEffect(() => {
     async function loadData() {
       try {
         const { id } = await params;
 
-        setProductId(id);
-
+        // Product
         const productResponse = await fetch(
           `/api/products/${id}`
         );
 
-        const productData = await productResponse.json();
+        const productData =
+          await productResponse.json();
 
         if (productResponse.ok) {
           setProduct(productData);
         }
 
-        const marketplaceResponse = await fetch(
-          `/api/marketplaces?productId=${id}`
-        );
+        // Marketplace data
+        const marketplaceResponse =
+          await fetch(
+            `/api/marketplaces?productId=${id}`
+          );
 
         const marketplaceData =
           await marketplaceResponse.json();
@@ -118,6 +141,26 @@ export default function ProductDetailsPage({
           Array.isArray(marketplaceData)
         ) {
           setMarketplaces(marketplaceData);
+        }
+
+        // Automatic comparison
+        const compareResponse =
+          await fetch(
+            `/api/marketplaces/compare?productId=${id}`
+          );
+
+        const compareData =
+          await compareResponse.json();
+
+        if (
+          compareResponse.ok &&
+          Array.isArray(
+            compareData.marketplaces
+          )
+        ) {
+          setCompareResults(
+            compareData.marketplaces
+          );
         }
       } catch (error) {
         console.error(
@@ -130,13 +173,23 @@ export default function ProductDetailsPage({
     }
 
     loadData();
-  }, []);
+  }, [params]);
 
   function getMarketplace(
     marketplace: MarketplaceName
   ) {
     return marketplaces.find(
-      (item) => item.marketplace === marketplace
+      (item) =>
+        item.marketplace === marketplace
+    );
+  }
+
+  function getCompareResult(
+    marketplace: MarketplaceName
+  ) {
+    return compareResults.find(
+      (item) =>
+        item.marketplace === marketplace
     );
   }
 
@@ -145,7 +198,8 @@ export default function ProductDetailsPage({
   ) {
     if (!product) return;
 
-    const current = getMarketplace(marketplace);
+    const current =
+      getMarketplace(marketplace);
 
     try {
       setSavingMarketplace(marketplace);
@@ -165,14 +219,16 @@ export default function ProductDetailsPage({
               : true,
             price: product.price,
             name: product.name,
-            description: product.description,
+            description:
+              product.description,
             image: product.image,
             syncStatus: "pending",
           }),
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         alert(
@@ -182,22 +238,51 @@ export default function ProductDetailsPage({
         return;
       }
 
-      setMarketplaces((currentList) => {
-        const exists = currentList.some(
-          (item) =>
-            item.marketplace === marketplace
+      setMarketplaces(
+        (currentList) => {
+          const exists =
+            currentList.some(
+              (item) =>
+                item.marketplace ===
+                marketplace
+            );
+
+          if (exists) {
+            return currentList.map(
+              (item) =>
+                item.marketplace ===
+                marketplace
+                  ? data
+                  : item
+            );
+          }
+
+          return [
+            ...currentList,
+            data,
+          ];
+        }
+      );
+
+      // Refresh automatic comparison
+      const compareResponse =
+        await fetch(
+          `/api/marketplaces/compare?productId=${product._id}`
         );
 
-        if (exists) {
-          return currentList.map((item) =>
-            item.marketplace === marketplace
-              ? data
-              : item
-          );
-        }
+      const compareData =
+        await compareResponse.json();
 
-        return [...currentList, data];
-      });
+      if (
+        compareResponse.ok &&
+        Array.isArray(
+          compareData.marketplaces
+        )
+      ) {
+        setCompareResults(
+          compareData.marketplaces
+        );
+      }
     } catch (error) {
       console.error(
         "Marketplace update error:",
@@ -216,28 +301,42 @@ export default function ProductDetailsPage({
     if (!product) return;
 
     if (selectedIssues.length === 0) {
-      alert("Please select at least one issue.");
+      alert(
+        "Please select at least one issue."
+      );
       return;
     }
 
     try {
       for (const type of selectedIssues) {
-        await fetch("/api/issues", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            productId: product._id,
-            marketplace:
-              selectedMarketplace,
-            type,
-            note: "",
-          }),
-        });
+        const response = await fetch(
+          "/api/issues",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              productId: product._id,
+              marketplace:
+                selectedMarketplace,
+              type,
+              note: "",
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            "Failed to create issue"
+          );
+        }
       }
 
-      alert("Issue(s) reported successfully.");
+      alert(
+        "Issue(s) reported successfully."
+      );
 
       setSelectedIssues([]);
     } catch (error) {
@@ -246,17 +345,24 @@ export default function ProductDetailsPage({
         error
       );
 
-      alert("Failed to report issue.");
+      alert(
+        "Failed to report issue."
+      );
     }
   }
 
   function toggleIssue(type: string) {
-    setSelectedIssues((current) =>
-      current.includes(type)
-        ? current.filter(
-            (item) => item !== type
-          )
-        : [...current, type]
+    setSelectedIssues(
+      (current) =>
+        current.includes(type)
+          ? current.filter(
+              (item) =>
+                item !== type
+            )
+          : [
+              ...current,
+              type,
+            ]
     );
   }
 
@@ -309,26 +415,26 @@ export default function ProductDetailsPage({
           <p className="text-gray-500 mt-1">
             SKU: {product.sku}
           </p>
-        </div>
-<div className="mt-5 flex gap-3">
-  <a
-    href={`/products/${product._id}/edit`}
-    className="rounded-lg bg-black px-5 py-3 text-white font-medium hover:bg-gray-800"
-  >
-    Edit Product
-  </a>
 
-  <a
-    href="/products"
-    className="rounded-lg border bg-white px-5 py-3 font-medium hover:bg-gray-50"
-  >
-    Back to Products
-  </a>
-</div>
+          <div className="mt-5 flex gap-3">
+            <a
+              href={`/products/${product._id}/edit`}
+              className="rounded-lg bg-black px-5 py-3 text-white font-medium hover:bg-gray-800"
+            >
+              Edit Product
+            </a>
+
+            <a
+              href="/products"
+              className="rounded-lg border bg-white px-5 py-3 font-medium hover:bg-gray-50"
+            >
+              Back to Products
+            </a>
+          </div>
+        </div>
 
         {/* Master Product */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-
           <h2 className="text-xl font-bold mb-5">
             Master Product
           </h2>
@@ -339,6 +445,7 @@ export default function ProductDetailsPage({
               <p className="text-sm text-gray-500">
                 Product Name
               </p>
+
               <p className="font-semibold mt-1">
                 {product.name}
               </p>
@@ -348,6 +455,7 @@ export default function ProductDetailsPage({
               <p className="text-sm text-gray-500">
                 SKU
               </p>
+
               <p className="font-semibold mt-1">
                 {product.sku}
               </p>
@@ -357,6 +465,7 @@ export default function ProductDetailsPage({
               <p className="text-sm text-gray-500">
                 Category
               </p>
+
               <p className="font-semibold mt-1">
                 {product.category || "-"}
               </p>
@@ -366,8 +475,12 @@ export default function ProductDetailsPage({
               <p className="text-sm text-gray-500">
                 Price
               </p>
+
               <p className="font-semibold mt-1">
-                QAR {Number(product.price).toFixed(2)}
+                QAR{" "}
+                {Number(
+                  product.price
+                ).toFixed(2)}
               </p>
             </div>
 
@@ -375,6 +488,7 @@ export default function ProductDetailsPage({
               <p className="text-sm text-gray-500">
                 Stock
               </p>
+
               <p className="font-semibold mt-1">
                 {product.stock}
               </p>
@@ -405,7 +519,124 @@ export default function ProductDetailsPage({
               </p>
             </div>
           )}
+        </div>
 
+        {/* Automatic Comparison */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+
+          <div className="flex items-center justify-between mb-6">
+
+            <div>
+              <h2 className="text-xl font-bold">
+                Marketplace Sync Check
+              </h2>
+
+              <p className="text-gray-500 mt-1">
+                Automatically compare marketplace data with the master product.
+              </p>
+            </div>
+
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+            {marketplaceNames.map(
+              (marketplace) => {
+                const result =
+                  getCompareResult(
+                    marketplace
+                  );
+
+                return (
+                  <div
+                    key={marketplace}
+                    className={`border rounded-xl p-5 ${
+                      !result
+                        ? "border-gray-200"
+                        : result.healthy
+                        ? "border-green-200 bg-green-50"
+                        : result.connected
+                        ? "border-yellow-200 bg-yellow-50"
+                        : "border-red-200 bg-red-50"
+                    }`}
+                  >
+
+                    <div className="flex items-center justify-between">
+
+                      <h3 className="font-bold">
+                        {marketplace}
+                      </h3>
+
+                      <span className="text-xl">
+                        {!result
+                          ? "..."
+                          : result.healthy
+                          ? "✅"
+                          : result.connected
+                          ? "⚠️"
+                          : "❌"}
+                      </span>
+
+                    </div>
+
+                    {!result ? (
+                      <p className="text-sm text-gray-500 mt-4">
+                        Checking...
+                      </p>
+                    ) : !result.connected ? (
+                      <div className="mt-4">
+                        <p className="font-semibold text-red-600">
+                          Not Connected
+                        </p>
+
+                        <p className="text-sm text-gray-500 mt-1">
+                          Marketplace data is not available.
+                        </p>
+                      </div>
+                    ) : result.healthy ? (
+                      <div className="mt-4">
+                        <p className="font-semibold text-green-600">
+                          Synced
+                        </p>
+
+                        <p className="text-sm text-gray-500 mt-1">
+                          All checked fields match.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="mt-4">
+
+                        <p className="font-semibold text-yellow-700">
+                          Mismatch Found
+                        </p>
+
+                        <div className="mt-3 space-y-2">
+
+                          {result.issues.map(
+                            (issue) => (
+                              <div
+                                key={issue}
+                                className="text-sm bg-white border rounded-lg px-3 py-2"
+                              >
+                                ⚠️{" "}
+                                {issueLabels[
+                                  issue
+                                ] ||
+                                  issue}
+                              </div>
+                            )
+                          )}
+
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              }
+            )}
+
+          </div>
         </div>
 
         {/* Marketplace Status */}
@@ -419,7 +650,7 @@ export default function ProductDetailsPage({
             Control product availability on each marketplace.
           </p>
 
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
             {marketplaceNames.map(
               (marketplace) => {
@@ -429,7 +660,8 @@ export default function ProductDetailsPage({
                   );
 
                 const available =
-                  data?.available ?? false;
+                  data?.available ??
+                  false;
 
                 const saving =
                   savingMarketplace ===
@@ -454,6 +686,7 @@ export default function ProductDetailsPage({
                             : "bg-red-500"
                         }`}
                       />
+
                     </div>
 
                     <p
@@ -553,29 +786,33 @@ export default function ProductDetailsPage({
               What is wrong?
             </p>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
-              {issueTypes.map((issue) => (
-                <label
-                  key={issue.key}
-                  className="border rounded-lg p-4 cursor-pointer hover:bg-gray-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedIssues.includes(
-                      issue.key
-                    )}
-                    onChange={() =>
-                      toggleIssue(
+              {issueTypes.map(
+                (issue) => (
+                  <label
+                    key={issue.key}
+                    className="border rounded-lg p-4 cursor-pointer hover:bg-gray-50"
+                  >
+
+                    <input
+                      type="checkbox"
+                      checked={selectedIssues.includes(
                         issue.key
-                      )
-                    }
-                    className="mr-3"
-                  />
+                      )}
+                      onChange={() =>
+                        toggleIssue(
+                          issue.key
+                        )
+                      }
+                      className="mr-3"
+                    />
 
-                  {issue.label}
-                </label>
-              ))}
+                    {issue.label}
+
+                  </label>
+                )
+              )}
 
             </div>
           </div>
