@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
 import Category from "@/models/Category";
 import Issue from "@/models/Issue";
+import Employee from "@/models/Employee";
 
 export async function GET() {
   try {
@@ -13,6 +14,7 @@ export async function GET() {
       activeProducts,
       inactiveProducts,
       totalCategories,
+      totalEmployees,
       openIssues,
       inProgressIssues,
       fixedIssues,
@@ -31,6 +33,8 @@ export async function GET() {
       }),
 
       Category.countDocuments(),
+
+      Employee.countDocuments(),
 
       Issue.countDocuments({
         status: "open",
@@ -85,6 +89,10 @@ export async function GET() {
 
       categories: {
         total: totalCategories,
+      },
+
+      employees: {
+        total: totalEmployees,
       },
 
       issues: {

@@ -11,7 +11,11 @@ type Product = {
 type Issue = {
   _id: string;
   productId: Product | null;
-  marketplace: "Talabat" | "Snoonu" | "Rafeeq" | "Keeta";
+  marketplace:
+    | "Talabat"
+    | "Snoonu"
+    | "Rafeeq"
+    | "Keeta";
   type:
     | "price"
     | "name"
@@ -20,7 +24,12 @@ type Issue = {
     | "category"
     | "availability"
     | "other";
-  status: "open" | "in_progress" | "fixed" | "verified" | "closed";
+  status:
+    | "open"
+    | "in_progress"
+    | "fixed"
+    | "verified"
+    | "closed";
   note: string;
   createdAt: string;
   updatedAt: string;
@@ -57,7 +66,11 @@ const statuses = [
 function formatType(type: string) {
   return type
     .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
     .join(" ");
 }
 
@@ -65,12 +78,16 @@ function formatStatus(status: string) {
   switch (status) {
     case "in_progress":
       return "In Progress";
+
     case "fixed":
       return "Fixed";
+
     case "verified":
       return "Verified";
+
     case "closed":
       return "Closed";
+
     default:
       return "Open";
   }
@@ -101,30 +118,48 @@ function getStatusClass(status: string) {
 export default function IssuesPage() {
   const [issues, setIssues] = useState<Issue[]>([]);
 
-  const [marketplaceFilter, setMarketplaceFilter] = useState("All");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [marketplaceFilter, setMarketplaceFilter] =
+    useState("All");
 
-  const [loading, setLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] =
+    useState("All");
+
+  const [statusFilter, setStatusFilter] =
+    useState("All");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [updatingId, setUpdatingId] =
+    useState<string | null>(null);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // --------------------------------
+  // Load Issues
+  // --------------------------------
 
   async function loadIssues() {
     try {
       setLoading(true);
       setError("");
 
-      const response = await fetch("/api/issues");
+      const response = await fetch(
+        "/api/issues"
+      );
 
       if (!response.ok) {
-        throw new Error("Failed to load issues");
+        throw new Error(
+          "Failed to load issues"
+        );
       }
 
       const data = await response.json();
 
-      setIssues(Array.isArray(data) ? data : []);
+      setIssues(
+        Array.isArray(data) ? data : []
+      );
     } catch (error) {
       console.error(error);
 
@@ -142,6 +177,10 @@ export default function IssuesPage() {
     loadIssues();
   }, []);
 
+  // --------------------------------
+  // Update Status
+  // --------------------------------
+
   async function updateStatus(
     issueId: string,
     status: Issue["status"]
@@ -151,25 +190,28 @@ export default function IssuesPage() {
       setError("");
       setSuccess("");
 
-      const response = await fetch(`/api/issues/${issueId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status,
-        }),
-      });
+      const response = await fetch(
+        `/api/issues/${issueId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            status,
+          }),
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error || "Failed to update issue"
+          data.error ||
+            "Failed to update issue"
         );
       }
-
-      setSuccess("Issue status updated successfully");
 
       setIssues((currentIssues) =>
         currentIssues.map((issue) =>
@@ -180,6 +222,10 @@ export default function IssuesPage() {
               }
             : issue
         )
+      );
+
+      setSuccess(
+        "Issue status updated successfully"
       );
     } catch (error) {
       console.error(error);
@@ -194,11 +240,16 @@ export default function IssuesPage() {
     }
   }
 
+  // --------------------------------
+  // Filter Issues
+  // --------------------------------
+
   const filteredIssues = useMemo(() => {
     return issues.filter((issue) => {
       const marketplaceMatch =
         marketplaceFilter === "All" ||
-        issue.marketplace === marketplaceFilter;
+        issue.marketplace ===
+          marketplaceFilter;
 
       const typeMatch =
         typeFilter === "All" ||
@@ -221,12 +272,17 @@ export default function IssuesPage() {
     statusFilter,
   ]);
 
+  // --------------------------------
+  // Summary Counts
+  // --------------------------------
+
   const openCount = issues.filter(
     (issue) => issue.status === "open"
   ).length;
 
   const progressCount = issues.filter(
-    (issue) => issue.status === "in_progress"
+    (issue) =>
+      issue.status === "in_progress"
   ).length;
 
   const fixedCount = issues.filter(
@@ -239,6 +295,10 @@ export default function IssuesPage() {
     (issue) => issue.status === "closed"
   ).length;
 
+  // --------------------------------
+  // UI
+  // --------------------------------
+
   return (
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl">
@@ -250,11 +310,13 @@ export default function IssuesPage() {
           </h1>
 
           <p className="mt-2 text-gray-500">
-            Manage product and marketplace issues
+            Manage product and marketplace
+            issues
           </p>
         </div>
 
         {/* Messages */}
+
         {error && (
           <div className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -268,8 +330,10 @@ export default function IssuesPage() {
         )}
 
         {/* Summary */}
+
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
+          {/* Open */}
           <div className="rounded-xl border bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Open
@@ -280,6 +344,7 @@ export default function IssuesPage() {
             </p>
           </div>
 
+          {/* In Progress */}
           <div className="rounded-xl border bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               In Progress
@@ -290,6 +355,7 @@ export default function IssuesPage() {
             </p>
           </div>
 
+          {/* Fixed */}
           <div className="rounded-xl border bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Fixed / Verified
@@ -300,6 +366,7 @@ export default function IssuesPage() {
             </p>
           </div>
 
+          {/* Closed */}
           <div className="rounded-xl border bg-white p-5 shadow-sm">
             <p className="text-sm text-gray-500">
               Closed
@@ -312,6 +379,7 @@ export default function IssuesPage() {
         </div>
 
         {/* Filters */}
+
         <div className="mb-6 rounded-xl border bg-white p-5 shadow-sm">
 
           <div className="mb-4">
@@ -323,6 +391,7 @@ export default function IssuesPage() {
           <div className="grid gap-4 md:grid-cols-3">
 
             {/* Marketplace */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">
                 Marketplace
@@ -331,22 +400,27 @@ export default function IssuesPage() {
               <select
                 value={marketplaceFilter}
                 onChange={(e) =>
-                  setMarketplaceFilter(e.target.value)
+                  setMarketplaceFilter(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-black"
               >
-                {marketplaces.map((marketplace) => (
-                  <option
-                    key={marketplace}
-                    value={marketplace}
-                  >
-                    {marketplace}
-                  </option>
-                ))}
+                {marketplaces.map(
+                  (marketplace) => (
+                    <option
+                      key={marketplace}
+                      value={marketplace}
+                    >
+                      {marketplace}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
-            {/* Type */}
+            {/* Issue Type */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">
                 Issue Type
@@ -355,12 +429,17 @@ export default function IssuesPage() {
               <select
                 value={typeFilter}
                 onChange={(e) =>
-                  setTypeFilter(e.target.value)
+                  setTypeFilter(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-black"
               >
                 {issueTypes.map((type) => (
-                  <option key={type} value={type}>
+                  <option
+                    key={type}
+                    value={type}
+                  >
                     {type === "All"
                       ? "All"
                       : formatType(type)}
@@ -370,6 +449,7 @@ export default function IssuesPage() {
             </div>
 
             {/* Status */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">
                 Status
@@ -378,7 +458,9 @@ export default function IssuesPage() {
               <select
                 value={statusFilter}
                 onChange={(e) =>
-                  setStatusFilter(e.target.value)
+                  setStatusFilter(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-black"
               >
@@ -398,7 +480,10 @@ export default function IssuesPage() {
         </div>
 
         {/* Issues Table */}
+
         <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+
+          {/* Table Header */}
 
           <div className="flex items-center justify-between border-b px-6 py-5">
             <div>
@@ -407,17 +492,29 @@ export default function IssuesPage() {
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                Showing {filteredIssues.length} of{" "}
-                {issues.length} issues
+                Showing{" "}
+                {filteredIssues.length}{" "}
+                of {issues.length} issues
               </p>
             </div>
+
+            <button
+              onClick={loadIssues}
+              disabled={loading}
+              className="rounded-lg border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            >
+              Refresh
+            </button>
           </div>
+
+          {/* Loading */}
 
           {loading ? (
             <div className="p-10 text-center text-gray-500">
               Loading issues...
             </div>
-          ) : filteredIssues.length === 0 ? (
+          ) : filteredIssues.length ===
+            0 ? (
             <div className="p-10 text-center text-gray-500">
               No issues found.
             </div>
@@ -428,6 +525,7 @@ export default function IssuesPage() {
 
                 <thead className="bg-gray-50 text-sm text-gray-600">
                   <tr>
+
                     <th className="px-6 py-4 font-medium">
                       Product
                     </th>
@@ -451,114 +549,156 @@ export default function IssuesPage() {
                     <th className="px-6 py-4 font-medium">
                       Action
                     </th>
+
                   </tr>
                 </thead>
 
                 <tbody className="divide-y">
 
-                  {filteredIssues.map((issue) => (
-                    <tr
-                      key={issue._id}
-                      className="hover:bg-gray-50"
-                    >
+                  {filteredIssues.map(
+                    (issue) => (
+                      <tr
+                        key={issue._id}
+                        className="hover:bg-gray-50"
+                      >
 
-                      {/* Product */}
-                      <td className="px-6 py-5">
-                        {issue.productId ? (
-                          <div>
-                            <div className="font-semibold text-gray-900">
-                              {issue.productId.name}
-                            </div>
+                        {/* Product */}
 
-                            <div className="mt-1 text-xs text-gray-500">
-                              SKU: {issue.productId.sku}
+                        <td className="px-6 py-5">
+                          {issue.productId ? (
+                            <div>
+                              <div className="font-semibold text-gray-900">
+                                {
+                                  issue
+                                    .productId
+                                    .name
+                                }
+                              </div>
+
+                              <div className="mt-1 text-xs text-gray-500">
+                                SKU:{" "}
+                                {
+                                  issue
+                                    .productId
+                                    .sku
+                                }
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">
-                            Product not found
+                          ) : (
+                            <span className="text-gray-400">
+                              Product not found
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Marketplace */}
+
+                        <td className="px-6 py-5">
+                          <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700">
+                            {
+                              issue.marketplace
+                            }
                           </span>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Marketplace */}
-                      <td className="px-6 py-5">
-                        <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700">
-                          {issue.marketplace}
-                        </span>
-                      </td>
+                        {/* Issue */}
 
-                      {/* Issue Type */}
-                      <td className="px-6 py-5">
-                        <span className="font-medium text-gray-900">
-                          {formatType(issue.type)}
-                        </span>
+                        <td className="px-6 py-5">
+                          <span className="font-medium text-gray-900">
+                            {formatType(
+                              issue.type
+                            )}
+                          </span>
 
-                        {issue.note && (
-                          <p className="mt-1 max-w-xs truncate text-xs text-gray-500">
-                            {issue.note}
-                          </p>
-                        )}
-                      </td>
+                          {issue.note && (
+                            <p className="mt-1 max-w-xs truncate text-xs text-gray-500">
+                              {issue.note}
+                            </p>
+                          )}
+                        </td>
 
-                      {/* Status */}
-                      <td className="px-6 py-5">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusClass(
-                            issue.status
-                          )}`}
-                        >
-                          {formatStatus(issue.status)}
-                        </span>
-                      </td>
+                        {/* Status */}
 
-                      {/* Created */}
-                      <td className="whitespace-nowrap px-6 py-5 text-sm text-gray-500">
-                        {new Date(
-                          issue.createdAt
-                        ).toLocaleDateString()}
-                      </td>
+                        <td className="px-6 py-5">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusClass(
+                              issue.status
+                            )}`}
+                          >
+                            {formatStatus(
+                              issue.status
+                            )}
+                          </span>
+                        </td>
 
-                      {/* Action */}
-                      <td className="px-6 py-5">
+                        {/* Created */}
 
-                        <select
-                          value={issue.status}
-                          disabled={
-                            updatingId === issue._id
-                          }
-                          onChange={(e) =>
-                            updateStatus(
-                              issue._id,
-                              e.target.value as Issue["status"]
-                            )
-                          }
-                          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-black disabled:opacity-50"
-                        >
-                          <option value="open">
-                            Open
-                          </option>
+                        <td className="whitespace-nowrap px-6 py-5 text-sm text-gray-500">
+                          {new Date(
+                            issue.createdAt
+                          ).toLocaleDateString()}
+                        </td>
 
-                          <option value="in_progress">
-                            In Progress
-                          </option>
+                        {/* Action */}
 
-                          <option value="fixed">
-                            Fixed
-                          </option>
+                        <td className="px-6 py-5">
+                          <div className="flex flex-wrap items-center gap-2">
 
-                          <option value="verified">
-                            Verified
-                          </option>
+                            {/* View */}
 
-                          <option value="closed">
-                            Closed
-                          </option>
-                        </select>
+                            <a
+                              href={`/issues/${issue._id}`}
+                              className="rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                            >
+                              View
+                            </a>
 
-                      </td>
-                    </tr>
-                  ))}
+                            {/* Status */}
+
+                            <select
+                              value={
+                                issue.status
+                              }
+                              disabled={
+                                updatingId ===
+                                issue._id
+                              }
+                              onChange={(e) =>
+                                updateStatus(
+                                  issue._id,
+                                  e.target
+                                    .value as Issue["status"]
+                                )
+                              }
+                              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-black disabled:opacity-50"
+                            >
+                              <option value="open">
+                                Open
+                              </option>
+
+                              <option value="in_progress">
+                                In Progress
+                              </option>
+
+                              <option value="fixed">
+                                Fixed
+                              </option>
+
+                              <option value="verified">
+                                Verified
+                              </option>
+
+                              <option value="closed">
+                                Closed
+                              </option>
+                            </select>
+
+                          </div>
+                        </td>
+
+                      </tr>
+                    )
+                  )}
 
                 </tbody>
               </table>

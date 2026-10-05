@@ -13,6 +13,10 @@ type DashboardData = {
     total: number;
   };
 
+  employees: {
+    total: number;
+  };
+
   issues: {
     total: number;
     open: number;
@@ -36,9 +40,7 @@ const marketplaces = [
 ];
 
 export default function DashboardPage() {
-  const [data, setData] =
-    useState<DashboardData | null>(null);
-
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -50,9 +52,7 @@ export default function DashboardPage() {
       const response = await fetch("/api/dashboard");
 
       if (!response.ok) {
-        throw new Error(
-          "Failed to load dashboard"
-        );
+        throw new Error("Failed to load dashboard");
       }
 
       const result = await response.json();
@@ -75,9 +75,7 @@ export default function DashboardPage() {
     loadDashboard();
   }, []);
 
-  function getMarketplaceIssueCount(
-    marketplace: string
-  ) {
+  function getMarketplaceIssueCount(marketplace: string) {
     return (
       data?.marketplaceIssues.find(
         (item) => item._id === marketplace
@@ -123,7 +121,7 @@ export default function DashboardPage() {
         ) : data ? (
           <>
             {/* Main Stats */}
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
 
               {/* Products */}
               <a
@@ -167,6 +165,24 @@ export default function DashboardPage() {
                 </p>
               </a>
 
+              {/* Employees */}
+              <a
+                href="/employees"
+                className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-md"
+              >
+                <p className="text-sm font-medium text-gray-500">
+                  Employees
+                </p>
+
+                <p className="mt-3 text-4xl font-bold text-gray-900">
+                  {data.employees.total}
+                </p>
+
+                <p className="mt-4 text-sm text-gray-500">
+                  Manage employees →
+                </p>
+              </a>
+
               {/* Total Issues */}
               <a
                 href="/issues"
@@ -206,7 +222,6 @@ export default function DashboardPage() {
 
             {/* Issue Status */}
             <div className="mt-6 rounded-xl border bg-white p-6 shadow-sm">
-
               <div className="mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">
                   Issue Status
@@ -274,7 +289,6 @@ export default function DashboardPage() {
 
             {/* Marketplace Issues */}
             <div className="mt-6 rounded-xl border bg-white p-6 shadow-sm">
-
               <div className="mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">
                   Marketplace Issues
@@ -289,9 +303,7 @@ export default function DashboardPage() {
 
                 {marketplaces.map((marketplace) => {
                   const count =
-                    getMarketplaceIssueCount(
-                      marketplace
-                    );
+                    getMarketplaceIssueCount(marketplace);
 
                   return (
                     <div
@@ -310,9 +322,7 @@ export default function DashboardPage() {
                               : "bg-green-100 text-green-700"
                           }`}
                         >
-                          {count > 0
-                            ? "Issues"
-                            : "Healthy"}
+                          {count > 0 ? "Issues" : "Healthy"}
                         </span>
                       </div>
 
@@ -321,9 +331,7 @@ export default function DashboardPage() {
                       </p>
 
                       <p className="mt-1 text-sm text-gray-500">
-                        {count === 1
-                          ? "issue"
-                          : "issues"}
+                        {count === 1 ? "issue" : "issues"}
                       </p>
                     </div>
                   );
@@ -334,12 +342,11 @@ export default function DashboardPage() {
 
             {/* Quick Actions */}
             <div className="mt-6 rounded-xl border bg-white p-6 shadow-sm">
-
               <h2 className="text-xl font-semibold text-gray-900">
                 Quick Actions
               </h2>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
 
                 <a
                   href="/products/new"
@@ -353,6 +360,13 @@ export default function DashboardPage() {
                   className="rounded-lg border px-5 py-4 text-center font-medium hover:bg-gray-50"
                 >
                   Manage Categories
+                </a>
+
+                <a
+                  href="/employees"
+                  className="rounded-lg border px-5 py-4 text-center font-medium hover:bg-gray-50"
+                >
+                  Manage Employees
                 </a>
 
                 <a

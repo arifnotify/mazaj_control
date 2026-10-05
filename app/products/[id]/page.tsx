@@ -29,6 +29,7 @@ type Marketplace = {
   name: string;
   description: string;
   image: string;
+  category?: string;
   syncStatus: string;
 };
 
@@ -214,14 +215,23 @@ export default function ProductDetailsPage({
           body: JSON.stringify({
             productId: product._id,
             marketplace,
+
             available: current
               ? !current.available
               : true,
+
             price: product.price,
+
             name: product.name,
+
             description:
               product.description,
+
             image: product.image,
+
+            // Category added
+            category: product.category,
+
             syncStatus: "pending",
           }),
         }
@@ -369,7 +379,7 @@ export default function ProductDetailsPage({
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-100 p-8">
-        <div className="max-w-6xl mx-auto bg-white rounded-xl p-10 text-center">
+        <div className="mx-auto max-w-6xl rounded-xl bg-white p-10 text-center">
           Loading product...
         </div>
       </main>
@@ -379,14 +389,14 @@ export default function ProductDetailsPage({
   if (!product) {
     return (
       <main className="min-h-screen bg-gray-100 p-8">
-        <div className="max-w-6xl mx-auto bg-white rounded-xl p-10 text-center">
+        <div className="mx-auto max-w-6xl rounded-xl bg-white p-10 text-center">
           <h1 className="text-2xl font-bold">
             Product not found
           </h1>
 
           <a
             href="/products"
-            className="inline-block mt-5 bg-black text-white px-5 py-3 rounded-lg"
+            className="mt-5 inline-block rounded-lg bg-black px-5 py-3 text-white"
           >
             Back to Products
           </a>
@@ -397,7 +407,7 @@ export default function ProductDetailsPage({
 
   return (
     <main className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-6xl mx-auto">
+      <div className="mx-auto max-w-6xl">
 
         {/* Header */}
         <div className="mb-8">
@@ -408,18 +418,18 @@ export default function ProductDetailsPage({
             ← Products
           </a>
 
-          <h1 className="text-3xl font-bold mt-3">
+          <h1 className="mt-3 text-3xl font-bold">
             {product.name}
           </h1>
 
-          <p className="text-gray-500 mt-1">
+          <p className="mt-1 text-gray-500">
             SKU: {product.sku}
           </p>
 
           <div className="mt-5 flex gap-3">
             <a
               href={`/products/${product._id}/edit`}
-              className="rounded-lg bg-black px-5 py-3 text-white font-medium hover:bg-gray-800"
+              className="rounded-lg bg-black px-5 py-3 font-medium text-white hover:bg-gray-800"
             >
               Edit Product
             </a>
@@ -434,19 +444,19 @@ export default function ProductDetailsPage({
         </div>
 
         {/* Master Product */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <h2 className="text-xl font-bold mb-5">
+        <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
+          <h2 className="mb-5 text-xl font-bold">
             Master Product
           </h2>
 
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
             <div>
               <p className="text-sm text-gray-500">
                 Product Name
               </p>
 
-              <p className="font-semibold mt-1">
+              <p className="mt-1 font-semibold">
                 {product.name}
               </p>
             </div>
@@ -456,7 +466,7 @@ export default function ProductDetailsPage({
                 SKU
               </p>
 
-              <p className="font-semibold mt-1">
+              <p className="mt-1 font-semibold">
                 {product.sku}
               </p>
             </div>
@@ -466,7 +476,7 @@ export default function ProductDetailsPage({
                 Category
               </p>
 
-              <p className="font-semibold mt-1">
+              <p className="mt-1 font-semibold">
                 {product.category || "-"}
               </p>
             </div>
@@ -476,7 +486,7 @@ export default function ProductDetailsPage({
                 Price
               </p>
 
-              <p className="font-semibold mt-1">
+              <p className="mt-1 font-semibold">
                 QAR{" "}
                 {Number(
                   product.price
@@ -489,7 +499,7 @@ export default function ProductDetailsPage({
                 Stock
               </p>
 
-              <p className="font-semibold mt-1">
+              <p className="mt-1 font-semibold">
                 {product.stock}
               </p>
             </div>
@@ -499,7 +509,7 @@ export default function ProductDetailsPage({
                 Status
               </p>
 
-              <p className="font-semibold mt-1">
+              <p className="mt-1 font-semibold">
                 {product.active
                   ? "Active"
                   : "Inactive"}
@@ -522,23 +532,21 @@ export default function ProductDetailsPage({
         </div>
 
         {/* Automatic Comparison */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
 
-          <div className="flex items-center justify-between mb-6">
-
+          <div className="mb-6 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold">
                 Marketplace Sync Check
               </h2>
 
-              <p className="text-gray-500 mt-1">
+              <p className="mt-1 text-gray-500">
                 Automatically compare marketplace data with the master product.
               </p>
             </div>
-
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 
             {marketplaceNames.map(
               (marketplace) => {
@@ -550,7 +558,7 @@ export default function ProductDetailsPage({
                 return (
                   <div
                     key={marketplace}
-                    className={`border rounded-xl p-5 ${
+                    className={`rounded-xl border p-5 ${
                       !result
                         ? "border-gray-200"
                         : result.healthy
@@ -580,7 +588,7 @@ export default function ProductDetailsPage({
                     </div>
 
                     {!result ? (
-                      <p className="text-sm text-gray-500 mt-4">
+                      <p className="mt-4 text-sm text-gray-500">
                         Checking...
                       </p>
                     ) : !result.connected ? (
@@ -589,7 +597,7 @@ export default function ProductDetailsPage({
                           Not Connected
                         </p>
 
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="mt-1 text-sm text-gray-500">
                           Marketplace data is not available.
                         </p>
                       </div>
@@ -599,7 +607,7 @@ export default function ProductDetailsPage({
                           Synced
                         </p>
 
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="mt-1 text-sm text-gray-500">
                           All checked fields match.
                         </p>
                       </div>
@@ -616,7 +624,7 @@ export default function ProductDetailsPage({
                             (issue) => (
                               <div
                                 key={issue}
-                                className="text-sm bg-white border rounded-lg px-3 py-2"
+                                className="rounded-lg border bg-white px-3 py-2 text-sm"
                               >
                                 ⚠️{" "}
                                 {issueLabels[
@@ -640,27 +648,27 @@ export default function ProductDetailsPage({
         </div>
 
         {/* Marketplace Status */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
 
           <h2 className="text-xl font-bold">
             Marketplace Status
           </h2>
 
-          <p className="text-gray-500 mt-1 mb-6">
+          <p className="mb-6 mt-1 text-gray-500">
             Control product availability on each marketplace.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 
             {marketplaceNames.map(
               (marketplace) => {
-                const data =
+                const marketplaceData =
                   getMarketplace(
                     marketplace
                   );
 
                 const available =
-                  data?.available ??
+                  marketplaceData?.available ??
                   false;
 
                 const saving =
@@ -670,7 +678,7 @@ export default function ProductDetailsPage({
                 return (
                   <div
                     key={marketplace}
-                    className="border rounded-xl p-5"
+                    className="rounded-xl border p-5"
                   >
 
                     <div className="flex items-center justify-between">
@@ -680,7 +688,7 @@ export default function ProductDetailsPage({
                       </h3>
 
                       <span
-                        className={`w-3 h-3 rounded-full ${
+                        className={`h-3 w-3 rounded-full ${
                           available
                             ? "bg-green-500"
                             : "bg-red-500"
@@ -708,7 +716,7 @@ export default function ProductDetailsPage({
                           marketplace
                         )
                       }
-                      className={`w-full mt-4 rounded-lg px-4 py-2 text-white font-medium disabled:opacity-50 ${
+                      className={`mt-4 w-full rounded-lg px-4 py-2 font-medium text-white disabled:opacity-50 ${
                         available
                           ? "bg-red-500 hover:bg-red-600"
                           : "bg-green-600 hover:bg-green-700"
@@ -721,9 +729,9 @@ export default function ProductDetailsPage({
                         : "Turn ON"}
                     </button>
 
-                    <p className="text-xs text-gray-400 mt-3">
+                    <p className="mt-3 text-xs text-gray-400">
                       Sync:{" "}
-                      {data?.syncStatus ||
+                      {marketplaceData?.syncStatus ||
                         "not_connected"}
                     </p>
 
@@ -736,24 +744,24 @@ export default function ProductDetailsPage({
         </div>
 
         {/* Issue Report */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="rounded-xl bg-white p-6 shadow-sm">
 
           <h2 className="text-xl font-bold">
             Report Marketplace Issue
           </h2>
 
-          <p className="text-gray-500 mt-1">
+          <p className="mt-1 text-gray-500">
             Select marketplace and check the fields that are wrong.
           </p>
 
           {/* Marketplace */}
           <div className="mt-6">
 
-            <p className="text-sm font-semibold mb-3">
+            <p className="mb-3 text-sm font-semibold">
               Marketplace
             </p>
 
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex flex-wrap gap-3">
 
               {marketplaceNames.map(
                 (marketplace) => (
@@ -764,7 +772,7 @@ export default function ProductDetailsPage({
                         marketplace
                       )
                     }
-                    className={`px-4 py-2 rounded-lg ${
+                    className={`rounded-lg px-4 py-2 ${
                       selectedMarketplace ===
                       marketplace
                         ? "bg-black text-white"
@@ -782,17 +790,17 @@ export default function ProductDetailsPage({
           {/* Issues */}
           <div className="mt-6">
 
-            <p className="text-sm font-semibold mb-3">
+            <p className="mb-3 text-sm font-semibold">
               What is wrong?
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
 
               {issueTypes.map(
                 (issue) => (
                   <label
                     key={issue.key}
-                    className="border rounded-lg p-4 cursor-pointer hover:bg-gray-50"
+                    className="cursor-pointer rounded-lg border p-4 hover:bg-gray-50"
                   >
 
                     <input
@@ -819,7 +827,7 @@ export default function ProductDetailsPage({
 
           <button
             onClick={reportIssues}
-            className="mt-6 rounded-lg bg-black px-6 py-3 text-white font-medium hover:bg-gray-800"
+            className="mt-6 rounded-lg bg-black px-6 py-3 font-medium text-white hover:bg-gray-800"
           >
             Report Issue
           </button>

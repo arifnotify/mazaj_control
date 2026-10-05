@@ -28,196 +28,213 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get("productId");
 
-    // Product ID check
+    // --------------------------------
+    // Validate Product ID
+    // --------------------------------
+
     if (!productId) {
       return NextResponse.json(
         {
           error: "Product ID is required",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    // ObjectId check
     if (!mongoose.Types.ObjectId.isValid(productId)) {
       return NextResponse.json(
         {
           error: "Invalid product ID",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    // Get master product
-    const product = await Product.findById(
-      productId
-    ).lean();
+    // --------------------------------
+    // Get Master Product
+    // --------------------------------
+
+    const product = await Product.findById(productId).lean();
 
     if (!product) {
       return NextResponse.json(
         {
           error: "Product not found",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
-    // Get marketplace data
+    // --------------------------------
+    // Get Marketplace Data
+    // --------------------------------
+
     const marketplaceData =
       await ProductMarketplace.find({
         productId,
       }).lean();
 
-    // Compare every marketplace
+    // --------------------------------
+    // Compare Marketplaces
+    // --------------------------------
+
     const results = await Promise.all(
-      marketplaceNames.map(
-        async (marketplace) => {
-          const marketplaceProduct =
-            marketplaceData.find(
-              (item) =>
-                item.marketplace ===
-                marketplace
-            );
+      marketplaceNames.map(async (marketplace) => {
+        const marketplaceProduct =
+          marketplaceData.find(
+            (item) =>
+              item.marketplace === marketplace
+          );
 
-          // Marketplace not connected
-          if (!marketplaceProduct) {
-            return {
-              marketplace,
-              connected: false,
-              healthy: false,
-              issues: [
-                "Marketplace is not connected",
-              ],
-            };
-          }
+        // --------------------------------
+        // Marketplace Not Connected
+        // --------------------------------
 
-          const issues: string[] = [];
-
-          // -------------------------
-          // PRICE
-          // -------------------------
-          if (
-            Number(
-              marketplaceProduct.price
-            ) !== Number(product.price)
-          ) {
-            issues.push("price");
-          }
-
-          // -------------------------
-          // NAME
-          // -------------------------
-          if (
-            marketplaceProduct.name !==
-            product.name
-          ) {
-            issues.push("name");
-          }
-
-          // -------------------------
-          // DESCRIPTION
-          // -------------------------
-          if (
-            marketplaceProduct.description !==
-            product.description
-          ) {
-            issues.push("description");
-          }
-
-          // -------------------------
-          // IMAGE
-          // -------------------------
-          if (
-            marketplaceProduct.image !==
-            product.image
-          ) {
-            issues.push("image");
-          }
-
-          // -------------------------
-          // CATEGORY
-          // -------------------------
-          if (
-            marketplaceProduct.category !==
-            product.category
-          ) {
-            issues.push("category");
-          }
-
-          // -------------------------
-          // AVAILABILITY
-          // -------------------------
-          if (
-            marketplaceProduct.available !==
-            product.active
-          ) {
-            issues.push("availability");
-          }
-
-          // -------------------------
-          // AUTOMATIC ISSUE CREATION
-          // -------------------------
-          for (const issueType of issues) {
-            if (
-              issueTypes.includes(
-                issueType as (typeof issueTypes)[number]
-              )
-            ) {
-              const existingIssue =
-                await Issue.findOne({
-                  productId: product._id,
-                  marketplace,
-                  type: issueType,
-                  status: {
-                    $in: [
-                      "open",
-                      "in_progress",
-                    ],
-                  },
-                });
-
-              // Create only if active issue does not exist
-              if (!existingIssue) {
-                await Issue.create({
-                  productId: product._id,
-                  marketplace,
-                  type: issueType,
-                  note:
-                    `Automatically detected ${issueType} mismatch.`,
-                  status: "open",
-                });
-              }
-            }
-          }
-
+        if (!marketplaceProduct) {
           return {
             marketplace,
-            connected: true,
-            healthy:
-              issues.length === 0,
-            issues,
-            available:
-              marketplaceProduct.available,
-            syncStatus:
-              marketplaceProduct.syncStatus,
+            connected: false,
+            healthy: false,
+            issues: [
+              "Marketplace is not connected",
+            ],
           };
         }
-      )
+
+        const issues: string[] = [];
+
+        // --------------------------------
+        // PRICE
+        // --------------------------------
+
+        if (
+          Number(marketplaceProduct.price) !==
+          Number(product.price)
+        ) {
+          issues.push("price");
+        }
+
+        // --------------------------------
+        // NAME
+        // --------------------------------
+
+        if (
+          String(marketplaceProduct.name || "").trim() !==
+          String(product.name || "").trim()
+        ) {
+          issues.push("name");
+        }
+
+        // --------------------------------
+        // DESCRIPTION
+        // --------------------------------
+
+        if (
+          String(
+            marketplaceProduct.description || ""
+          ).trim() !==
+          String(product.description || "").trim()
+        ) {
+          issues.push("description");
+        }
+
+        // --------------------------------
+        // IMAGE
+        // --------------------------------
+
+        if (
+          String(marketplaceProduct.image || "").trim() !==
+          String(product.image || "").trim()
+        ) {
+          issues.push("image");
+        }
+
+        // --------------------------------
+        // CATEGORY
+        // --------------------------------
+
+        if (
+          String(marketplaceProduct.category || "").trim() !==
+          String(product.category || "").trim()
+        ) {
+          issues.push("category");
+        }
+
+        // --------------------------------
+        // AVAILABILITY
+        // --------------------------------
+
+        if (
+          Boolean(marketplaceProduct.available) !==
+          Boolean(product.active)
+        ) {
+          issues.push("availability");
+        }
+
+        // --------------------------------
+        // AUTOMATIC ISSUE CREATION
+        // --------------------------------
+
+        for (const issueType of issues) {
+          if (
+            !issueTypes.includes(
+              issueType as (typeof issueTypes)[number]
+            )
+          ) {
+            continue;
+          }
+
+          const existingIssue =
+            await Issue.findOne({
+              productId: product._id,
+              marketplace,
+              type: issueType,
+              status: {
+                $in: [
+                  "open",
+                  "in_progress",
+                ],
+              },
+            });
+
+          if (!existingIssue) {
+            await Issue.create({
+              productId: product._id,
+              marketplace,
+              type: issueType,
+              note: `Automatically detected ${issueType} mismatch.`,
+              status: "open",
+            });
+          }
+        }
+
+        // --------------------------------
+        // Result
+        // --------------------------------
+
+        return {
+          marketplace,
+          connected: true,
+          healthy: issues.length === 0,
+          issues,
+          available:
+            marketplaceProduct.available,
+          syncStatus:
+            marketplaceProduct.syncStatus,
+        };
+      })
     );
+
+    // --------------------------------
+    // Response
+    // --------------------------------
 
     return NextResponse.json({
       product: {
         id: product._id,
         name: product.name,
         price: product.price,
-        description:
-          product.description,
+        description: product.description,
         image: product.image,
         category: product.category,
         active: product.active,
@@ -235,9 +252,7 @@ export async function GET(request: Request) {
         error:
           "Failed to compare marketplaces",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
