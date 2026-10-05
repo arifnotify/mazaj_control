@@ -54,6 +54,68 @@ export async function POST(request: Request) {
       );
     }
 
+    const allowedMarketplaces = [
+      "Talabat",
+      "Snoonu",
+      "Rafeeq",
+      "Keeta",
+    ];
+
+    const allowedTypes = [
+      "price",
+      "name",
+      "description",
+      "image",
+      "category",
+      "availability",
+      "other",
+    ];
+
+    if (
+      !allowedMarketplaces.includes(
+        body.marketplace
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Invalid marketplace" },
+        { status: 400 }
+      );
+    }
+
+    if (!allowedTypes.includes(body.type)) {
+      return NextResponse.json(
+        { error: "Invalid issue type" },
+        { status: 400 }
+      );
+    }
+
+    // Check if the same issue is already open
+    const existingIssue = await Issue.findOne({
+      productId: body.productId,
+      marketplace: body.marketplace,
+      type: body.type,
+      status: {
+        $in: ["open", "in_progress"],
+      },
+    });
+
+    // Prevent duplicate issue
+    if (existingIssue) {
+      return NextResponse.json(
+        {
+          success: true,
+          duplicate: true,
+          message:
+            "This issue is already open.",
+          issue: existingIssue,
+        },
+        {
+          status: 200,
+        }
+      );
+    }
+
+    // Create new issue
     const issue = await Issue.create({
       productId: body.productId,
       marketplace: body.marketplace,
@@ -62,11 +124,22 @@ export async function POST(request: Request) {
       status: "open",
     });
 
-    return NextResponse.json(issue, {
-      status: 201,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        duplicate: false,
+        message: "Issue created successfully.",
+        issue,
+      },
+      {
+        status: 201,
+      }
+    );
   } catch (error) {
-    console.error("CREATE ISSUE ERROR:", error);
+    console.error(
+      "CREATE ISSUE ERROR:",
+      error
+    );
 
     return NextResponse.json(
       {
