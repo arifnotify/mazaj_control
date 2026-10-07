@@ -7,25 +7,23 @@ export async function POST(request: Request) {
 
     const file = formData.get("file");
 
-    if (!file || !(file instanceof File)) {
+    if (!(file instanceof File)) {
       return NextResponse.json(
-        { error: "Image file is required" },
+        { error: "No image file provided" },
         { status: 400 }
       );
     }
 
-    // File size limit: 5MB
-    if (file.size > 5 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "Image size must be less than 5MB" },
-        { status: 400 }
-      );
-    }
-
-    // Allow image files only
     if (!file.type.startsWith("image/")) {
       return NextResponse.json(
         { error: "Only image files are allowed" },
+        { status: 400 }
+      );
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "Image must be less than 5MB" },
         { status: 400 }
       );
     }
@@ -57,10 +55,15 @@ export async function POST(request: Request) {
       public_id: result.public_id,
     });
   } catch (error) {
-    console.error("CLOUDINARY UPLOAD ERROR:", error);
+    console.error("Cloudinary upload error:", error);
 
     return NextResponse.json(
-      { error: "Failed to upload image" },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to upload image",
+      },
       { status: 500 }
     );
   }
