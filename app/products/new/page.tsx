@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Category = {
@@ -16,86 +16,73 @@ export default function NewProductPage() {
   const router = useRouter();
 
   const [categories, setCategories] = useState<Category[]>([]);
+
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const [form, setForm] = useState({
     sku: "",
-
     nameEn: "",
     nameAr: "",
-
-    categoryEn: "",
-    categoryAr: "",
-
     descriptionEn: "",
     descriptionAr: "",
-
     image: "",
+    categoryEn: "",
+    categoryAr: "",
     price: "",
-    stock: "",
+    stock: "0",
     active: true,
   });
 
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
   useEffect(() => {
-    async function loadCategories() {
-      try {
-        const response = await fetch("/api/categories");
-
-        if (!response.ok) {
-          throw new Error("Failed to load categories");
-        }
-
-        const data = await response.json();
-
-        setCategories(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error(err);
-        setError("Categories load করা যায়নি");
-      } finally {
-        setLoadingCategories(false);
-      }
-    }
-
-    loadCategories();
+    fetchCategories();
   }, []);
 
+  async function fetchCategories() {
+    try {
+      setLoadingCategories(true);
+
+      const response = await fetch("/api/categories");
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load categories");
+      }
+
+      setCategories(data);
+    } catch (err: any) {
+      setError(err.message || "Failed to load categories");
+    } finally {
+      setLoadingCategories(false);
+    }
+  }
+
   function handleChange(
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) {
     const { name, value } = e.target;
 
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       [name]: value,
     }));
   }
 
-  function handleActiveChange(
-    e: React.ChangeEvent<HTMLInputElement>
-  ) {
-    setForm((prev) => ({
-      ...prev,
-      active: e.target.checked,
-    }));
-  }
-
-  function handleCategoryChange(
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) {
+  function handleCategoryChange(e: ChangeEvent<HTMLSelectElement>) {
     const selectedId = e.target.value;
 
-    const selectedCategory = categories.find(
-      (category) => category._id === selectedId
+    const category = categories.find(
+      (item) => item._id === selectedId
     );
 
-    if (!selectedCategory) {
-      setForm((prev) => ({
-        ...prev,
+    if (!category) {
+      setForm((previous) => ({
+        ...previous,
         categoryEn: "",
         categoryAr: "",
       }));
@@ -103,60 +90,150 @@ export default function NewProductPage() {
       return;
     }
 
-    setForm((prev) => ({
-      ...prev,
-      categoryEn: selectedCategory.nameEn,
-      categoryAr: selectedCategory.nameAr,
+    setForm((previous) => ({
+      ...previous,
+      categoryEn: category.nameEn,
+      categoryAr: category.nameAr,
     }));
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function handleImageUpload(
+    e: ChangeEvent<HTMLInputElement>
+  ) {
+    const file = e.target.files?.[0];
 
-    setSaving(true);
+    if (!file) {
+      return;
+    }
+
     setError("");
+    setSuccess("");
 
-    if (!form.categoryEn || !form.categoryAr) {
-      setError("Please select a category");
-      setSaving(false);
+    // Client-side validation
+    if (!file.type.startsWith("image/")) {
+      setError("Please select a valid image file.");
+      e.target.value = "";
       return;
     }
 
-    if (!form.nameEn || !form.nameAr) {
-      setError("English and Arabic product names are required");
-      setSaving(false);
-      return;
-    }
-
-    if (!form.price) {
-      setError("Price is required");
-      setSaving(false);
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size must be less than 5MB.");
+      e.target.value = "";
       return;
     }
 
     try {
+      setUploading(true);
+
+      const formData = new FormData();
+
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to upload image");
+      }
+
+      setForm((previous) => ({
+        ...previous,
+        image: data.url,
+      }));
+
+      setSuccess("Image uploaded successfully.");
+    } catch (err: any) {
+      setError(err.message || "Failed to upload image");
+    } finally {
+      setUploading(false);
+
+      // Allow selecting the same file again
+      e.target.value = "";
+    }
+  }
+
+  function removeImage() {
+    setForm((previous) => ({
+      ...previous,
+      image: "",
+    }));
+
+    setSuccess("");
+  }
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    setError("");
+    setSuccess("");
+
+    // Validation
+    if (!form.sku.trim()) {
+      setError("SKU is required.");
+      return;
+    }
+
+    if (!form.nameEn.trim()) {
+      setError("English product name is required.");
+      return;
+    }
+
+    if (!form.nameAr.trim()) {
+      setError("Arabic product name is required.");
+      return;
+    }
+
+    if (!form.price.trim()) {
+      setError("Price is required.");
+      return;
+    }
+
+    const price = Number(form.price);
+    const stock = Number(form.stock || 0);
+
+    if (Number.isNaN(price) || price < 0) {
+      setError("Please enter a valid price.");
+      return;
+    }
+
+    if (Number.isNaN(stock) || stock < 0) {
+      setError("Please enter a valid stock quantity.");
+      return;
+    }
+
+    if (uploading) {
+      setError("Please wait until the image upload is complete.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
       const response = await fetch("/api/products", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sku: form.sku,
+          sku: form.sku.trim(),
 
-          nameEn: form.nameEn,
-          nameAr: form.nameAr,
+          nameEn: form.nameEn.trim(),
+          nameAr: form.nameAr.trim(),
 
-          descriptionEn: form.descriptionEn,
-          descriptionAr: form.descriptionAr,
+          descriptionEn: form.descriptionEn.trim(),
+          descriptionAr: form.descriptionAr.trim(),
 
           image: form.image,
 
-          categoryEn: form.categoryEn,
-          categoryAr: form.categoryAr,
+          categoryEn: form.categoryEn.trim(),
+          categoryAr: form.categoryAr.trim(),
 
-          price: Number(form.price),
-          stock: Number(form.stock || 0),
-
+          price,
+          stock,
           active: form.active,
         }),
       });
@@ -164,137 +241,191 @@ export default function NewProductPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || "Failed to create product"
-        );
+        throw new Error(data.error || "Failed to create product");
       }
 
-      router.push("/products");
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong"
-      );
+      setSuccess("Product created successfully.");
 
+      setTimeout(() => {
+        router.push("/products");
+        router.refresh();
+      }, 800);
+    } catch (err: any) {
+      setError(err.message || "Failed to create product");
+    } finally {
       setSaving(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8">
-      <div className="mx-auto max-w-4xl">
-
+    <main className="min-h-screen bg-gray-50 p-6">
+      <div className="mx-auto max-w-5xl">
         {/* Header */}
-        <div className="mb-8">
-          <a
-            href="/products"
-            className="text-sm text-gray-500 hover:text-black"
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={() => router.push("/products")}
+            className="mb-3 text-sm font-medium text-gray-600 hover:text-gray-900"
           >
             ← Back to Products
-          </a>
+          </button>
 
-          <h1 className="mt-4 text-3xl font-bold">
-            Add Product
+          <h1 className="text-3xl font-bold text-gray-900">
+            Add New Product
           </h1>
 
-          <p className="mt-1 text-gray-500">
-            Add a new product to your master product database.
+          <p className="mt-1 text-sm text-gray-500">
+            Create a new product with English and Arabic information.
           </p>
         </div>
 
-        {/* Form */}
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-6 rounded-xl bg-white p-8 shadow"
-        >
-
-          {/* SKU */}
-          <div>
-            <label className="mb-2 block font-medium">
-              SKU
-            </label>
-
-            <input
-              name="sku"
-              value={form.sku}
-              onChange={handleChange}
-              required
-              placeholder="COKE-330"
-              className="w-full rounded-lg border p-3 outline-none focus:border-black"
-            />
+        {/* Error */}
+        {error && (
+          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
           </div>
+        )}
 
-          {/* Product Name */}
-          <div>
-            <h2 className="mb-4 text-lg font-semibold">
-              Product Name
-            </h2>
+        {/* Success */}
+        {success && (
+          <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {success}
+          </div>
+        )}
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-6">
+            {/* Basic Information */}
+            <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-5 text-xl font-semibold text-gray-900">
+                Basic Information
+              </h2>
 
-              {/* English */}
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                {/* SKU */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    SKU *
+                  </label>
+
+                  <input
+                    type="text"
+                    name="sku"
+                    value={form.sku}
+                    onChange={handleChange}
+                    placeholder="Example: NUT-001"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                {/* Price */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Price *
+                  </label>
+
+                  <input
+                    type="number"
+                    name="price"
+                    value={form.price}
+                    onChange={handleChange}
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                {/* English Name */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Product Name - English *
+                  </label>
+
+                  <input
+                    type="text"
+                    name="nameEn"
+                    value={form.nameEn}
+                    onChange={handleChange}
+                    dir="ltr"
+                    placeholder="Example: Roasted Almonds"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                {/* Arabic Name */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Product Name - Arabic *
+                  </label>
+
+                  <input
+                    type="text"
+                    name="nameAr"
+                    value={form.nameAr}
+                    onChange={handleChange}
+                    dir="rtl"
+                    placeholder="مثال: لوز محمص"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-right text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Description */}
+            <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-5 text-xl font-semibold text-gray-900">
+                Description
+              </h2>
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                {/* English Description */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Description - English
+                  </label>
+
+                  <textarea
+                    name="descriptionEn"
+                    value={form.descriptionEn}
+                    onChange={handleChange}
+                    dir="ltr"
+                    rows={5}
+                    placeholder="Enter product description in English..."
+                    className="w-full resize-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                {/* Arabic Description */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Description - Arabic
+                  </label>
+
+                  <textarea
+                    name="descriptionAr"
+                    value={form.descriptionAr}
+                    onChange={handleChange}
+                    dir="rtl"
+                    rows={5}
+                    placeholder="أدخل وصف المنتج باللغة العربية..."
+                    className="w-full resize-none rounded-lg border border-gray-300 px-4 py-3 text-right text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Category */}
+            <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-5 text-xl font-semibold text-gray-900">
+                Category
+              </h2>
+
               <div>
-                <label className="mb-2 block font-medium">
-                  English Name
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Select Category
                 </label>
 
-                <input
-                  name="nameEn"
-                  value={form.nameEn}
-                  onChange={handleChange}
-                  required
-                  dir="ltr"
-                  placeholder="Coca Cola 330ml"
-                  className="w-full rounded-lg border p-3 outline-none focus:border-black"
-                />
-              </div>
-
-              {/* Arabic */}
-              <div>
-                <label className="mb-2 block font-medium">
-                  Arabic Name
-                </label>
-
-                <input
-                  name="nameAr"
-                  value={form.nameAr}
-                  onChange={handleChange}
-                  required
-                  dir="rtl"
-                  placeholder="كوكا كولا 330 مل"
-                  className="w-full rounded-lg border p-3 text-right outline-none focus:border-black"
-                />
-              </div>
-
-            </div>
-          </div>
-
-          {/* Category */}
-          <div>
-            <h2 className="mb-4 text-lg font-semibold">
-              Category
-            </h2>
-
-            {loadingCategories ? (
-              <div className="rounded-lg border bg-gray-50 p-3 text-gray-500">
-                Loading categories...
-              </div>
-            ) : categories.length === 0 ? (
-              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-                <p className="text-sm text-yellow-700">
-                  No categories found.
-                </p>
-
-                <a
-                  href="/categories"
-                  className="mt-2 inline-block font-medium text-black underline"
-                >
-                  Create a category first →
-                </a>
-              </div>
-            ) : (
-              <>
                 <select
                   value={
                     categories.find(
@@ -304,233 +435,226 @@ export default function NewProductPage() {
                     )?._id || ""
                   }
                   onChange={handleCategoryChange}
-                  required
-                  className="w-full rounded-lg border bg-white p-3 outline-none focus:border-black"
+                  disabled={loadingCategories}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 >
                   <option value="">
-                    Select a category
+                    {loadingCategories
+                      ? "Loading categories..."
+                      : "Select a category"}
                   </option>
 
                   {categories
                     .filter((category) => category.active)
                     .map((category) => (
-                      <option
-                        key={category._id}
-                        value={category._id}
-                      >
+                      <option key={category._id} value={category._id}>
                         {category.nameEn} / {category.nameAr}
                       </option>
                     ))}
                 </select>
 
-                {/* Selected Category Preview */}
                 {form.categoryEn && form.categoryAr && (
-                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-
-                    <div className="rounded-lg bg-gray-50 p-3">
-                      <p className="text-xs text-gray-500">
-                        English
-                      </p>
-
-                      <p className="font-medium">
-                        {form.categoryEn}
-                      </p>
+                  <div className="mt-3 rounded-lg bg-gray-50 p-3 text-sm">
+                    <div className="text-gray-700">
+                      <span className="font-medium">English:</span>{" "}
+                      {form.categoryEn}
                     </div>
 
                     <div
+                      className="mt-1 text-right text-gray-700"
                       dir="rtl"
-                      className="rounded-lg bg-gray-50 p-3 text-right"
                     >
-                      <p className="text-xs text-gray-500">
-                        العربية
-                      </p>
-
-                      <p className="font-medium">
-                        {form.categoryAr}
-                      </p>
+                      <span className="font-medium">العربية:</span>{" "}
+                      {form.categoryAr}
                     </div>
-
                   </div>
                 )}
-              </>
-            )}
-          </div>
-
-          {/* Description */}
-          <div>
-            <h2 className="mb-4 text-lg font-semibold">
-              Description
-            </h2>
-
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-              {/* English Description */}
-              <div>
-                <label className="mb-2 block font-medium">
-                  English Description
-                </label>
-
-                <textarea
-                  name="descriptionEn"
-                  value={form.descriptionEn}
-                  onChange={handleChange}
-                  rows={5}
-                  dir="ltr"
-                  placeholder="Original Coca Cola 330ml..."
-                  className="w-full rounded-lg border p-3 outline-none focus:border-black"
-                />
               </div>
+            </section>
 
-              {/* Arabic Description */}
-              <div>
-                <label className="mb-2 block font-medium">
-                  Arabic Description
-                </label>
+            {/* Image Upload */}
+            <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-2 text-xl font-semibold text-gray-900">
+                Product Image
+              </h2>
 
-                <textarea
-                  name="descriptionAr"
-                  value={form.descriptionAr}
-                  onChange={handleChange}
-                  rows={5}
-                  dir="rtl"
-                  placeholder="كوكا كولا أصلية 330 مل..."
-                  className="w-full rounded-lg border p-3 text-right outline-none focus:border-black"
-                />
-              </div>
+              <p className="mb-5 text-sm text-gray-500">
+                Upload an image to Cloudinary. Maximum size: 5MB.
+              </p>
 
-            </div>
-          </div>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                {/* Upload */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Choose Image
+                  </label>
 
-          {/* Image */}
-          <div>
-            <label className="mb-2 block font-medium">
-              Image URL
-            </label>
+                  <label
+                    className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed px-6 py-10 transition ${
+                      uploading
+                        ? "cursor-not-allowed border-gray-300 bg-gray-100"
+                        : "border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50"
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className="mb-3 text-4xl">📷</div>
 
-            <input
-              name="image"
-              value={form.image}
-              onChange={handleChange}
-              placeholder="https://..."
-              className="w-full rounded-lg border p-3 outline-none focus:border-black"
-            />
+                      {uploading ? (
+                        <>
+                          <p className="font-medium text-blue-600">
+                            Uploading...
+                          </p>
 
-            {/* Image Preview */}
-            {form.image && (
-              <div className="mt-4">
-                <p className="mb-2 text-sm text-gray-500">
-                  Image Preview
-                </p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            Please wait
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-gray-700">
+                            Click to choose an image
+                          </p>
 
-                <div className="flex h-40 w-40 items-center justify-center overflow-hidden rounded-lg border bg-gray-50">
-                  <img
-                    src={form.image}
-                    alt="Product preview"
-                    className="h-full w-full object-contain"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
+                          <p className="mt-1 text-xs text-gray-500">
+                            JPG, PNG, WEBP up to 5MB
+                          </p>
+                        </>
+                      )}
+                    </div>
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      disabled={uploading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Preview */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Image Preview
+                  </label>
+
+                  <div className="relative flex min-h-[250px] items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                    {form.image ? (
+                      <>
+                        <img
+                          src={form.image}
+                          alt="Product preview"
+                          className="max-h-[250px] max-w-full object-contain"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="absolute right-3 top-3 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-red-700"
+                        >
+                          Remove
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-center text-gray-400">
+                        <div className="mb-2 text-4xl">🖼️</div>
+
+                        <p className="text-sm">
+                          No image selected
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
+            </section>
 
-          {/* Price + Stock */}
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {/* Stock & Status */}
+            <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-5 text-xl font-semibold text-gray-900">
+                Inventory & Status
+              </h2>
 
-            <div>
-              <label className="mb-2 block font-medium">
-                Price (QAR)
-              </label>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                {/* Stock */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Stock
+                  </label>
 
-              <input
-                name="price"
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.price}
-                onChange={handleChange}
-                required
-                placeholder="2.50"
-                className="w-full rounded-lg border p-3 outline-none focus:border-black"
-              />
-            </div>
+                  <input
+                    type="number"
+                    name="stock"
+                    value={form.stock}
+                    onChange={handleChange}
+                    min="0"
+                    step="1"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
 
-            <div>
-              <label className="mb-2 block font-medium">
-                Stock
-              </label>
+                {/* Status */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Product Status
+                  </label>
 
-              <input
-                name="stock"
-                type="number"
-                min="0"
-                value={form.stock}
-                onChange={handleChange}
-                placeholder="50"
-                className="w-full rounded-lg border p-3 outline-none focus:border-black"
-              />
-            </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((previous) => ({
+                        ...previous,
+                        active: !previous.active,
+                      }))
+                    }
+                    className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 ${
+                      form.active
+                        ? "border-green-200 bg-green-50"
+                        : "border-gray-200 bg-gray-50"
+                    }`}
+                  >
+                    <span className="font-medium text-gray-700">
+                      {form.active ? "Product is ON" : "Product is OFF"}
+                    </span>
 
-          </div>
-
-          {/* Product Status */}
-          <div className="rounded-lg border p-4">
-            <div className="flex items-center justify-between">
-
-              <div>
-                <p className="font-medium">
-                  Product Status
-                </p>
-
-                <p className="text-sm text-gray-500">
-                  Turn product ON or OFF
-                </p>
+                    <span
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                        form.active ? "bg-green-600" : "bg-gray-400"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                          form.active
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </div>
               </div>
+            </section>
 
-              <label className="relative inline-flex cursor-pointer items-center">
-                <input
-                  type="checkbox"
-                  checked={form.active}
-                  onChange={handleActiveChange}
-                  className="peer sr-only"
-                />
+            {/* Actions */}
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => router.push("/products")}
+                disabled={saving}
+                className="rounded-lg border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
 
-                <div className="h-7 w-12 rounded-full bg-gray-300 peer-checked:bg-green-500 after:absolute after:left-[3px] after:top-[3px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-5" />
-              </label>
-
-            </div>
-
-            <div className="mt-3">
-              {form.active ? (
-                <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-                  ● ON — Product Active
-                </span>
-              ) : (
-                <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-700">
-                  ● OFF — Product Inactive
-                </span>
-              )}
+              <button
+                type="submit"
+                disabled={saving || uploading}
+                className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? "Creating Product..." : "Create Product"}
+              </button>
             </div>
           </div>
-
-          {/* Error */}
-          {error && (
-            <div className="rounded-lg bg-red-50 p-4 text-red-600">
-              {error}
-            </div>
-          )}
-
-          {/* Save */}
-          <button
-            type="submit"
-            disabled={saving || loadingCategories}
-            className="w-full rounded-lg bg-black p-3 font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Product"}
-          </button>
-
         </form>
       </div>
     </main>

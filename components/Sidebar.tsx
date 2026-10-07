@@ -1,31 +1,33 @@
 "use client";
 
+import { useLanguage } from "@/app/components/LanguageProvider";
+import LanguageSwitcher from "@/app/components/LanguageSwitcher";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const menuItems = [
   {
-    name: "Dashboard",
+    key: "dashboard",
     href: "/",
     icon: "▣",
   },
   {
-    name: "Products",
+    key: "products",
     href: "/products",
     icon: "□",
   },
   {
-    name: "Issues",
+    key: "issues",
     href: "/issues",
     icon: "⚠",
   },
   {
-    name: "Categories",
+    key: "categories",
     href: "/categories",
     icon: "▤",
   },
   {
-    name: "Employees",
+    key: "employees",
     href: "/employees",
     icon: "♙",
   },
@@ -33,18 +35,27 @@ const menuItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { language, isArabic, t } = useLanguage();
 
   return (
-    <aside className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r bg-white">
-      
+    <aside
+      className={`fixed top-0 z-50 flex h-screen w-64 flex-col border-gray-200 bg-white ${
+        isArabic
+          ? "right-0 border-l"
+          : "left-0 border-r"
+      }`}
+      dir={isArabic ? "rtl" : "ltr"}
+    >
       {/* Logo */}
-      <div className="border-b px-6 py-6">
+      <div className="border-b border-gray-200 px-6 py-6">
         <h1 className="text-xl font-bold tracking-wide text-gray-900">
           MAZAJ CONTROL
         </h1>
 
         <p className="mt-1 text-xs text-gray-500">
-          Product Management
+          {isArabic
+            ? "إدارة المنتجات"
+            : "Product Management"}
         </p>
       </div>
 
@@ -70,21 +81,32 @@ export default function Sidebar() {
                 {item.icon}
               </span>
 
-              <span>{item.name}</span>
+              <span>{t(item.key)}</span>
             </Link>
           );
         })}
       </nav>
 
+      {/* Language */}
+      <div className="border-t border-gray-200 p-4">
+        <p className="mb-2 text-xs font-medium text-gray-500">
+          {t("language")}
+        </p>
+
+        <LanguageSwitcher />
+      </div>
+
       {/* Bottom */}
-      <div className="border-t p-4">
+      <div className="border-t border-gray-200 p-4">
         <div className="rounded-lg bg-gray-50 p-4">
           <p className="text-xs font-medium text-gray-700">
             MAZAJ CONTROL
           </p>
 
           <p className="mt-1 text-xs text-gray-500">
-            Admin Panel
+            {language === "ar"
+              ? "لوحة الإدارة"
+              : "Admin Panel"}
           </p>
         </div>
       </div>

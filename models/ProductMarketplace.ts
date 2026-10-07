@@ -1,4 +1,4 @@
-import mongoose, {
+import {
   Schema,
   models,
   model,
@@ -7,11 +7,19 @@ import mongoose, {
 const ProductMarketplaceSchema =
   new Schema(
     {
+      // =========================================
+      // PRODUCT
+      // =========================================
+
       productId: {
         type: Schema.Types.ObjectId,
         ref: "Product",
         required: true,
       },
+
+      // =========================================
+      // MARKETPLACE
+      // =========================================
 
       marketplace: {
         type: String,
@@ -24,36 +32,98 @@ const ProductMarketplaceSchema =
         required: true,
       },
 
+      // =========================================
+      // AVAILABILITY
+      // =========================================
+
       available: {
         type: Boolean,
         default: false,
       },
 
+      // =========================================
+      // PRICE
+      // =========================================
+
       price: {
         type: Number,
         default: 0,
+        min: 0,
       },
 
-      name: {
+      // =========================================
+      // PRODUCT NAME - ENGLISH
+      // =========================================
+
+      nameEn: {
         type: String,
         default: "",
+        trim: true,
       },
 
-      description: {
+      // =========================================
+      // PRODUCT NAME - ARABIC
+      // =========================================
+
+      nameAr: {
         type: String,
         default: "",
+        trim: true,
       },
+
+      // =========================================
+      // DESCRIPTION - ENGLISH
+      // =========================================
+
+      descriptionEn: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      // =========================================
+      // DESCRIPTION - ARABIC
+      // =========================================
+
+      descriptionAr: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      // =========================================
+      // IMAGE
+      // =========================================
 
       image: {
         type: String,
         default: "",
+        trim: true,
       },
 
-      // Marketplace category
-      category: {
+      // =========================================
+      // CATEGORY - ENGLISH
+      // =========================================
+
+      categoryEn: {
         type: String,
         default: "",
+        trim: true,
       },
+
+      // =========================================
+      // CATEGORY - ARABIC
+      // =========================================
+
+      categoryAr: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      // =========================================
+      // SYNC STATUS
+      // =========================================
 
       syncStatus: {
         type: String,
@@ -71,7 +141,10 @@ const ProductMarketplaceSchema =
     }
   );
 
-// একই product + marketplace যেন duplicate না হয়
+// =============================================
+// SAME PRODUCT + MARKETPLACE DUPLICATE PREVENT
+// =============================================
+
 ProductMarketplaceSchema.index(
   {
     productId: 1,
@@ -82,7 +155,8 @@ ProductMarketplaceSchema.index(
   }
 );
 
-export default models.ProductMarketplace ||
+export default
+  models.ProductMarketplace ||
   model(
     "ProductMarketplace",
     ProductMarketplaceSchema
