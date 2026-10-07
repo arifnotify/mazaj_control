@@ -8,15 +8,12 @@ export async function GET() {
     await connectDB();
 
     const categories = await Category.find()
-      .sort({ name: 1 })
+      .sort({ nameEn: 1 })
       .lean();
 
     return NextResponse.json(categories);
   } catch (error) {
-    console.error(
-      "GET CATEGORIES ERROR:",
-      error
-    );
+    console.error("GET CATEGORIES ERROR:", error);
 
     return NextResponse.json(
       {
@@ -30,26 +27,27 @@ export async function GET() {
 }
 
 // POST category
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
     await connectDB();
 
     const body = await request.json();
 
-    const name = String(
-      body.name || ""
+    const nameEn = String(body.nameEn || "").trim();
+    const nameAr = String(body.nameAr || "").trim();
+
+    const descriptionEn = String(
+      body.descriptionEn || ""
     ).trim();
 
-    const description = String(
-      body.description || ""
+    const descriptionAr = String(
+      body.descriptionAr || ""
     ).trim();
 
-    if (!name) {
+    if (!nameEn) {
       return NextResponse.json(
         {
-          error: "Category name is required",
+          error: "English category name is required",
         },
         {
           status: 400,
@@ -57,19 +55,29 @@ export async function POST(
       );
     }
 
-    const existing =
-      await Category.findOne({
-        name: {
-          $regex: `^${name}$`,
-          $options: "i",
-        },
-      });
-
-    if (existing) {
+    if (!nameAr) {
       return NextResponse.json(
         {
-          error:
-            "Category already exists",
+          error: "Arabic category name is required",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // Check English name
+    const existingEnglish = await Category.findOne({
+      nameEn: {
+        $regex: `^${nameEn}$`,
+        $options: "i",
+      },
+    });
+
+    if (existingEnglish) {
+      return NextResponse.json(
+        {
+          error: "English category already exists",
         },
         {
           status: 409,
@@ -77,29 +85,53 @@ export async function POST(
       );
     }
 
-    const category =
-      await Category.create({
-        name,
-        description,
-        active: true,
-      });
+    // Check Arabic name
+    const existingArabic = await Category.findOne({
+      nameAr: {
+        $regex: `^${nameAr}$`,
+        $options: "i",
+      },
+    });
+
+    if (existingArabic) {
+      return NextResponse.json(
+        {
+          error: "Arabic category already exists",
+        },
+        {
+          status: 409,
+        }
+      );
+    }
+
+    const category = await Category.create({
+      nameEn,
+      nameAr,
+      descriptionEn,
+      descriptionAr,
+      active: true,
+    });
+
+    return NextResponse.json(category, {
+      status: 201,
+    });
+  } catch (error: any) {
+    console.error("CREATE CATEGORY ERROR:", error);
+
+    if (error?.code === 11000) {
+      return NextResponse.json(
+        {
+          error: "Category already exists",
+        },
+        {
+          status: 409,
+        }
+      );
+    }
 
     return NextResponse.json(
-      category,
       {
-        status: 201,
-      }
-    );
-  } catch (error) {
-    console.error(
-      "CREATE CATEGORY ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          "Failed to create category",
+        error: "Failed to create category",
       },
       {
         status: 500,

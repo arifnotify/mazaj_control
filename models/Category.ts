@@ -2,14 +2,27 @@ import mongoose, { Schema, models, model } from "mongoose";
 
 const CategorySchema = new Schema(
   {
-    name: {
+    nameEn: {
       type: String,
       required: true,
       unique: true,
       trim: true,
     },
 
-    description: {
+    nameAr: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+
+    descriptionEn: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    descriptionAr: {
       type: String,
       default: "",
       trim: true,

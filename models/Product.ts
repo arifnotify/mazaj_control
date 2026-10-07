@@ -9,39 +9,67 @@ const ProductSchema = new Schema(
       trim: true,
     },
 
-    name: {
+    // Product Name
+    nameEn: {
       type: String,
       required: true,
       trim: true,
     },
 
-    description: {
+    nameAr: {
       type: String,
-      default: "",
+      required: true,
+      trim: true,
     },
 
+    // Product Description
+    descriptionEn: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    descriptionAr: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // Product Image
     image: {
       type: String,
       default: "",
+      trim: true,
     },
 
-    category: {
+    // Category
+    categoryEn: {
       type: String,
       default: "",
+      trim: true,
     },
 
+    categoryAr: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // Price
     price: {
       type: Number,
       required: true,
       min: 0,
     },
 
+    // Stock
     stock: {
       type: Number,
       default: 0,
       min: 0,
     },
 
+    // Product ON / OFF
     active: {
       type: Boolean,
       default: true,

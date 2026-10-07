@@ -4,16 +4,24 @@ import { FormEvent, useEffect, useState } from "react";
 
 type Category = {
   _id: string;
-  name: string;
-  description: string;
+
+  nameEn: string;
+  nameAr: string;
+
+  descriptionEn: string;
+  descriptionAr: string;
+
   active: boolean;
 };
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+
+  const [descriptionEn, setDescriptionEn] = useState("");
+  const [descriptionAr, setDescriptionAr] = useState("");
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -49,15 +57,23 @@ export default function CategoriesPage() {
   }, []);
 
   function resetForm() {
-    setName("");
-    setDescription("");
+    setNameEn("");
+    setNameAr("");
+
+    setDescriptionEn("");
+    setDescriptionAr("");
+
     setEditingId(null);
   }
 
   function startEdit(category: Category) {
     setEditingId(category._id);
-    setName(category.name);
-    setDescription(category.description || "");
+
+    setNameEn(category.nameEn);
+    setNameAr(category.nameAr);
+
+    setDescriptionEn(category.descriptionEn || "");
+    setDescriptionAr(category.descriptionAr || "");
 
     setError("");
     setSuccess("");
@@ -68,14 +84,21 @@ export default function CategoriesPage() {
     });
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     setError("");
     setSuccess("");
 
-    if (!name.trim()) {
-      setError("Category name দিন");
+    if (!nameEn.trim()) {
+      setError("English category name দিন");
+      return;
+    }
+
+    if (!nameAr.trim()) {
+      setError("Arabic category name দিন");
       return;
     }
 
@@ -94,8 +117,10 @@ export default function CategoriesPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name,
-          description,
+          nameEn,
+          nameAr,
+          descriptionEn,
+          descriptionAr,
         }),
       });
 
@@ -135,26 +160,35 @@ export default function CategoriesPage() {
       setError("");
       setSuccess("");
 
-      const response = await fetch(`/api/categories/${category._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: category.name,
-          description: category.description,
-          active: !category.active,
-        }),
-      });
+      const response = await fetch(
+        `/api/categories/${category._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            nameEn: category.nameEn,
+            nameAr: category.nameAr,
+
+            descriptionEn: category.descriptionEn,
+            descriptionAr: category.descriptionAr,
+
+            active: !category.active,
+          }),
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to update category");
+        throw new Error(
+          data.error || "Failed to update category"
+        );
       }
 
       setSuccess(
-        `${category.name} is now ${
+        `${category.nameEn} is now ${
           !category.active ? "Active" : "Inactive"
         }`
       );
@@ -171,7 +205,7 @@ export default function CategoriesPage() {
 
   async function deleteCategory(category: Category) {
     const confirmed = window.confirm(
-      `Are you sure you want to delete "${category.name}"?`
+      `Are you sure you want to delete "${category.nameEn}"?`
     );
 
     if (!confirmed) {
@@ -182,17 +216,24 @@ export default function CategoriesPage() {
       setError("");
       setSuccess("");
 
-      const response = await fetch(`/api/categories/${category._id}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `/api/categories/${category._id}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to delete category");
+        throw new Error(
+          data.error || "Failed to delete category"
+        );
       }
 
-      setSuccess(`${category.name} deleted successfully`);
+      setSuccess(
+        `${category.nameEn} deleted successfully`
+      );
 
       if (editingId === category._id) {
         resetForm();
@@ -230,7 +271,9 @@ export default function CategoriesPage() {
 
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">
-                {editingId ? "Edit Category" : "Add Category"}
+                {editingId
+                  ? "Edit Category"
+                  : "Add Category"}
               </h2>
 
               {editingId && (
@@ -244,35 +287,82 @@ export default function CategoriesPage() {
               )}
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-5"
+            >
 
-              {/* Name */}
+              {/* English Name */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Category Name
+                  English Category Name
                 </label>
 
                 <input
                   type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Burgers"
+                  value={nameEn}
+                  onChange={(e) =>
+                    setNameEn(e.target.value)
+                  }
+                  placeholder="e.g. Soft Drinks"
+                  dir="ltr"
+                  required
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-black"
                 />
               </div>
 
-              {/* Description */}
+              {/* Arabic Name */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Description
+                  Arabic Category Name
+                </label>
+
+                <input
+                  type="text"
+                  value={nameAr}
+                  onChange={(e) =>
+                    setNameAr(e.target.value)
+                  }
+                  placeholder="مثال: مشروبات غازية"
+                  dir="rtl"
+                  required
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-right outline-none focus:border-black"
+                />
+              </div>
+
+              {/* English Description */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  English Description
                 </label>
 
                 <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  value={descriptionEn}
+                  onChange={(e) =>
+                    setDescriptionEn(e.target.value)
+                  }
                   placeholder="Category description"
-                  rows={4}
+                  rows={3}
+                  dir="ltr"
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-black"
+                />
+              </div>
+
+              {/* Arabic Description */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Arabic Description
+                </label>
+
+                <textarea
+                  value={descriptionAr}
+                  onChange={(e) =>
+                    setDescriptionAr(e.target.value)
+                  }
+                  placeholder="وصف الفئة"
+                  rows={3}
+                  dir="rtl"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-right outline-none focus:border-black"
                 />
               </div>
 
@@ -302,6 +392,7 @@ export default function CategoriesPage() {
                   ? "Update Category"
                   : "Add Category"}
               </button>
+
             </form>
           </div>
 
@@ -340,41 +431,67 @@ export default function CategoriesPage() {
                     >
 
                       {/* Left */}
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-start gap-4">
 
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 font-semibold text-gray-700">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 font-semibold text-gray-700">
                           {index + 1}
                         </div>
 
                         <div>
+
+                          {/* English */}
                           <h3 className="font-semibold text-gray-900">
-                            {category.name}
+                            {category.nameEn}
                           </h3>
 
-                          {category.description && (
-                            <p className="mt-1 text-sm text-gray-500">
-                              {category.description}
+                          {/* Arabic */}
+                          <p
+                            dir="rtl"
+                            className="mt-1 text-lg text-gray-700"
+                          >
+                            {category.nameAr}
+                          </p>
+
+                          {/* Descriptions */}
+                          {category.descriptionEn && (
+                            <p className="mt-2 text-sm text-gray-500">
+                              {category.descriptionEn}
                             </p>
                           )}
 
+                          {category.descriptionAr && (
+                            <p
+                              dir="rtl"
+                              className="mt-1 text-sm text-gray-500"
+                            >
+                              {category.descriptionAr}
+                            </p>
+                          )}
+
+                          {/* Status */}
                           <span
-                            className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-medium ${
+                            className={`mt-3 inline-block rounded-full px-3 py-1 text-xs font-medium ${
                               category.active
                                 ? "bg-green-100 text-green-700"
                                 : "bg-gray-100 text-gray-600"
                             }`}
                           >
-                            {category.active ? "Active" : "Inactive"}
+                            {category.active
+                              ? "Active"
+                              : "Inactive"}
                           </span>
+
                         </div>
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
 
                         <button
                           type="button"
-                          onClick={() => startEdit(category)}
+                          onClick={() =>
+                            startEdit(category)
+                          }
                           className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
                         >
                           Edit
@@ -382,28 +499,37 @@ export default function CategoriesPage() {
 
                         <button
                           type="button"
-                          onClick={() => toggleActive(category)}
+                          onClick={() =>
+                            toggleActive(category)
+                          }
                           className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
                         >
-                          {category.active ? "Disable" : "Enable"}
+                          {category.active
+                            ? "Disable"
+                            : "Enable"}
                         </button>
 
                         <button
                           type="button"
-                          onClick={() => deleteCategory(category)}
+                          onClick={() =>
+                            deleteCategory(category)
+                          }
                           className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
                         >
                           Delete
                         </button>
 
                       </div>
+
                     </div>
                   ))}
 
                 </div>
               )}
+
             </div>
           </div>
+
         </div>
       </div>
     </main>

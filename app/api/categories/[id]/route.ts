@@ -21,37 +21,87 @@ export async function PUT(
 
     const body = await request.json();
 
-    const name = String(body.name || "").trim();
-    const description = String(body.description || "").trim();
+    const updateData: Record<string, unknown> = {};
 
-    if (!name) {
-      return NextResponse.json(
-        { error: "Category name is required" },
-        { status: 400 }
-      );
+    if (body.nameEn !== undefined) {
+      const nameEn = String(body.nameEn).trim();
+
+      if (!nameEn) {
+        return NextResponse.json(
+          { error: "English category name is required" },
+          { status: 400 }
+        );
+      }
+
+      updateData.nameEn = nameEn;
     }
 
-    const duplicate = await Category.findOne({
-      _id: { $ne: id },
-      name: { $regex: `^${name}$`, $options: "i" },
-    });
+    if (body.nameAr !== undefined) {
+      const nameAr = String(body.nameAr).trim();
 
-    if (duplicate) {
-      return NextResponse.json(
-        { error: "Category already exists" },
-        { status: 409 }
-      );
+      if (!nameAr) {
+        return NextResponse.json(
+          { error: "Arabic category name is required" },
+          { status: 400 }
+        );
+      }
+
+      updateData.nameAr = nameAr;
+    }
+
+    if (body.descriptionEn !== undefined) {
+      updateData.descriptionEn =
+        String(body.descriptionEn).trim();
+    }
+
+    if (body.descriptionAr !== undefined) {
+      updateData.descriptionAr =
+        String(body.descriptionAr).trim();
+    }
+
+    if (body.active !== undefined) {
+      updateData.active = Boolean(body.active);
+    }
+
+    // Check duplicate English name
+    if (updateData.nameEn) {
+      const duplicateEnglish = await Category.findOne({
+        _id: { $ne: id },
+        nameEn: {
+          $regex: `^${String(updateData.nameEn)}$`,
+          $options: "i",
+        },
+      });
+
+      if (duplicateEnglish) {
+        return NextResponse.json(
+          { error: "English category already exists" },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Check duplicate Arabic name
+    if (updateData.nameAr) {
+      const duplicateArabic = await Category.findOne({
+        _id: { $ne: id },
+        nameAr: {
+          $regex: `^${String(updateData.nameAr)}$`,
+          $options: "i",
+        },
+      });
+
+      if (duplicateArabic) {
+        return NextResponse.json(
+          { error: "Arabic category already exists" },
+          { status: 409 }
+        );
+      }
     }
 
     const category = await Category.findByIdAndUpdate(
       id,
-      {
-        name,
-        description,
-        ...(body.active !== undefined && {
-          active: Boolean(body.active),
-        }),
-      },
+      updateData,
       {
         new: true,
         runValidators: true,
@@ -66,8 +116,15 @@ export async function PUT(
     }
 
     return NextResponse.json(category);
-  } catch (error) {
+  } catch (error: any) {
     console.error("UPDATE CATEGORY ERROR:", error);
+
+    if (error?.code === 11000) {
+      return NextResponse.json(
+        { error: "Category already exists" },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json(
       { error: "Failed to update category" },
