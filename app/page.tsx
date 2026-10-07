@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLanguage } from "./components/LanguageProvider";
 
 type DashboardData = {
   products: {
@@ -40,6 +41,8 @@ const marketplaces = [
 ];
 
 export default function DashboardPage() {
+  const { isArabic, t } = useLanguage();
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -84,7 +87,10 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6">
+    <main
+      className="min-h-screen bg-gray-50 p-6"
+      dir={isArabic ? "rtl" : "ltr"}
+    >
       <div className="mx-auto max-w-7xl">
 
         {/* Header */}
@@ -95,7 +101,9 @@ export default function DashboardPage() {
             </h1>
 
             <p className="mt-2 text-gray-500">
-              Product management dashboard
+              {isArabic
+                ? "لوحة إدارة المنتجات"
+                : "Product management dashboard"}
             </p>
           </div>
 
@@ -103,7 +111,7 @@ export default function DashboardPage() {
             onClick={loadDashboard}
             className="rounded-lg border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
           >
-            Refresh
+            {t("refresh")}
           </button>
         </div>
 
@@ -114,9 +122,10 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Loading */}
         {loading ? (
           <div className="rounded-xl border bg-white p-10 text-center text-gray-500">
-            Loading dashboard...
+            {t("loading")}
           </div>
         ) : data ? (
           <>
@@ -129,7 +138,7 @@ export default function DashboardPage() {
                 className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-md"
               >
                 <p className="text-sm font-medium text-gray-500">
-                  Total Products
+                  {t("products")}
                 </p>
 
                 <p className="mt-3 text-4xl font-bold text-gray-900">
@@ -138,11 +147,11 @@ export default function DashboardPage() {
 
                 <div className="mt-4 flex gap-3 text-xs">
                   <span className="rounded-full bg-green-100 px-3 py-1 text-green-700">
-                    {data.products.active} Active
+                    {data.products.active} {t("active")}
                   </span>
 
                   <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-600">
-                    {data.products.inactive} Inactive
+                    {data.products.inactive} {t("inactive")}
                   </span>
                 </div>
               </a>
@@ -153,7 +162,7 @@ export default function DashboardPage() {
                 className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-md"
               >
                 <p className="text-sm font-medium text-gray-500">
-                  Categories
+                  {t("categories")}
                 </p>
 
                 <p className="mt-3 text-4xl font-bold text-gray-900">
@@ -161,7 +170,9 @@ export default function DashboardPage() {
                 </p>
 
                 <p className="mt-4 text-sm text-gray-500">
-                  Manage product categories →
+                  {isArabic
+                    ? "إدارة فئات المنتجات ←"
+                    : "Manage product categories →"}
                 </p>
               </a>
 
@@ -171,7 +182,7 @@ export default function DashboardPage() {
                 className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-md"
               >
                 <p className="text-sm font-medium text-gray-500">
-                  Employees
+                  {t("employees")}
                 </p>
 
                 <p className="mt-3 text-4xl font-bold text-gray-900">
@@ -179,7 +190,9 @@ export default function DashboardPage() {
                 </p>
 
                 <p className="mt-4 text-sm text-gray-500">
-                  Manage employees →
+                  {isArabic
+                    ? "إدارة الموظفين ←"
+                    : "Manage employees →"}
                 </p>
               </a>
 
@@ -189,7 +202,7 @@ export default function DashboardPage() {
                 className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-md"
               >
                 <p className="text-sm font-medium text-gray-500">
-                  Total Issues
+                  {isArabic ? "إجمالي المشاكل" : "Total Issues"}
                 </p>
 
                 <p className="mt-3 text-4xl font-bold text-gray-900">
@@ -197,7 +210,9 @@ export default function DashboardPage() {
                 </p>
 
                 <p className="mt-4 text-sm text-gray-500">
-                  View all issues →
+                  {isArabic
+                    ? "عرض جميع المشاكل ←"
+                    : "View all issues →"}
                 </p>
               </a>
 
@@ -207,7 +222,7 @@ export default function DashboardPage() {
                 className="rounded-xl border bg-white p-6 shadow-sm transition hover:shadow-md"
               >
                 <p className="text-sm font-medium text-gray-500">
-                  Open Issues
+                  {isArabic ? "المشاكل المفتوحة" : "Open Issues"}
                 </p>
 
                 <p className="mt-3 text-4xl font-bold text-red-600">
@@ -215,7 +230,9 @@ export default function DashboardPage() {
                 </p>
 
                 <p className="mt-4 text-sm text-red-500">
-                  Needs attention
+                  {isArabic
+                    ? "تحتاج إلى اهتمام"
+                    : "Needs attention"}
                 </p>
               </a>
             </div>
@@ -224,19 +241,22 @@ export default function DashboardPage() {
             <div className="mt-6 rounded-xl border bg-white p-6 shadow-sm">
               <div className="mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Issue Status
+                  {isArabic ? "حالة المشاكل" : "Issue Status"}
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Current marketplace issue progress
+                  {isArabic
+                    ? "التقدم الحالي لمشاكل الأسواق"
+                    : "Current marketplace issue progress"}
                 </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
 
+                {/* Open */}
                 <div className="rounded-lg bg-red-50 p-5">
                   <p className="text-sm text-red-600">
-                    Open
+                    {isArabic ? "مفتوحة" : "Open"}
                   </p>
 
                   <p className="mt-2 text-3xl font-bold text-red-700">
@@ -244,9 +264,10 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
+                {/* In Progress */}
                 <div className="rounded-lg bg-yellow-50 p-5">
                   <p className="text-sm text-yellow-600">
-                    In Progress
+                    {isArabic ? "قيد التنفيذ" : "In Progress"}
                   </p>
 
                   <p className="mt-2 text-3xl font-bold text-yellow-700">
@@ -254,9 +275,10 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
+                {/* Fixed */}
                 <div className="rounded-lg bg-blue-50 p-5">
                   <p className="text-sm text-blue-600">
-                    Fixed
+                    {isArabic ? "تم الإصلاح" : "Fixed"}
                   </p>
 
                   <p className="mt-2 text-3xl font-bold text-blue-700">
@@ -264,9 +286,10 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
+                {/* Verified */}
                 <div className="rounded-lg bg-purple-50 p-5">
                   <p className="text-sm text-purple-600">
-                    Verified
+                    {isArabic ? "تم التحقق" : "Verified"}
                   </p>
 
                   <p className="mt-2 text-3xl font-bold text-purple-700">
@@ -274,9 +297,10 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
+                {/* Closed */}
                 <div className="rounded-lg bg-green-50 p-5">
                   <p className="text-sm text-green-600">
-                    Closed
+                    {isArabic ? "مغلقة" : "Closed"}
                   </p>
 
                   <p className="mt-2 text-3xl font-bold text-green-700">
@@ -291,11 +315,15 @@ export default function DashboardPage() {
             <div className="mt-6 rounded-xl border bg-white p-6 shadow-sm">
               <div className="mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Marketplace Issues
+                  {isArabic
+                    ? "مشاكل الأسواق"
+                    : "Marketplace Issues"}
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Issues reported for each marketplace
+                  {isArabic
+                    ? "المشاكل المسجلة لكل سوق"
+                    : "Issues reported for each marketplace"}
                 </p>
               </div>
 
@@ -322,7 +350,13 @@ export default function DashboardPage() {
                               : "bg-green-100 text-green-700"
                           }`}
                         >
-                          {count > 0 ? "Issues" : "Healthy"}
+                          {count > 0
+                            ? isArabic
+                              ? "مشاكل"
+                              : "Issues"
+                            : isArabic
+                              ? "سليم"
+                              : "Healthy"}
                         </span>
                       </div>
 
@@ -331,7 +365,13 @@ export default function DashboardPage() {
                       </p>
 
                       <p className="mt-1 text-sm text-gray-500">
-                        {count === 1 ? "issue" : "issues"}
+                        {count === 1
+                          ? isArabic
+                            ? "مشكلة"
+                            : "issue"
+                          : isArabic
+                            ? "مشاكل"
+                            : "issues"}
                       </p>
                     </div>
                   );
@@ -343,7 +383,9 @@ export default function DashboardPage() {
             {/* Quick Actions */}
             <div className="mt-6 rounded-xl border bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold text-gray-900">
-                Quick Actions
+                {isArabic
+                  ? "إجراءات سريعة"
+                  : "Quick Actions"}
               </h2>
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -352,35 +394,43 @@ export default function DashboardPage() {
                   href="/products/new"
                   className="rounded-lg bg-black px-5 py-4 text-center font-medium text-white hover:bg-gray-800"
                 >
-                  + Add Product
+                  + {t("addProduct")}
                 </a>
 
                 <a
                   href="/categories"
                   className="rounded-lg border px-5 py-4 text-center font-medium hover:bg-gray-50"
                 >
-                  Manage Categories
+                  {isArabic
+                    ? "إدارة الفئات"
+                    : "Manage Categories"}
                 </a>
 
                 <a
                   href="/employees"
                   className="rounded-lg border px-5 py-4 text-center font-medium hover:bg-gray-50"
                 >
-                  Manage Employees
+                  {isArabic
+                    ? "إدارة الموظفين"
+                    : "Manage Employees"}
                 </a>
 
                 <a
                   href="/issues"
                   className="rounded-lg border px-5 py-4 text-center font-medium hover:bg-gray-50"
                 >
-                  Manage Issues
+                  {isArabic
+                    ? "إدارة المشاكل"
+                    : "Manage Issues"}
                 </a>
 
                 <a
                   href="/products"
                   className="rounded-lg border px-5 py-4 text-center font-medium hover:bg-gray-50"
                 >
-                  View Products
+                  {isArabic
+                    ? "পণ্য দেখুন"
+                    : "View Products"}
                 </a>
 
               </div>
