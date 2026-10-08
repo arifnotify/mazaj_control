@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useLanguage } from "../components/LanguageProvider";
 
@@ -65,8 +70,11 @@ export default function StockReceivingPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [records, setRecords] = useState<ReceivingRecord[]>([]);
 
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [loadingRecords, setLoadingRecords] = useState(true);
+  const [loadingProducts, setLoadingProducts] =
+    useState(true);
+
+  const [loadingRecords, setLoadingRecords] =
+    useState(true);
 
   const [error, setError] = useState("");
 
@@ -84,11 +92,26 @@ export default function StockReceivingPage() {
   );
 
   const [saving, setSaving] = useState(false);
-  const [actionLoading, setActionLoading] = useState<
-    string | null
-  >(null);
+
+  const [actionLoading, setActionLoading] =
+    useState<string | null>(null);
 
   const [search, setSearch] = useState("");
+
+  // --------------------------------------------------
+  // PRODUCT SEARCH DROPDOWN
+  // --------------------------------------------------
+
+  const [productSearch, setProductSearch] = useState("");
+
+  const [productDropdownOpen, setProductDropdownOpen] =
+    useState(false);
+
+  const productDropdownRef =
+    useRef<HTMLDivElement | null>(null);
+
+  const productSearchInputRef =
+    useRef<HTMLInputElement | null>(null);
 
   // --------------------------------------------------
   // PRODUCT NAME
@@ -96,12 +119,134 @@ export default function StockReceivingPage() {
 
   function getProductName(product: Product | null) {
     if (!product) {
-      return isArabic ? "منتج محذوف" : "Deleted Product";
+      return isArabic
+        ? "منتج محذوف"
+        : "Deleted Product";
     }
 
     return language === "ar"
       ? product.nameAr || product.nameEn || "-"
       : product.nameEn || product.nameAr || "-";
+  }
+
+  // --------------------------------------------------
+  // SELECTED PRODUCT
+  // --------------------------------------------------
+
+  const selectedProduct = useMemo(() => {
+    if (!form.productId) {
+      return null;
+    }
+
+    return (
+      products.find(
+        (product) => product._id === form.productId
+      ) || null
+    );
+  }, [products, form.productId]);
+
+  // --------------------------------------------------
+  // FILTER PRODUCTS FOR DROPDOWN
+  // --------------------------------------------------
+
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase();
+
+    if (!query) {
+      return products.slice(0, 100);
+    }
+
+    return products
+      .filter((product) => {
+        const sku =
+          product.sku?.toLowerCase() || "";
+
+        const nameEn =
+          product.nameEn?.toLowerCase() || "";
+
+        const nameAr =
+          product.nameAr?.toLowerCase() || "";
+
+        const categoryEn =
+          product.categoryEn?.toLowerCase() || "";
+
+        const categoryAr =
+          product.categoryAr?.toLowerCase() || "";
+
+        return (
+          sku.includes(query) ||
+          nameEn.includes(query) ||
+          nameAr.includes(query) ||
+          categoryEn.includes(query) ||
+          categoryAr.includes(query)
+        );
+      })
+      .slice(0, 100);
+  }, [products, productSearch]);
+
+  // --------------------------------------------------
+  // CLOSE PRODUCT DROPDOWN OUTSIDE CLICK
+  // --------------------------------------------------
+
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (
+        productDropdownRef.current &&
+        !productDropdownRef.current.contains(
+          event.target as Node
+        )
+      ) {
+        setProductDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
+    };
+  }, []);
+
+  // --------------------------------------------------
+  // ESCAPE PRODUCT DROPDOWN
+  // --------------------------------------------------
+
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setProductDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener(
+      "keydown",
+      handleEscape
+    );
+
+    return () => {
+      document.removeEventListener(
+        "keydown",
+        handleEscape
+      );
+    };
+  }, []);
+
+  // --------------------------------------------------
+  // SELECT PRODUCT
+  // --------------------------------------------------
+
+  function handleSelectProduct(product: Product) {
+    updateForm("productId", product._id);
+
+    setProductSearch("");
+
+    setProductDropdownOpen(false);
   }
 
   // --------------------------------------------------
@@ -112,7 +257,9 @@ export default function StockReceivingPage() {
     try {
       setLoadingProducts(true);
 
-      const response = await fetch("/api/products");
+      const response = await fetch("/api/products", {
+        cache: "no-store",
+      });
 
       const data = await response.json();
 
@@ -140,7 +287,9 @@ export default function StockReceivingPage() {
   // LOAD RECEIVING RECORDS
   // --------------------------------------------------
 
-  async function loadRecords(selectedMonth = month) {
+  async function loadRecords(
+    selectedMonth = month
+  ) {
     try {
       setLoadingRecords(true);
       setError("");
@@ -156,7 +305,8 @@ export default function StockReceivingPage() {
 
       if (!response.ok) {
         throw new Error(
-          data.error || "Failed to load receiving records"
+          data.error ||
+            "Failed to load receiving records"
         );
       }
 
@@ -211,6 +361,10 @@ export default function StockReceivingPage() {
       quantity: "",
       note: "",
     });
+
+    setProductSearch("");
+
+    setProductDropdownOpen(false);
 
     setEditingId(null);
   }
@@ -293,7 +447,6 @@ export default function StockReceivingPage() {
 
       resetForm();
 
-      // নতুন/updated record যদি selected month-এর মধ্যে থাকে
       await loadRecords(month);
     } catch (err) {
       console.error(err);
@@ -330,6 +483,10 @@ export default function StockReceivingPage() {
       note: record.note || "",
     });
 
+    setProductSearch("");
+
+    setProductDropdownOpen(false);
+
     window.scrollTo({
       top: 0,
       behavior: "smooth",
@@ -340,7 +497,9 @@ export default function StockReceivingPage() {
   // DELETE
   // --------------------------------------------------
 
-  async function handleDelete(record: ReceivingRecord) {
+  async function handleDelete(
+    record: ReceivingRecord
+  ) {
     const product = getProductFromRecord(record);
 
     const productName = getProductName(product);
@@ -397,7 +556,7 @@ export default function StockReceivingPage() {
   }
 
   // --------------------------------------------------
-  // FILTER
+  // FILTER RECORDS
   // --------------------------------------------------
 
   const filteredRecords = useMemo(() => {
@@ -481,7 +640,9 @@ export default function StockReceivingPage() {
           name: product?.nameEn || "-",
           nameAr: product?.nameAr || "-",
           sku: product?.sku || "-",
-          quantity: Number(record.quantity || 0),
+          quantity: Number(
+            record.quantity || 0
+          ),
         });
       }
     });
@@ -683,45 +844,273 @@ export default function StockReceivingPage() {
                 />
               </div>
 
-              {/* PRODUCT */}
-              <div>
+              {/* SEARCHABLE PRODUCT */}
+              <div
+                ref={productDropdownRef}
+                className="relative"
+              >
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   {isArabic
                     ? "المنتج"
                     : "Product"}
                 </label>
 
-                <select
-                  value={form.productId}
-                  onChange={(e) =>
-                    updateForm(
-                      "productId",
-                      e.target.value
-                    )
-                  }
-                  disabled={loadingProducts}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100 disabled:bg-gray-100"
-                >
-                  <option value="">
-                    {loadingProducts
-                      ? isArabic
-                        ? "جاري التحميل..."
-                        : "Loading..."
-                      : isArabic
-                      ? "اختر المنتج"
-                      : "Select Product"}
-                  </option>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (loadingProducts) {
+                      return;
+                    }
 
-                  {products.map((product) => (
-                    <option
-                      key={product._id}
-                      value={product._id}
-                    >
-                      {product.sku} —{" "}
-                      {getProductName(product)}
-                    </option>
-                  ))}
-                </select>
+                    setProductDropdownOpen(
+                      (current) => !current
+                    );
+
+                    setTimeout(() => {
+                      productSearchInputRef.current?.focus();
+                    }, 50);
+                  }}
+                  disabled={loadingProducts}
+                  className={`flex min-h-[50px] w-full items-center justify-between rounded-xl border bg-white px-4 py-3 text-start text-sm outline-none transition ${
+                    productDropdownOpen
+                      ? "border-gray-900 ring-2 ring-gray-100"
+                      : "border-gray-300"
+                  } ${
+                    loadingProducts
+                      ? "cursor-not-allowed bg-gray-100"
+                      : "hover:border-gray-400"
+                  }`}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    {selectedProduct?.image ? (
+                      <img
+                        src={selectedProduct.image}
+                        alt={getProductName(
+                          selectedProduct
+                        )}
+                        className="h-8 w-8 shrink-0 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-sm">
+                        📦
+                      </div>
+                    )}
+
+                    <div className="min-w-0">
+                      {selectedProduct ? (
+                        <>
+                          <p className="truncate font-semibold text-gray-900">
+                            {getProductName(
+                              selectedProduct
+                            )}
+                          </p>
+
+                          <p className="truncate text-xs text-gray-400">
+                            {selectedProduct.sku}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-gray-500">
+                          {loadingProducts
+                            ? isArabic
+                              ? "جاري التحميل..."
+                              : "Loading..."
+                            : isArabic
+                            ? "اختر المنتج"
+                            : "Select Product"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <span className="ml-2 shrink-0 text-gray-400">
+                    {productDropdownOpen
+                      ? "▲"
+                      : "▼"}
+                  </span>
+                </button>
+
+                {productDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
+                    {/* SEARCH */}
+                    <div className="border-b border-gray-200 bg-gray-50 p-3">
+                      <div className="relative">
+                        <span
+                          className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-gray-400 ${
+                            isArabic
+                              ? "right-3"
+                              : "left-3"
+                          }`}
+                        >
+                          🔍
+                        </span>
+
+                        <input
+                          ref={
+                            productSearchInputRef
+                          }
+                          type="text"
+                          value={productSearch}
+                          onChange={(e) =>
+                            setProductSearch(
+                              e.target.value
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              setProductDropdownOpen(
+                                false
+                              );
+                            }
+                          }}
+                          placeholder={
+                            isArabic
+                              ? "ابحث بالاسم أو SKU..."
+                              : "Search by name or SKU..."
+                          }
+                          className={`w-full rounded-lg border border-gray-300 bg-white py-2.5 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100 ${
+                            isArabic
+                              ? "pr-10 pl-3"
+                              : "pl-10 pr-3"
+                          }`}
+                        />
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+                        <span>
+                          {isArabic
+                            ? `${filteredProducts.length} نتيجة`
+                            : `${filteredProducts.length} results`}
+                        </span>
+
+                        {products.length >
+                          100 && (
+                          <span>
+                            {isArabic
+                              ? "أول 100 نتيجة"
+                              : "First 100 results"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* PRODUCT LIST */}
+                    <div className="max-h-80 overflow-y-auto">
+                      {filteredProducts.length ===
+                      0 ? (
+                        <div className="px-4 py-10 text-center">
+                          <div className="text-3xl">
+                            🔍
+                          </div>
+
+                          <p className="mt-2 text-sm font-semibold text-gray-700">
+                            {isArabic
+                              ? "لم يتم العثور على المنتج"
+                              : "No product found"}
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-400">
+                            {isArabic
+                              ? "جرب اسم منتج أو SKU آخر"
+                              : "Try another product name or SKU"}
+                          </p>
+                        </div>
+                      ) : (
+                        filteredProducts.map(
+                          (product) => {
+                            const selected =
+                              form.productId ===
+                              product._id;
+
+                            return (
+                              <button
+                                key={product._id}
+                                type="button"
+                                onClick={() =>
+                                  handleSelectProduct(
+                                    product
+                                  )
+                                }
+                                className={`flex w-full items-center gap-3 px-4 py-3 text-start transition ${
+                                  selected
+                                    ? "bg-gray-100"
+                                    : "hover:bg-gray-50"
+                                }`}
+                              >
+                                {/* IMAGE */}
+                                {product.image ? (
+                                  <img
+                                    src={
+                                      product.image
+                                    }
+                                    alt={getProductName(
+                                      product
+                                    )}
+                                    className="h-10 w-10 shrink-0 rounded-lg border border-gray-200 object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-100">
+                                    📦
+                                  </div>
+                                )}
+
+                                {/* DETAILS */}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="truncate text-sm font-semibold text-gray-900">
+                                      {getProductName(
+                                        product
+                                      )}
+                                    </p>
+
+                                    {product.active ===
+                                      false && (
+                                      <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-600">
+                                        {isArabic
+                                          ? "متوقف"
+                                          : "OFF"}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                                    <span className="font-mono">
+                                      {product.sku}
+                                    </span>
+
+                                    {product.categoryEn && (
+                                      <>
+                                        <span>
+                                          •
+                                        </span>
+
+                                        <span>
+                                          {language ===
+                                          "ar"
+                                            ? product.categoryAr ||
+                                              product.categoryEn
+                                            : product.categoryEn ||
+                                              product.categoryAr}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* CHECK */}
+                                {selected && (
+                                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black text-xs text-white">
+                                    ✓
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          }
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* QUANTITY */}
@@ -778,7 +1167,7 @@ export default function StockReceivingPage() {
                 />
               </div>
 
-              {/* BUTTON */}
+              {/* SUBMIT */}
               <div className="md:col-span-2 xl:col-span-4">
                 <button
                   type="submit"
@@ -848,7 +1237,9 @@ export default function StockReceivingPage() {
                   {records.reduce(
                     (sum, record) =>
                       sum +
-                      Number(record.quantity || 0),
+                      Number(
+                        record.quantity || 0
+                      ),
                     0
                   )}
                 </p>
@@ -912,7 +1303,9 @@ export default function StockReceivingPage() {
 
                 <button
                   type="button"
-                  onClick={() => loadRecords(month)}
+                  onClick={() =>
+                    loadRecords(month)
+                  }
                   disabled={loadingRecords}
                   className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
@@ -1068,7 +1461,9 @@ export default function StockReceivingPage() {
                           className="animate-pulse flex items-center gap-4"
                         >
                           <div className="h-10 w-24 rounded bg-gray-200" />
+
                           <div className="h-10 flex-1 rounded bg-gray-200" />
+
                           <div className="h-10 w-20 rounded bg-gray-200" />
                         </div>
                       )
