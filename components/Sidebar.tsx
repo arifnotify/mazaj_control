@@ -17,6 +17,11 @@ const menuItems = [
     icon: "□",
   },
   {
+    key: "stockReceiving",
+    href: "/stock-receiving",
+    icon: "📥",
+  },
+  {
     key: "issues",
     href: "/issues",
     icon: "⚠",
@@ -40,27 +45,23 @@ export default function Sidebar() {
   return (
     <aside
       className={`fixed top-0 z-50 flex h-screen w-64 flex-col border-gray-200 bg-white ${
-        isArabic
-          ? "right-0 border-l"
-          : "left-0 border-r"
+        isArabic ? "right-0 border-l" : "left-0 border-r"
       }`}
       dir={isArabic ? "rtl" : "ltr"}
     >
-      {/* Logo */}
+      {/* Logo / Header */}
       <div className="border-b border-gray-200 px-6 py-6">
         <h1 className="text-xl font-bold tracking-wide text-gray-900">
           MAZAJ CONTROL
         </h1>
 
         <p className="mt-1 text-xs text-gray-500">
-          {isArabic
-            ? "إدارة المنتجات"
-            : "Product Management"}
+          {isArabic ? "إدارة المنتجات" : "Product Management"}
         </p>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-2 p-4">
+      <nav className="flex-1 space-y-2 overflow-y-auto p-4">
         {menuItems.map((item) => {
           const active =
             item.href === "/"
@@ -77,17 +78,19 @@ export default function Sidebar() {
                   : "text-gray-700 hover:bg-gray-100"
               }`}
             >
-              <span className="w-5 text-center text-base">
+              {/* Icon */}
+              <span className="w-5 shrink-0 text-center text-base">
                 {item.icon}
               </span>
 
+              {/* Menu Name */}
               <span>{t(item.key)}</span>
             </Link>
           );
         })}
       </nav>
 
-      {/* Language */}
+      {/* Language Section */}
       <div className="border-t border-gray-200 p-4">
         <p className="mb-2 text-xs font-medium text-gray-500">
           {t("language")}
@@ -96,7 +99,7 @@ export default function Sidebar() {
         <LanguageSwitcher />
       </div>
 
-      {/* Bottom */}
+      {/* Bottom Admin Info */}
       <div className="border-t border-gray-200 p-4">
         <div className="rounded-lg bg-gray-50 p-4">
           <p className="text-xs font-medium text-gray-700">
@@ -104,9 +107,7 @@ export default function Sidebar() {
           </p>
 
           <p className="mt-1 text-xs text-gray-500">
-            {language === "ar"
-              ? "لوحة الإدارة"
-              : "Admin Panel"}
+            {language === "ar" ? "لوحة الإدارة" : "Admin Panel"}
           </p>
         </div>
       </div>
