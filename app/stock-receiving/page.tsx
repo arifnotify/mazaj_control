@@ -68,7 +68,9 @@ export default function StockReceivingPage() {
   const { language, isArabic, t } = useLanguage();
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [records, setRecords] = useState<ReceivingRecord[]>([]);
+  const [records, setRecords] = useState<ReceivingRecord[]>(
+    []
+  );
 
   const [loadingProducts, setLoadingProducts] =
     useState(true);
@@ -79,6 +81,11 @@ export default function StockReceivingPage() {
   const [error, setError] = useState("");
 
   const [month, setMonth] = useState(getLocalMonth());
+
+  // Date specifically used for printing
+  const [printDate, setPrintDate] = useState(
+    getLocalDateKey()
+  );
 
   const [form, setForm] = useState<FormState>({
     productId: "",
@@ -99,7 +106,7 @@ export default function StockReceivingPage() {
   const [search, setSearch] = useState("");
 
   // --------------------------------------------------
-  // PRODUCT SEARCH DROPDOWN
+  // PRODUCT SEARCH
   // --------------------------------------------------
 
   const [productSearch, setProductSearch] = useState("");
@@ -146,7 +153,7 @@ export default function StockReceivingPage() {
   }, [products, form.productId]);
 
   // --------------------------------------------------
-  // FILTER PRODUCTS FOR DROPDOWN
+  // PRODUCT SEARCH FILTER
   // --------------------------------------------------
 
   const filteredProducts = useMemo(() => {
@@ -185,7 +192,7 @@ export default function StockReceivingPage() {
   }, [products, productSearch]);
 
   // --------------------------------------------------
-  // CLOSE PRODUCT DROPDOWN OUTSIDE CLICK
+  // CLOSE DROPDOWN OUTSIDE CLICK
   // --------------------------------------------------
 
   useEffect(() => {
@@ -214,7 +221,7 @@ export default function StockReceivingPage() {
   }, []);
 
   // --------------------------------------------------
-  // ESCAPE PRODUCT DROPDOWN
+  // ESCAPE DROPDOWN
   // --------------------------------------------------
 
   useEffect(() => {
@@ -556,7 +563,7 @@ export default function StockReceivingPage() {
   }
 
   // --------------------------------------------------
-  // FILTER RECORDS
+  // FILTER MONTHLY RECORDS
   // --------------------------------------------------
 
   const filteredRecords = useMemo(() => {
@@ -590,6 +597,89 @@ export default function StockReceivingPage() {
       );
     });
   }, [records, search]);
+
+  // --------------------------------------------------
+  // PRINT RECORDS
+  // --------------------------------------------------
+
+  const printRecords = useMemo(() => {
+    return records.filter(
+      (record) => record.date === printDate
+    );
+  }, [records, printDate]);
+
+  // --------------------------------------------------
+  // PRINT SUMMARY
+  //
+  // Same product received multiple times on the
+  // selected date will be combined into one row.
+  // --------------------------------------------------
+
+  const printSummary = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        productId: string;
+        name: string;
+        nameAr: string;
+        sku: string;
+        quantity: number;
+        notes: string[];
+      }
+    >();
+
+    printRecords.forEach((record) => {
+      const product = getProductFromRecord(record);
+
+      const productId =
+        product?._id ||
+        (typeof record.productId === "string"
+          ? record.productId
+          : record._id);
+
+      const existing = map.get(productId);
+
+      if (existing) {
+        existing.quantity += Number(
+          record.quantity || 0
+        );
+
+        if (record.note?.trim()) {
+          existing.notes.push(record.note.trim());
+        }
+      } else {
+        map.set(productId, {
+          productId,
+          name: product?.nameEn || "-",
+          nameAr: product?.nameAr || "-",
+          sku: product?.sku || "-",
+          quantity: Number(
+            record.quantity || 0
+          ),
+          notes: record.note?.trim()
+            ? [record.note.trim()]
+            : [],
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        a.name.localeCompare(b.name)
+    );
+  }, [printRecords]);
+
+  // --------------------------------------------------
+  // PRINT TOTAL
+  // --------------------------------------------------
+
+  const printTotal = useMemo(() => {
+    return printSummary.reduce(
+      (total, item) =>
+        total + Number(item.quantity || 0),
+      0
+    );
+  }, [printSummary]);
 
   // --------------------------------------------------
   // TOTAL QUANTITY
@@ -694,6 +784,28 @@ export default function StockReceivingPage() {
     ).format(date);
   }
 
+  // --------------------------------------------------
+  // PRINT REPORT
+  // --------------------------------------------------
+
+  function handlePrint() {
+    if (printRecords.length === 0) {
+      window.alert(
+        isArabic
+          ? `لا توجد منتجات مستلمة بتاريخ ${formatDate(
+              printDate
+            )}`
+          : `No products were received on ${formatDate(
+              printDate
+            )}`
+      );
+
+      return;
+    }
+
+    window.print();
+  }
+
   return (
     <>
       <style jsx global>{`
@@ -720,10 +832,22 @@ export default function StockReceivingPage() {
             display: none !important;
           }
 
+          .monthly-screen-report {
+            display: none !important;
+          }
+
+          .daily-print-report {
+            display: block !important;
+          }
+
           @page {
             size: A4;
             margin: 12mm;
           }
+        }
+
+        .daily-print-report {
+          display: none;
         }
       `}</style>
 
@@ -733,7 +857,10 @@ export default function StockReceivingPage() {
       >
         <div className="mx-auto max-w-[1500px]">
 
-          {/* HEADER */}
+          {/* =========================================
+              HEADER
+          ========================================== */}
+
           <div className="no-print mb-7 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <Link
@@ -759,20 +886,12 @@ export default function StockReceivingPage() {
                   : "Record products and quantities received each day."}
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800"
-            >
-              🖨️{" "}
-              {isArabic
-                ? "طباعة التقرير"
-                : "Print Report"}
-            </button>
           </div>
 
-          {/* ERROR */}
+          {/* =========================================
+              ERROR
+          ========================================== */}
+
           {error && (
             <div className="no-print mb-5 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <span>{error}</span>
@@ -787,7 +906,10 @@ export default function StockReceivingPage() {
             </div>
           )}
 
-          {/* FORM */}
+          {/* =========================================
+              ADD / EDIT FORM
+          ========================================== */}
+
           <div className="no-print mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
@@ -826,6 +948,7 @@ export default function StockReceivingPage() {
               className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
             >
               {/* DATE */}
+
               <div>
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   {isArabic ? "التاريخ" : "Date"}
@@ -845,6 +968,7 @@ export default function StockReceivingPage() {
               </div>
 
               {/* SEARCHABLE PRODUCT */}
+
               <div
                 ref={productDropdownRef}
                 className="relative"
@@ -932,7 +1056,8 @@ export default function StockReceivingPage() {
 
                 {productDropdownOpen && (
                   <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
-                    {/* SEARCH */}
+                    {/* SEARCH BOX */}
+
                     <div className="border-b border-gray-200 bg-gray-50 p-3">
                       <div className="relative">
                         <span
@@ -956,13 +1081,6 @@ export default function StockReceivingPage() {
                               e.target.value
                             )
                           }
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") {
-                              setProductDropdownOpen(
-                                false
-                              );
-                            }
-                          }}
                           placeholder={
                             isArabic
                               ? "ابحث بالاسم أو SKU..."
@@ -995,6 +1113,7 @@ export default function StockReceivingPage() {
                     </div>
 
                     {/* PRODUCT LIST */}
+
                     <div className="max-h-80 overflow-y-auto">
                       {filteredProducts.length ===
                       0 ? (
@@ -1037,7 +1156,6 @@ export default function StockReceivingPage() {
                                     : "hover:bg-gray-50"
                                 }`}
                               >
-                                {/* IMAGE */}
                                 {product.image ? (
                                   <img
                                     src={
@@ -1054,7 +1172,6 @@ export default function StockReceivingPage() {
                                   </div>
                                 )}
 
-                                {/* DETAILS */}
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
                                     <p className="truncate text-sm font-semibold text-gray-900">
@@ -1097,7 +1214,6 @@ export default function StockReceivingPage() {
                                   </div>
                                 </div>
 
-                                {/* CHECK */}
                                 {selected && (
                                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black text-xs text-white">
                                     ✓
@@ -1114,6 +1230,7 @@ export default function StockReceivingPage() {
               </div>
 
               {/* QUANTITY */}
+
               <div>
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   {isArabic
@@ -1142,6 +1259,7 @@ export default function StockReceivingPage() {
               </div>
 
               {/* NOTE */}
+
               <div>
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   {isArabic
@@ -1168,6 +1286,7 @@ export default function StockReceivingPage() {
               </div>
 
               {/* SUBMIT */}
+
               <div className="md:col-span-2 xl:col-span-4">
                 <button
                   type="submit"
@@ -1190,520 +1309,749 @@ export default function StockReceivingPage() {
             </form>
           </div>
 
-          {/* PRINT AREA */}
-          <div className="print-area">
+          {/* =========================================
+              PRINT DATE SELECTOR
+          ========================================== */}
 
-            {/* PRINT HEADER */}
-            <div className="mb-6 hidden print:block">
-              <div className="border-b border-gray-300 pb-4">
-                <h1 className="text-2xl font-bold text-gray-900">
-                  MAZAJ NUTS ROASTERY
-                </h1>
+          <div className="no-print mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 
-                <h2 className="mt-1 text-lg font-semibold text-gray-700">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  🖨️{" "}
                   {isArabic
-                    ? "تقرير استلام المخزون"
-                    : "Stock Receiving Report"}
+                    ? "طباعة حسب التاريخ"
+                    : "Print by Date"}
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  {formatMonth(month)}
-                </p>
-              </div>
-            </div>
-
-            {/* STATS */}
-            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <p className="text-sm font-medium text-gray-500">
+                <p className="mt-1 text-sm text-gray-600">
                   {isArabic
-                    ? "إجمالي السجلات"
-                    : "Total Records"}
-                </p>
-
-                <p className="mt-2 text-3xl font-bold text-gray-900">
-                  {records.length}
+                    ? "اختر تاريخاً لطباعة جميع المنتجات المستلمة في ذلك اليوم فقط."
+                    : "Select a date to print only the products received on that day."}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <p className="text-sm font-medium text-gray-500">
-                  {isArabic
-                    ? "إجمالي الكمية"
-                    : "Total Quantity"}
-                </p>
-
-                <p className="mt-2 text-3xl font-bold text-green-600">
-                  {records.reduce(
-                    (sum, record) =>
-                      sum +
-                      Number(
-                        record.quantity || 0
-                      ),
-                    0
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <p className="text-sm font-medium text-gray-500">
-                  {isArabic
-                    ? "المنتجات"
-                    : "Products"}
-                </p>
-
-                <p className="mt-2 text-3xl font-bold text-blue-600">
-                  {productSummary.length}
-                </p>
-              </div>
-            </div>
-
-            {/* MONTH + SEARCH */}
-            <div className="no-print mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-
-                <div className="w-full lg:max-w-xs">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div>
                   <label className="mb-2 block text-sm font-semibold text-gray-700">
                     {isArabic
-                      ? "الشهر"
-                      : "Month"}
+                      ? "تاريخ الطباعة"
+                      : "Print Date"}
                   </label>
 
                   <input
-                    type="month"
-                    value={month}
+                    type="date"
+                    value={printDate}
                     onChange={(e) =>
-                      setMonth(e.target.value)
+                      setPrintDate(
+                        e.target.value
+                      )
                     }
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100"
-                  />
-                </div>
-
-                <div className="w-full lg:max-w-md">
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
-                    {isArabic
-                      ? "بحث"
-                      : "Search"}
-                  </label>
-
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) =>
-                      setSearch(e.target.value)
-                    }
-                    placeholder={
-                      isArabic
-                        ? "بحث بالمنتج أو SKU أو التاريخ..."
-                        : "Search product, SKU or date..."
-                    }
-                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100"
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100"
                   />
                 </div>
 
                 <button
                   type="button"
-                  onClick={() =>
-                    loadRecords(month)
-                  }
-                  disabled={loadingRecords}
-                  className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  onClick={handlePrint}
+                  className="rounded-xl bg-gray-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800"
                 >
-                  ↻{" "}
+                  🖨️{" "}
                   {isArabic
-                    ? "تحديث"
-                    : "Refresh"}
+                    ? "طباعة"
+                    : "Print"}
                 </button>
-              </div>
-
-              <div className="mt-4 text-sm text-gray-500">
-                {formatMonth(month)}
-                {" — "}
-                {isArabic
-                  ? `${filteredRecords.length} سجل`
-                  : `${filteredRecords.length} records`}
               </div>
             </div>
 
-            {/* PRODUCT SUMMARY */}
-            <div className="mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-200 p-5">
-                <h2 className="text-lg font-bold text-gray-900">
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+              <span className="rounded-full bg-white px-3 py-1.5 font-medium text-gray-700">
+                {formatDate(printDate)}
+              </span>
+
+              <span className="rounded-full bg-green-100 px-3 py-1.5 font-semibold text-green-700">
+                {isArabic
+                  ? `${printSummary.length} منتج`
+                  : `${printSummary.length} products`}
+              </span>
+
+              <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-gray-700">
+                {isArabic
+                  ? `إجمالي: ${printTotal}`
+                  : `Total: ${printTotal}`}
+              </span>
+            </div>
+          </div>
+
+          {/* =========================================
+              PRINT AREA
+          ========================================== */}
+
+          <div className="print-area">
+
+            {/* =======================================
+                DAILY PRINT REPORT
+            ======================================== */}
+
+            <div className="daily-print-report">
+
+              <div className="mb-7 border-b-2 border-gray-900 pb-5">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  MAZAJ NUTS ROASTERY
+                </h1>
+
+                <h2 className="mt-2 text-xl font-bold text-gray-800">
                   {isArabic
-                    ? "ملخص المنتجات"
-                    : "Product Summary"}
+                    ? "تقرير استلام المخزون"
+                    : "Stock Receiving Report"}
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  {isArabic
-                    ? `إجمالي الكميات المستلمة في ${formatMonth(
-                        month
-                      )}`
-                    : `Total quantities received in ${formatMonth(
-                        month
-                      )}`}
-                </p>
+                <div className="mt-3 flex justify-between text-sm text-gray-600">
+                  <span>
+                    {isArabic
+                      ? "التاريخ:"
+                      : "Date:"}{" "}
+                    <strong>
+                      {formatDate(printDate)}
+                    </strong>
+                  </span>
+
+                  <span>
+                    {isArabic
+                      ? "عدد المنتجات:"
+                      : "Products:"}{" "}
+                    <strong>
+                      {printSummary.length}
+                    </strong>
+                  </span>
+                </div>
               </div>
 
-              {productSummary.length === 0 ? (
-                <div className="p-10 text-center text-sm text-gray-500">
-                  {isArabic
-                    ? "لا توجد بيانات لهذا الشهر"
-                    : "No receiving data for this month"}
+              {printSummary.length === 0 ? (
+                <div className="py-16 text-center">
+                  <p className="text-lg font-semibold text-gray-700">
+                    {isArabic
+                      ? "لا توجد منتجات مستلمة في هذا التاريخ."
+                      : "No products were received on this date."}
+                  </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[650px]">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          {isArabic
-                            ? "المنتج"
-                            : "Product"}
-                        </th>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-gray-900">
+                      <th className="px-3 py-3 text-start text-sm font-bold">
+                        {isArabic
+                          ? "المنتج"
+                          : "Product"}
+                      </th>
 
-                        <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          SKU
-                        </th>
+                      <th className="px-3 py-3 text-start text-sm font-bold">
+                        SKU
+                      </th>
 
-                        <th className="px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          {isArabic
-                            ? "إجمالي الكمية"
-                            : "Total Received"}
-                        </th>
-                      </tr>
-                    </thead>
+                      <th className="px-3 py-3 text-end text-sm font-bold">
+                        {isArabic
+                          ? "الكمية"
+                          : "Quantity"}
+                      </th>
 
-                    <tbody className="divide-y divide-gray-100">
-                      {productSummary.map(
-                        (item) => (
-                          <tr
-                            key={item.productId}
-                            className="hover:bg-gray-50"
-                          >
-                            <td className="px-5 py-4">
+                      <th className="px-3 py-3 text-start text-sm font-bold">
+                        {isArabic
+                          ? "ملاحظة"
+                          : "Note"}
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {printSummary.map(
+                      (item) => (
+                        <tr
+                          key={item.productId}
+                          className="border-b border-gray-300"
+                        >
+                          <td className="px-3 py-4">
+                            <div>
                               <p className="font-semibold text-gray-900">
-                                {language === "ar"
+                                {language ===
+                                "ar"
                                   ? item.nameAr ||
                                     item.name
                                   : item.name ||
                                     item.nameAr}
                               </p>
 
-                              <p className="mt-0.5 text-xs text-gray-400">
-                                {language === "ar"
+                              <p className="mt-1 text-xs text-gray-500">
+                                {language ===
+                                "ar"
                                   ? item.name
                                   : item.nameAr}
                               </p>
-                            </td>
+                            </div>
+                          </td>
 
-                            <td className="px-5 py-4">
-                              <span className="rounded-lg bg-gray-100 px-2.5 py-1 font-mono text-xs font-medium text-gray-600">
-                                {item.sku}
-                              </span>
-                            </td>
+                          <td className="px-3 py-4 font-mono text-sm">
+                            {item.sku}
+                          </td>
 
-                            <td className="px-5 py-4 text-end">
-                              <span className="text-lg font-bold text-green-600">
-                                {item.quantity}
-                              </span>
-                            </td>
-                          </tr>
-                        )
-                      )}
-                    </tbody>
+                          <td className="px-3 py-4 text-end text-base font-bold">
+                            {item.quantity}
+                          </td>
 
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-200 bg-gray-50">
-                        <td
-                          colSpan={2}
-                          className="px-5 py-4 text-start font-bold text-gray-900"
-                        >
-                          {isArabic
-                            ? "الإجمالي"
-                            : "Total"}
-                        </td>
-
-                        <td className="px-5 py-4 text-end text-lg font-bold text-gray-900">
-                          {records.reduce(
-                            (sum, record) =>
-                              sum +
-                              Number(
-                                record.quantity || 0
-                              ),
-                            0
-                          )}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* DAILY RECORDS */}
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-200 p-5">
-                <h2 className="text-lg font-bold text-gray-900">
-                  {isArabic
-                    ? "تفاصيل الاستلام اليومية"
-                    : "Daily Receiving Details"}
-                </h2>
-              </div>
-
-              {loadingRecords ? (
-                <div className="p-12">
-                  <div className="space-y-4">
-                    {[1, 2, 3, 4, 5].map(
-                      (item) => (
-                        <div
-                          key={item}
-                          className="animate-pulse flex items-center gap-4"
-                        >
-                          <div className="h-10 w-24 rounded bg-gray-200" />
-
-                          <div className="h-10 flex-1 rounded bg-gray-200" />
-
-                          <div className="h-10 w-20 rounded bg-gray-200" />
-                        </div>
+                          <td className="px-3 py-4 text-sm text-gray-600">
+                            {item.notes.length > 0
+                              ? item.notes.join(
+                                  ", "
+                                )
+                              : "-"}
+                          </td>
+                        </tr>
                       )
                     )}
-                  </div>
+                  </tbody>
+
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-900">
+                      <td
+                        colSpan={2}
+                        className="px-3 py-4 text-start text-base font-bold"
+                      >
+                        {isArabic
+                          ? "الإجمالي"
+                          : "Total"}
+                      </td>
+
+                      <td className="px-3 py-4 text-end text-lg font-bold">
+                        {printTotal}
+                      </td>
+
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+
+              <div className="mt-10 border-t border-gray-300 pt-4">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>
+                    {isArabic
+                      ? "تقرير استلام المخزون"
+                      : "Stock Receiving Report"}
+                  </span>
+
+                  <span>
+                    {new Date().toLocaleDateString(
+                      isArabic
+                        ? "ar-QA"
+                        : "en-GB"
+                    )}
+                  </span>
                 </div>
-              ) : filteredRecords.length === 0 ? (
-                <div className="p-12 text-center">
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-3xl">
-                    📦
+              </div>
+            </div>
+
+            {/* =======================================
+                MONTHLY SCREEN REPORT
+            ======================================== */}
+
+            <div className="monthly-screen-report">
+
+              {/* STATS */}
+
+              <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm font-medium text-gray-500">
+                    {isArabic
+                      ? "إجمالي السجلات"
+                      : "Total Records"}
+                  </p>
+
+                  <p className="mt-2 text-3xl font-bold text-gray-900">
+                    {records.length}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm font-medium text-gray-500">
+                    {isArabic
+                      ? "إجمالي الكمية"
+                      : "Total Quantity"}
+                  </p>
+
+                  <p className="mt-2 text-3xl font-bold text-green-600">
+                    {records.reduce(
+                      (sum, record) =>
+                        sum +
+                        Number(
+                          record.quantity || 0
+                        ),
+                      0
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm font-medium text-gray-500">
+                    {isArabic
+                      ? "المنتجات"
+                      : "Products"}
+                  </p>
+
+                  <p className="mt-2 text-3xl font-bold text-blue-600">
+                    {productSummary.length}
+                  </p>
+                </div>
+              </div>
+
+              {/* MONTH + SEARCH */}
+
+              <div className="no-print mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+
+                  <div className="w-full lg:max-w-xs">
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
+                      {isArabic
+                        ? "الشهر"
+                        : "Month"}
+                    </label>
+
+                    <input
+                      type="month"
+                      value={month}
+                      onChange={(e) =>
+                        setMonth(
+                          e.target.value
+                        )
+                      }
+                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100"
+                    />
                   </div>
 
-                  <h3 className="mt-4 font-bold text-gray-900">
-                    {search
-                      ? isArabic
-                        ? "لا توجد نتائج"
-                        : "No results found"
-                      : isArabic
-                      ? "لا توجد سجلات"
-                      : "No receiving records"}
-                  </h3>
+                  <div className="w-full lg:max-w-md">
+                    <label className="mb-2 block text-sm font-semibold text-gray-700">
+                      {isArabic
+                        ? "بحث"
+                        : "Search"}
+                    </label>
+
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) =>
+                        setSearch(
+                          e.target.value
+                        )
+                      }
+                      placeholder={
+                        isArabic
+                          ? "بحث بالمنتج أو SKU أو التاريخ..."
+                          : "Search product, SKU or date..."
+                      }
+                      className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      loadRecords(month)
+                    }
+                    disabled={
+                      loadingRecords
+                    }
+                    className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    ↻{" "}
+                    {isArabic
+                      ? "تحديث"
+                      : "Refresh"}
+                  </button>
+                </div>
+
+                <div className="mt-4 text-sm text-gray-500">
+                  {formatMonth(month)}
+                  {" — "}
+                  {isArabic
+                    ? `${filteredRecords.length} سجل`
+                    : `${filteredRecords.length} records`}
+                </div>
+              </div>
+
+              {/* PRODUCT SUMMARY */}
+
+              <div className="mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-200 p-5">
+                  <h2 className="text-lg font-bold text-gray-900">
+                    {isArabic
+                      ? "ملخص المنتجات"
+                      : "Product Summary"}
+                  </h2>
 
                   <p className="mt-1 text-sm text-gray-500">
                     {isArabic
-                      ? "لم يتم تسجيل أي استلام لهذا الشهر."
-                      : "No receiving records have been added for this month."}
+                      ? `إجمالي الكميات المستلمة في ${formatMonth(
+                          month
+                        )}`
+                      : `Total quantities received in ${formatMonth(
+                          month
+                        )}`}
                   </p>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px]">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          {isArabic
-                            ? "التاريخ"
-                            : "Date"}
-                        </th>
 
-                        <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          {isArabic
-                            ? "المنتج"
-                            : "Product"}
-                        </th>
+                {productSummary.length ===
+                0 ? (
+                  <div className="p-10 text-center text-sm text-gray-500">
+                    {isArabic
+                      ? "لا توجد بيانات لهذا الشهر"
+                      : "No receiving data for this month"}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[650px]">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            {isArabic
+                              ? "المنتج"
+                              : "Product"}
+                          </th>
 
-                        <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          SKU
-                        </th>
+                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            SKU
+                          </th>
 
-                        <th className="px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          {isArabic
-                            ? "الكمية"
-                            : "Quantity"}
-                        </th>
+                          <th className="px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            {isArabic
+                              ? "إجمالي الكمية"
+                              : "Total Received"}
+                          </th>
+                        </tr>
+                      </thead>
 
-                        <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          {isArabic
-                            ? "ملاحظة"
-                            : "Note"}
-                        </th>
-
-                        <th className="no-print px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
-                          {isArabic
-                            ? "الإجراء"
-                            : "Action"}
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y divide-gray-100">
-                      {filteredRecords.map(
-                        (record) => {
-                          const product =
-                            getProductFromRecord(
-                              record
-                            );
-
-                          const isLoading =
-                            actionLoading ===
-                            record._id;
-
-                          return (
+                      <tbody className="divide-y divide-gray-100">
+                        {productSummary.map(
+                          (item) => (
                             <tr
-                              key={record._id}
-                              className="transition hover:bg-gray-50"
+                              key={
+                                item.productId
+                              }
+                              className="hover:bg-gray-50"
                             >
                               <td className="px-5 py-4">
-                                <span className="font-medium text-gray-700">
-                                  {formatDate(
-                                    record.date
-                                  )}
-                                </span>
-                              </td>
+                                <p className="font-semibold text-gray-900">
+                                  {language ===
+                                  "ar"
+                                    ? item.nameAr ||
+                                      item.name
+                                    : item.name ||
+                                      item.nameAr}
+                                </p>
 
-                              <td className="px-5 py-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
-                                    {product?.image ? (
-                                      <img
-                                        src={
-                                          product.image
-                                        }
-                                        alt={getProductName(
-                                          product
-                                        )}
-                                        className="h-full w-full object-cover"
-                                      />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center">
-                                        📦
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div>
-                                    <p className="font-semibold text-gray-900">
-                                      {getProductName(
-                                        product
-                                      )}
-                                    </p>
-
-                                    <p className="text-xs text-gray-400">
-                                      {language ===
-                                      "ar"
-                                        ? product?.nameEn ||
-                                          "-"
-                                        : product?.nameAr ||
-                                          "-"}
-                                    </p>
-                                  </div>
-                                </div>
+                                <p className="mt-0.5 text-xs text-gray-400">
+                                  {language ===
+                                  "ar"
+                                    ? item.name
+                                    : item.nameAr}
+                                </p>
                               </td>
 
                               <td className="px-5 py-4">
                                 <span className="rounded-lg bg-gray-100 px-2.5 py-1 font-mono text-xs font-medium text-gray-600">
-                                  {product?.sku ||
-                                    "-"}
+                                  {item.sku}
                                 </span>
                               </td>
 
                               <td className="px-5 py-4 text-end">
-                                <span className="rounded-full bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700">
-                                  +{record.quantity}
+                                <span className="text-lg font-bold text-green-600">
+                                  {item.quantity}
                                 </span>
-                              </td>
-
-                              <td className="px-5 py-4">
-                                <span className="text-sm text-gray-500">
-                                  {record.note ||
-                                    "-"}
-                                </span>
-                              </td>
-
-                              <td className="no-print px-5 py-4">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleEdit(
-                                        record
-                                      )
-                                    }
-                                    disabled={
-                                      isLoading
-                                    }
-                                    className="rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-                                  >
-                                    {isArabic
-                                      ? "تعديل"
-                                      : "Edit"}
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleDelete(
-                                        record
-                                      )
-                                    }
-                                    disabled={
-                                      isLoading
-                                    }
-                                    className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
-                                  >
-                                    {isLoading
-                                      ? "..."
-                                      : isArabic
-                                      ? "حذف"
-                                      : "Delete"}
-                                  </button>
-                                </div>
                               </td>
                             </tr>
-                          );
-                        }
-                      )}
-                    </tbody>
+                          )
+                        )}
+                      </tbody>
 
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-200 bg-gray-50">
-                        <td
-                          colSpan={3}
-                          className="px-5 py-4 text-start font-bold text-gray-900"
-                        >
-                          {isArabic
-                            ? "الإجمالي"
-                            : "Total"}
-                        </td>
+                      <tfoot>
+                        <tr className="border-t-2 border-gray-200 bg-gray-50">
+                          <td
+                            colSpan={2}
+                            className="px-5 py-4 text-start font-bold text-gray-900"
+                          >
+                            {isArabic
+                              ? "الإجمالي"
+                              : "Total"}
+                          </td>
 
-                        <td className="px-5 py-4 text-end text-lg font-bold text-green-700">
-                          +{totalReceived}
-                        </td>
+                          <td className="px-5 py-4 text-end text-lg font-bold text-gray-900">
+                            {records.reduce(
+                              (
+                                sum,
+                                record
+                              ) =>
+                                sum +
+                                Number(
+                                  record.quantity ||
+                                    0
+                                ),
+                              0
+                            )}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
 
-                        <td
-                          colSpan={2}
-                          className="no-print"
-                        />
-                      </tr>
-                    </tfoot>
-                  </table>
+              {/* DAILY RECORDS */}
+
+              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b border-gray-200 p-5">
+                  <h2 className="text-lg font-bold text-gray-900">
+                    {isArabic
+                      ? "تفاصيل الاستلام اليومية"
+                      : "Daily Receiving Details"}
+                  </h2>
                 </div>
-              )}
-            </div>
 
-            {/* PRINT FOOTER */}
-            <div className="mt-8 hidden border-t border-gray-200 pt-4 text-xs text-gray-500 print:block">
-              <div className="flex justify-between">
-                <span>
-                  {isArabic
-                    ? "تقرير استلام المخزون"
-                    : "Stock Receiving Report"}
-                </span>
+                {loadingRecords ? (
+                  <div className="p-12">
+                    <div className="space-y-4">
+                      {[1, 2, 3, 4, 5].map(
+                        (item) => (
+                          <div
+                            key={item}
+                            className="flex animate-pulse items-center gap-4"
+                          >
+                            <div className="h-10 w-24 rounded bg-gray-200" />
 
-                <span>
-                  {new Date().toLocaleDateString(
-                    isArabic
-                      ? "ar-QA"
-                      : "en-GB"
-                  )}
-                </span>
+                            <div className="h-10 flex-1 rounded bg-gray-200" />
+
+                            <div className="h-10 w-20 rounded bg-gray-200" />
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ) : filteredRecords.length ===
+                  0 ? (
+                  <div className="p-12 text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-3xl">
+                      📦
+                    </div>
+
+                    <h3 className="mt-4 font-bold text-gray-900">
+                      {search
+                        ? isArabic
+                          ? "لا توجد نتائج"
+                          : "No results found"
+                        : isArabic
+                        ? "لا توجد سجلات"
+                        : "No receiving records"}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      {isArabic
+                        ? "لم يتم تسجيل أي استلام لهذا الشهر."
+                        : "No receiving records have been added for this month."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px]">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            {isArabic
+                              ? "التاريخ"
+                              : "Date"}
+                          </th>
+
+                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            {isArabic
+                              ? "المنتج"
+                              : "Product"}
+                          </th>
+
+                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            SKU
+                          </th>
+
+                          <th className="px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            {isArabic
+                              ? "الكمية"
+                              : "Quantity"}
+                          </th>
+
+                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            {isArabic
+                              ? "ملاحظة"
+                              : "Note"}
+                          </th>
+
+                          <th className="no-print px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            {isArabic
+                              ? "الإجراء"
+                              : "Action"}
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredRecords.map(
+                          (record) => {
+                            const product =
+                              getProductFromRecord(
+                                record
+                              );
+
+                            const isLoading =
+                              actionLoading ===
+                              record._id;
+
+                            return (
+                              <tr
+                                key={
+                                  record._id
+                                }
+                                className="transition hover:bg-gray-50"
+                              >
+                                <td className="px-5 py-4">
+                                  <span className="font-medium text-gray-700">
+                                    {formatDate(
+                                      record.date
+                                    )}
+                                  </span>
+                                </td>
+
+                                <td className="px-5 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                                      {product?.image ? (
+                                        <img
+                                          src={
+                                            product.image
+                                          }
+                                          alt={getProductName(
+                                            product
+                                          )}
+                                          className="h-full w-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="flex h-full w-full items-center justify-center">
+                                          📦
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div>
+                                      <p className="font-semibold text-gray-900">
+                                        {getProductName(
+                                          product
+                                        )}
+                                      </p>
+
+                                      <p className="text-xs text-gray-400">
+                                        {language ===
+                                        "ar"
+                                          ? product?.nameEn ||
+                                            "-"
+                                          : product?.nameAr ||
+                                            "-"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="px-5 py-4">
+                                  <span className="rounded-lg bg-gray-100 px-2.5 py-1 font-mono text-xs font-medium text-gray-600">
+                                    {product?.sku ||
+                                      "-"}
+                                  </span>
+                                </td>
+
+                                <td className="px-5 py-4 text-end">
+                                  <span className="rounded-full bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700">
+                                    +{record.quantity}
+                                  </span>
+                                </td>
+
+                                <td className="px-5 py-4">
+                                  <span className="text-sm text-gray-500">
+                                    {record.note ||
+                                      "-"}
+                                  </span>
+                                </td>
+
+                                <td className="no-print px-5 py-4">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleEdit(
+                                          record
+                                        )
+                                      }
+                                      disabled={
+                                        isLoading
+                                      }
+                                      className="rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                                    >
+                                      {isArabic
+                                        ? "تعديل"
+                                        : "Edit"}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleDelete(
+                                          record
+                                        )
+                                      }
+                                      disabled={
+                                        isLoading
+                                      }
+                                      className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                                    >
+                                      {isLoading
+                                        ? "..."
+                                        : isArabic
+                                        ? "حذف"
+                                        : "Delete"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          }
+                        )}
+                      </tbody>
+
+                      <tfoot>
+                        <tr className="border-t-2 border-gray-200 bg-gray-50">
+                          <td
+                            colSpan={3}
+                            className="px-5 py-4 text-start font-bold text-gray-900"
+                          >
+                            {isArabic
+                              ? "الإجمالي"
+                              : "Total"}
+                          </td>
+
+                          <td className="px-5 py-4 text-end text-lg font-bold text-green-700">
+                            +{totalReceived}
+                          </td>
+
+                          <td
+                            colSpan={2}
+                            className="no-print"
+                          />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           </div>
