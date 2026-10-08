@@ -38,6 +38,9 @@ export default function ProductsPage() {
     useState<FilterStatus>("all");
   const [error, setError] = useState("");
 
+  const [actionLoading, setActionLoading] =
+    useState<string | null>(null);
+
   useEffect(() => {
     loadProducts();
   }, []);
@@ -68,6 +71,108 @@ export default function ProductsPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function toggleProduct(product: Product) {
+    try {
+      setActionLoading(product._id);
+      setError("");
+
+      const response = await fetch(
+        `/api/products/${product._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            active: !product.active,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Failed to update product"
+        );
+      }
+
+      setProducts((currentProducts) =>
+        currentProducts.map((item) =>
+          item._id === product._id
+            ? {
+                ...item,
+                active: !product.active,
+              }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update product"
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function deleteProduct(product: Product) {
+    const productName =
+      language === "ar"
+        ? product.nameAr || product.nameEn
+        : product.nameEn || product.nameAr;
+
+    const confirmed = window.confirm(
+      isArabic
+        ? `هل أنت متأكد أنك تريد حذف المنتج "${productName}"؟\n\nلا يمكن التراجع عن هذا الإجراء.`
+        : `Are you sure you want to delete "${productName}"?\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setActionLoading(product._id);
+      setError("");
+
+      const response = await fetch(
+        `/api/products/${product._id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Failed to delete product"
+        );
+      }
+
+      setProducts((currentProducts) =>
+        currentProducts.filter(
+          (item) => item._id !== product._id
+        )
+      );
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to delete product"
+      );
+    } finally {
+      setActionLoading(null);
     }
   }
 
@@ -372,11 +477,21 @@ export default function ProductsPage() {
             {/* Result count */}
             {!loading && (
               <div className="mt-4 text-sm text-gray-500">
-                {isArabic
-                  ? `عرض ${filteredProducts.length} من ${products.length} منتج`
-                  : "Showing "}
-                {!isArabic && (
+                {isArabic ? (
                   <>
+                    عرض{" "}
+                    <span className="font-semibold text-gray-900">
+                      {filteredProducts.length}
+                    </span>{" "}
+                    من{" "}
+                    <span className="font-semibold text-gray-900">
+                      {products.length}
+                    </span>{" "}
+                    منتج
+                  </>
+                ) : (
+                  <>
+                    Showing{" "}
                     <span className="font-semibold text-gray-900">
                       {filteredProducts.length}
                     </span>{" "}
@@ -468,7 +583,7 @@ export default function ProductsPage() {
 
             /* ================= TABLE ================= */
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px]">
+              <table className="w-full min-w-[1150px]">
 
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50/80">
@@ -514,6 +629,9 @@ export default function ProductsPage() {
                         ? "low"
                         : "good";
 
+                    const isActionLoading =
+                      actionLoading === product._id;
+
                     return (
                       <tr
                         key={product._id}
@@ -543,16 +661,15 @@ export default function ProductsPage() {
                             <div className="min-w-0">
                               <p
                                 className={`truncate font-semibold text-gray-900 ${
-                                  isArabic ? "text-right" : "text-left"
+                                  isArabic
+                                    ? "text-right"
+                                    : "text-left"
                                 }`}
                               >
                                 {getProductName(product)}
                               </p>
 
-                              <p
-                                dir={isArabic ? "rtl" : "ltr"}
-                                className="mt-0.5 truncate text-xs text-gray-400"
-                              >
+                              <p className="mt-0.5 truncate text-xs text-gray-400">
                                 {language === "ar"
                                   ? product.nameEn || "-"
                                   : product.nameAr || "-"}
@@ -583,10 +700,7 @@ export default function ProductsPage() {
                               {getProductCategory(product)}
                             </p>
 
-                            <p
-                              dir={isArabic ? "ltr" : "rtl"}
-                              className="truncate text-xs text-gray-400"
-                            >
+                            <p className="truncate text-xs text-gray-400">
                               {language === "ar"
                                 ? product.categoryEn || "-"
                                 : product.categoryAr || "-"}
@@ -613,7 +727,9 @@ export default function ProductsPage() {
                           ) : stockStatus === "low" ? (
                             <span className="inline-flex rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-600">
                               {product.stock}{" "}
-                              {isArabic ? "متبقي" : "left"}
+                              {isArabic
+                                ? "متبقي"
+                                : "left"}
                             </span>
                           ) : (
                             <span className="font-medium text-gray-700">
@@ -623,20 +739,58 @@ export default function ProductsPage() {
 
                         </td>
 
-                        {/* Status */}
+                        {/* ON / OFF */}
                         <td className="px-5 py-4">
 
-                          {product.active ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
-                              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                              {t("active")}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleProduct(product)
+                            }
+                            disabled={isActionLoading}
+                            aria-label={
+                              product.active
+                                ? "Turn product off"
+                                : "Turn product on"
+                            }
+                            className={`relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-200 ${
+                              product.active
+                                ? "bg-green-500"
+                                : "bg-gray-300"
+                            } ${
+                              isActionLoading
+                                ? "cursor-wait opacity-50"
+                                : "cursor-pointer"
+                            }`}
+                          >
+                            <span
+                              className={`absolute h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                                product.active
+                                  ? isArabic
+                                    ? "-translate-x-8"
+                                    : "translate-x-8"
+                                  : isArabic
+                                  ? "-translate-x-1"
+                                  : "translate-x-1"
+                              }`}
+                            />
+
+                            <span
+                              className={`absolute text-[9px] font-bold ${
+                                product.active
+                                  ? isArabic
+                                    ? "right-2 text-white"
+                                    : "left-2 text-white"
+                                  : isArabic
+                                  ? "left-2 text-gray-600"
+                                  : "right-2 text-gray-600"
+                              }`}
+                            >
+                              {product.active
+                                ? "ON"
+                                : "OFF"}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">
-                              <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-                              {t("inactive")}
-                            </span>
-                          )}
+                          </button>
 
                         </td>
 
@@ -658,6 +812,19 @@ export default function ProductsPage() {
                             >
                               {t("edit")}
                             </Link>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                deleteProduct(product)
+                              }
+                              disabled={isActionLoading}
+                              className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {isActionLoading
+                                ? "..."
+                                : t("delete")}
+                            </button>
 
                           </div>
 
