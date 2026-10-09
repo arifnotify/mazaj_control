@@ -1,7 +1,11 @@
+
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
+
 import { connectDB } from "@/lib/mongodb";
 import Issue from "@/models/Issue";
+import "@/models/Product";
+import "@/models/Employee";
 
 const validStatuses = [
   "open",
@@ -11,66 +15,86 @@ const validStatuses = [
   "closed",
 ];
 
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext
 ) {
   try {
     await connectDB();
 
     const { id } = await params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json(
-        { error: "Invalid issue ID" },
+        { message: "Invalid issue ID." },
         { status: 400 }
       );
     }
 
     const body = await request.json();
-
-    if (
-      body.status !== undefined &&
-      !validStatuses.includes(body.status)
-    ) {
-      return NextResponse.json(
-        { error: "Invalid issue status" },
-        { status: 400 }
-      );
-    }
-
-    const updateData: Record<string, unknown> = {};
+    const updateData: Record<string, string> = {};
 
     if (body.status !== undefined) {
+      if (
+        typeof body.status !== "string" ||
+        !validStatuses.includes(body.status)
+      ) {
+        return NextResponse.json(
+          { message: "Invalid issue status." },
+          { status: 400 }
+        );
+      }
+
       updateData.status = body.status;
     }
 
     if (body.note !== undefined) {
-      updateData.note = String(body.note);
+      if (typeof body.note !== "string") {
+        return NextResponse.json(
+          { message: "Note must be text." },
+          { status: 400 }
+        );
+      }
+
+      updateData.note = body.note.trim();
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { message: "No valid fields provided to update." },
+        { status: 400 }
+      );
     }
 
     const issue = await Issue.findByIdAndUpdate(
       id,
-      updateData,
+      { $set: updateData },
       {
         new: true,
         runValidators: true,
       }
-    ).populate("productId");
+    )
+      .populate("productId")
+      .populate("reporterEmployeeId")
+      .lean();
 
     if (!issue) {
       return NextResponse.json(
-        { error: "Issue not found" },
+        { message: "Issue not found." },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(issue);
+    return NextResponse.json(issue, { status: 200 });
   } catch (error) {
-    console.error("UPDATE ISSUE ERROR:", error);
+    console.error("PUT /api/issues/[id] error:", error);
 
     return NextResponse.json(
-      { error: "Failed to update issue" },
+      { message: "Failed to update issue." },
       { status: 500 }
     );
   }
@@ -78,16 +102,16 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext
 ) {
   try {
     await connectDB();
 
     const { id } = await params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json(
-        { error: "Invalid issue ID" },
+        { message: "Invalid issue ID." },
         { status: 400 }
       );
     }
@@ -96,20 +120,23 @@ export async function DELETE(
 
     if (!issue) {
       return NextResponse.json(
-        { error: "Issue not found" },
+        { message: "Issue not found." },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "Issue deleted successfully",
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Issue deleted successfully.",
+      },
+      { status: 200 }
+    );
   } catch (error) {
-    console.error("DELETE ISSUE ERROR:", error);
+    console.error("DELETE /api/issues/[id] error:", error);
 
     return NextResponse.json(
-      { error: "Failed to delete issue" },
+      { message: "Failed to delete issue." },
       { status: 500 }
     );
   }
