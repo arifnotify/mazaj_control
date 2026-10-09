@@ -7,18 +7,19 @@ import Issue from "@/models/Issue";
 import "@/models/Product";
 import "@/models/Employee";
 
-const validStatuses = [
+const VALID_STATUSES = [
   "open",
   "in_progress",
   "fixed",
   "verified",
   "closed",
-];
+] as const;
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+// Update Issue status or note
 export async function PUT(
   request: Request,
   { params }: RouteContext
@@ -41,7 +42,9 @@ export async function PUT(
     if (body.status !== undefined) {
       if (
         typeof body.status !== "string" ||
-        !validStatuses.includes(body.status)
+        !VALID_STATUSES.includes(
+          body.status as (typeof VALID_STATUSES)[number]
+        )
       ) {
         return NextResponse.json(
           { message: "Invalid issue status." },
@@ -100,6 +103,7 @@ export async function PUT(
   }
 }
 
+// Permanently delete Issue from MongoDB
 export async function DELETE(
   request: Request,
   { params }: RouteContext
@@ -116,9 +120,9 @@ export async function DELETE(
       );
     }
 
-    const issue = await Issue.findByIdAndDelete(id);
+    const deletedIssue = await Issue.findByIdAndDelete(id);
 
-    if (!issue) {
+    if (!deletedIssue) {
       return NextResponse.json(
         { message: "Issue not found." },
         { status: 404 }
@@ -129,6 +133,7 @@ export async function DELETE(
       {
         success: true,
         message: "Issue deleted successfully.",
+        deletedId: id,
       },
       { status: 200 }
     );

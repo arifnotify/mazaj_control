@@ -1,9 +1,32 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type MarketplaceName = "Talabat" | "Snoonu" | "Rafeeq" | "Keeta";
+type IssueType =
+  | "price"
+  | "name"
+  | "description"
+  | "image"
+  | "category"
+  | "availability"
+  | "other";
+type IssueStatus =
+  | "open"
+  | "in_progress"
+  | "fixed"
+  | "verified"
+  | "closed";
+
+type ProductInfo = {
+  _id: string;
+  sku?: string;
+  name?: string;
+  nameEn?: string;
+  nameAr?: string;
+};
 
 type MarketplaceStatus = {
   marketplace: MarketplaceName;
@@ -12,40 +35,26 @@ type MarketplaceStatus = {
   syncStatus: string;
 };
 
-type StatusProduct = {
-  _id: string;
-  sku: string;
-  name: string;
-  nameEn?: string;
-  nameAr?: string;
+type ProductStatus = ProductInfo & {
   marketplaces: MarketplaceStatus[];
 };
 
-type PopulatedProduct = {
-  _id?: string;
-  sku?: string;
-  name?: string;
-  nameEn?: string;
-  nameAr?: string;
-} | string | null;
-
-type PopulatedEmployee = {
+type EmployeeInfo = {
   _id?: string;
   name?: string;
-  nameEn?: string;
-  nameAr?: string;
-} | string | null;
+};
 
-type Issue = {
+type IssueRecord = {
   _id: string;
-  productId: PopulatedProduct;
+  productId: ProductInfo | string | null;
   marketplace: MarketplaceName;
-  type: string;
+  type: IssueType;
   note?: string;
   reporterName?: string;
-  reporterEmployeeId?: PopulatedEmployee;
-  status: string;
+  reporterEmployeeId?: EmployeeInfo | string | null;
+  status: IssueStatus;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 const MARKETPLACES: MarketplaceName[] = [
@@ -55,7 +64,7 @@ const MARKETPLACES: MarketplaceName[] = [
   "Keeta",
 ];
 
-const ISSUE_TYPES = [
+const ISSUE_TYPES: IssueType[] = [
   "price",
   "name",
   "description",
@@ -65,7 +74,7 @@ const ISSUE_TYPES = [
   "other",
 ];
 
-const ISSUE_STATUSES = [
+const ISSUE_STATUSES: IssueStatus[] = [
   "open",
   "in_progress",
   "fixed",
@@ -73,133 +82,158 @@ const ISSUE_STATUSES = [
   "closed",
 ];
 
-function getProductName(product: PopulatedProduct) {
-  if (!product || typeof product === "string") {
-    return "Product details unavailable";
-  }
+const STATUS_LABELS: Record<IssueStatus, string> = {
+  open: "Open",
+  in_progress: "In Progress",
+  fixed: "Fixed",
+  verified: "Verified",
+  closed: "Closed",
+};
+
+function getProductName(
+  product: ProductInfo | string | null | undefined
+): string {
+  if (!product) return "Unknown product";
+  if (typeof product === "string") return product;
 
   return (
     product.nameEn ||
     product.name ||
     product.nameAr ||
     product.sku ||
-    "Unnamed product"
+    "Unknown product"
   );
 }
 
-function getEmployeeName(issue: Issue) {
-  if (issue.reporterName?.trim()) {
-    return issue.reporterName;
+function getProductSku(
+  product: ProductInfo | string | null | undefined
+): string {
+  if (!product || typeof product === "string") return "";
+  return product.sku || "";
+}
+
+function getEmployeeName(
+  employee: EmployeeInfo | string | null | undefined
+): string {
+  if (!employee) return "";
+  if (typeof employee === "string") return employee;
+  return employee.name || "";
+}
+
+function formatDate(date?: string): string {
+  if (!date) return "—";
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) return "—";
+
+  return parsed.toLocaleString();
+}
+
+function statusColor(status: IssueStatus): string {
+  switch (status) {
+    case "open":
+      return "bg-red-100 text-red-700";
+    case "in_progress":
+      return "bg-yellow-100 text-yellow-800";
+    case "fixed":
+      return "bg-blue-100 text-blue-700";
+    case "verified":
+      return "bg-green-100 text-green-700";
+    case "closed":
+      return "bg-gray-200 text-gray-700";
+    default:
+      return "bg-gray-100 text-gray-700";
   }
-
-  const employee = issue.reporterEmployeeId;
-
-  if (employee && typeof employee !== "string") {
-    return (
-      employee.name ||
-      employee.nameEn ||
-      employee.nameAr ||
-      "Unknown employee"
-    );
-  }
-
-  return "Unknown employee";
 }
 
-function formatDate(value?: string) {
-  if (!value) return "—";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "—";
-
-  return date.toLocaleString();
-}
-
-function formatLabel(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function AvailabilityBadge({
-  status,
+function MarketplaceBadge({
+  marketplace,
 }: {
-  status: MarketplaceStatus;
+  marketplace: MarketplaceStatus;
 }) {
-  if (!status.connected || status.available === null) {
+  if (!marketplace.connected) {
     return (
-      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+      <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">
         Not Connected
       </span>
     );
   }
 
-  if (status.available) {
+  if (marketplace.available === true) {
     return (
-      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+      <span className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
         ON
       </span>
     );
   }
 
   return (
-    <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800">
+    <span className="inline-flex rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
       OFF
     </span>
   );
 }
 
 export default function IssuesPage() {
-  const [products, setProducts] = useState<StatusProduct[]>([]);
-  const [issues, setIssues] = useState<Issue[]>([]);
+  const [issues, setIssues] = useState<IssueRecord[]>([]);
+  const [products, setProducts] = useState<ProductStatus[]>([]);
+
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const [search, setSearch] = useState("");
-  const [marketplaceFilter, setMarketplaceFilter] =
-    useState("all");
-  const [availabilityFilter, setAvailabilityFilter] =
-    useState("all");
-  const [issueFilter, setIssueFilter] = useState("all");
-  const [savingIssueId, setSavingIssueId] = useState("");
+  const [marketplaceFilter, setMarketplaceFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [availabilityFilter, setAvailabilityFilter] = useState("all");
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
-      const [statusResponse, issueResponse] = await Promise.all([
-        fetch("/api/marketplaces/status", { cache: "no-store" }),
+      const [issuesResponse, productsResponse] = await Promise.all([
         fetch("/api/issues", { cache: "no-store" }),
+        fetch("/api/marketplaces/status", { cache: "no-store" }),
       ]);
 
-      if (!statusResponse.ok) {
-        throw new Error("Failed to load marketplace statuses.");
+      const issuesData = await issuesResponse.json();
+      const productsData = await productsResponse.json();
+
+      if (!issuesResponse.ok) {
+        throw new Error(
+          issuesData.message || "Failed to load reported issues."
+        );
       }
 
-      if (!issueResponse.ok) {
-        throw new Error("Failed to load issues.");
+      if (!productsResponse.ok) {
+        throw new Error(
+          productsData.message || "Failed to load marketplace statuses."
+        );
       }
 
-      const statusData = await statusResponse.json();
-      const issueData = await issueResponse.json();
+      const issueList = Array.isArray(issuesData)
+        ? issuesData
+        : Array.isArray(issuesData.issues)
+          ? issuesData.issues
+          : [];
 
-      setProducts(
-        Array.isArray(statusData)
-          ? statusData
-          : statusData.products || []
-      );
+      const productList = Array.isArray(productsData)
+        ? productsData
+        : Array.isArray(productsData.products)
+          ? productsData.products
+          : [];
 
-      setIssues(
-        Array.isArray(issueData)
-          ? issueData
-          : issueData.issues || []
-      );
+      setIssues(issueList);
+      setProducts(productList);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load dashboard data."
+        err instanceof Error ? err.message : "Failed to load data."
       );
     } finally {
       setLoading(false);
@@ -210,12 +244,133 @@ export default function IssuesPage() {
     void loadData();
   }, [loadData]);
 
+  const filteredProducts = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    return products.filter((product) => {
+      const matchesSearch =
+        !term ||
+        product.name?.toLowerCase().includes(term) ||
+        product.nameEn?.toLowerCase().includes(term) ||
+        product.nameAr?.toLowerCase().includes(term) ||
+        product.sku?.toLowerCase().includes(term);
+
+      const matchesMarketplace =
+        marketplaceFilter === "all" ||
+        product.marketplaces.some(
+          (item) => item.marketplace === marketplaceFilter
+        );
+
+      const matchesAvailability =
+        availabilityFilter === "all" ||
+        product.marketplaces.some((item) => {
+          if (
+            marketplaceFilter !== "all" &&
+            item.marketplace !== marketplaceFilter
+          ) {
+            return false;
+          }
+
+          if (availabilityFilter === "connected") {
+            return item.connected;
+          }
+
+          if (availabilityFilter === "on") {
+            return item.connected && item.available === true;
+          }
+
+          if (availabilityFilter === "off") {
+            return item.connected && item.available === false;
+          }
+
+          if (availabilityFilter === "not_connected") {
+            return !item.connected;
+          }
+
+          return true;
+        });
+
+      return (
+        Boolean(matchesSearch) &&
+        matchesMarketplace &&
+        matchesAvailability
+      );
+    });
+  }, [
+    products,
+    search,
+    marketplaceFilter,
+    availabilityFilter,
+  ]);
+
+  const filteredIssues = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    return issues.filter((issue) => {
+      const productName = getProductName(issue.productId);
+      const sku = getProductSku(issue.productId);
+      const employeeName =
+        issue.reporterName || getEmployeeName(issue.reporterEmployeeId);
+
+      const matchesSearch =
+        !term ||
+        productName.toLowerCase().includes(term) ||
+        sku.toLowerCase().includes(term) ||
+        (issue.note || "").toLowerCase().includes(term) ||
+        employeeName.toLowerCase().includes(term);
+
+      const matchesMarketplace =
+        marketplaceFilter === "all" ||
+        issue.marketplace === marketplaceFilter;
+
+      const matchesType =
+        typeFilter === "all" || issue.type === typeFilter;
+
+      const matchesStatus =
+        statusFilter === "all" || issue.status === statusFilter;
+
+      return (
+        matchesSearch &&
+        matchesMarketplace &&
+        matchesType &&
+        matchesStatus
+      );
+    });
+  }, [
+    issues,
+    search,
+    marketplaceFilter,
+    typeFilter,
+    statusFilter,
+  ]);
+
+  const marketplaceCounts = useMemo(() => {
+    let on = 0;
+    let off = 0;
+    let notConnected = 0;
+
+    for (const product of products) {
+      for (const item of product.marketplaces || []) {
+        if (!item.connected) {
+          notConnected++;
+        } else if (item.available === true) {
+          on++;
+        } else {
+          off++;
+        }
+      }
+    }
+
+    return { on, off, notConnected };
+  }, [products]);
+
   async function updateIssueStatus(
     issueId: string,
-    status: string
+    newStatus: IssueStatus
   ) {
-    setSavingIssueId(issueId);
     setError("");
+    setSuccess("");
+    setUpdatingId(issueId);
 
     try {
       const response = await fetch(`/api/issues/${issueId}`, {
@@ -223,127 +378,92 @@ export default function IssuesPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: newStatus }),
       });
 
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to update issue status."
-        );
+        throw new Error(data.message || "Failed to update issue status.");
       }
 
-      await loadData();
+      setIssues((previous) =>
+        previous.map((issue) =>
+          issue._id === issueId
+            ? { ...issue, status: newStatus }
+            : issue
+        )
+      );
+
+      setSuccess("Issue status updated successfully.");
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to update issue."
+          : "Failed to update issue status."
       );
     } finally {
-      setSavingIssueId("");
+      setUpdatingId(null);
     }
   }
 
-  const filteredProducts = products.filter((product) => {
-    const searchText = search.trim().toLowerCase();
+  async function deleteIssue(issueId: string) {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete this reported issue? This cannot be undone."
+    );
 
-    const matchesSearch =
-      !searchText ||
-      product.name?.toLowerCase().includes(searchText) ||
-      product.sku?.toLowerCase().includes(searchText);
+    if (!confirmed) return;
 
-    const matchesMarketplace =
-      marketplaceFilter === "all" ||
-      product.marketplaces.some(
-        (item) => item.marketplace === marketplaceFilter
-      );
+    setError("");
+    setSuccess("");
+    setDeletingId(issueId);
 
-    const matchesAvailability =
-      availabilityFilter === "all" ||
-      product.marketplaces.some((item) => {
-        if (availabilityFilter === "not_connected") {
-          return !item.connected;
-        }
-
-        if (availabilityFilter === "on") {
-          return item.connected && item.available === true;
-        }
-
-        if (availabilityFilter === "off") {
-          return item.connected && item.available === false;
-        }
-
-        return true;
+    try {
+      const response = await fetch(`/api/issues/${issueId}`, {
+        method: "DELETE",
       });
 
-    return (
-      matchesSearch &&
-      matchesMarketplace &&
-      matchesAvailability
-    );
-  });
+      const data = await response.json();
 
-  const filteredIssues = issues.filter((issue) => {
-    const productName = getProductName(issue.productId);
-    const employeeName = getEmployeeName(issue);
-    const searchText = search.trim().toLowerCase();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to delete issue.");
+      }
 
-    const matchesSearch =
-      !searchText ||
-      productName.toLowerCase().includes(searchText) ||
-      employeeName.toLowerCase().includes(searchText) ||
-      (issue.note || "").toLowerCase().includes(searchText);
+      // Remove from the screen only after the server confirms deletion.
+      setIssues((previous) =>
+        previous.filter((issue) => issue._id !== issueId)
+      );
 
-    const matchesMarketplace =
-      marketplaceFilter === "all" ||
-      issue.marketplace === marketplaceFilter;
+      setSuccess("Issue permanently deleted from the database.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to delete issue."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
-    const matchesIssue =
-      issueFilter === "all" || issue.type === issueFilter;
-
-    return matchesSearch && matchesMarketplace && matchesIssue;
-  });
-
-  const onCount = products.reduce(
-    (total, product) =>
-      total +
-      product.marketplaces.filter(
-        (item) => item.connected && item.available === true
-      ).length,
-    0
-  );
-
-  const offCount = products.reduce(
-    (total, product) =>
-      total +
-      product.marketplaces.filter(
-        (item) => item.connected && item.available === false
-      ).length,
-    0
-  );
-
-  const notConnectedCount = products.reduce(
-    (total, product) =>
-      total +
-      product.marketplaces.filter((item) => !item.connected).length,
-    0
-  );
-
-  const availabilityIssueCount = issues.filter(
-    (issue) => issue.type === "availability"
+  const openCount = issues.filter((issue) => issue.status === "open").length;
+  const inProgressCount = issues.filter(
+    (issue) => issue.status === "in_progress"
+  ).length;
+  const fixedCount = issues.filter(
+    (issue) => issue.status === "fixed"
+  ).length;
+  const closedCount = issues.filter(
+    (issue) => issue.status === "closed"
   ).length;
 
   return (
-    <main className="space-y-8 p-4 md:p-8">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+    <main className="min-h-screen space-y-6 bg-gray-50 p-4 text-gray-900 sm:p-6 lg:p-8">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold sm:text-3xl">
             Issues & Marketplace Status
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Check ON/OFF availability and manage employee-reported issues.
+          <p className="mt-1 text-sm text-gray-600">
+            Monitor product availability and manage reported issues.
           </p>
         </div>
 
@@ -351,77 +471,82 @@ export default function IssuesPage() {
           type="button"
           onClick={() => void loadData()}
           disabled={loading}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading ? "Refreshing..." : "Refresh Data"}
+          {loading ? "Loading..." : "Refresh Data"}
         </button>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
           {error}
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border bg-white p-5">
+      {success && (
+        <div
+          role="status"
+          className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700"
+        >
+          {success}
+        </div>
+      )}
+
+      {/* Summary cards */}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-sm text-gray-500">Total Products</p>
           <p className="mt-2 text-3xl font-bold">{products.length}</p>
         </div>
 
-        <div className="rounded-xl border bg-white p-5">
-          <p className="text-sm text-gray-500">
-            Marketplace ON records
-          </p>
-          <p className="mt-2 text-3xl font-bold text-green-700">
-            {onCount}
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Marketplace ON</p>
+          <p className="mt-2 text-3xl font-bold text-green-600">
+            {marketplaceCounts.on}
           </p>
         </div>
 
-        <div className="rounded-xl border bg-white p-5">
-          <p className="text-sm text-gray-500">
-            Marketplace OFF records
-          </p>
-          <p className="mt-2 text-3xl font-bold text-red-700">
-            {offCount}
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Marketplace OFF</p>
+          <p className="mt-2 text-3xl font-bold text-red-600">
+            {marketplaceCounts.off}
           </p>
         </div>
 
-        <div className="rounded-xl border bg-white p-5">
-          <p className="text-sm text-gray-500">
-            Not Connected / Availability Issues
-          </p>
-          <p className="mt-2 text-3xl font-bold text-gray-700">
-            {notConnectedCount} / {availabilityIssueCount}
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Not Connected</p>
+          <p className="mt-2 text-3xl font-bold text-gray-600">
+            {marketplaceCounts.notConnected}
           </p>
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">
-            Automatic Marketplace Availability
-          </h2>
+      {/* Marketplace status table */}
+      <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <div className="border-b p-4 sm:p-5">
+          <h2 className="text-xl font-bold">Product Marketplace Status</h2>
           <p className="mt-1 text-sm text-gray-500">
-            The status below comes from ProductMarketplace.available.
+            ON means marked available in your database. OFF means marked
+            unavailable. Not Connected means no marketplace record exists.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid gap-3 border-b p-4 md:grid-cols-3">
           <input
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search product name or SKU..."
-            className="rounded-lg border px-3 py-2 text-sm outline-none focus:border-blue-500"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
           />
 
           <select
             value={marketplaceFilter}
-            onChange={(event) =>
-              setMarketplaceFilter(event.target.value)
-            }
-            className="rounded-lg border px-3 py-2 text-sm"
+            onChange={(event) => setMarketplaceFilter(event.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           >
             <option value="all">All Marketplaces</option>
             {MARKETPLACES.map((marketplace) => (
@@ -433,25 +558,28 @@ export default function IssuesPage() {
 
           <select
             value={availabilityFilter}
-            onChange={(event) =>
-              setAvailabilityFilter(event.target.value)
-            }
-            className="rounded-lg border px-3 py-2 text-sm"
+            onChange={(event) => setAvailabilityFilter(event.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           >
             <option value="all">All Availability</option>
             <option value="on">ON only</option>
             <option value="off">OFF only</option>
             <option value="not_connected">Not Connected only</option>
+            <option value="connected">Connected only</option>
           </select>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border bg-white">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[850px] text-left text-sm">
-            <thead className="bg-gray-50 text-gray-600">
+            <thead className="bg-gray-100 text-gray-600">
               <tr>
-                <th className="px-4 py-3">Product</th>
+                <th className="px-4 py-3 font-semibold">Product</th>
+                <th className="px-4 py-3 font-semibold">SKU</th>
                 {MARKETPLACES.map((marketplace) => (
-                  <th key={marketplace} className="px-4 py-3">
+                  <th
+                    key={marketplace}
+                    className="px-4 py-3 text-center font-semibold"
+                  >
                     {marketplace}
                   </th>
                 ))}
@@ -462,8 +590,8 @@ export default function IssuesPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-gray-500"
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-gray-500"
                   >
                     Loading marketplace statuses...
                   </td>
@@ -471,8 +599,8 @@ export default function IssuesPage() {
               ) : filteredProducts.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-gray-500"
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-gray-500"
                   >
                     No products found.
                   </td>
@@ -480,35 +608,42 @@ export default function IssuesPage() {
               ) : (
                 filteredProducts.map((product) => (
                   <tr key={product._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4">
-                      <p className="font-semibold text-gray-900">
-                        {product.name}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-500">
-                        SKU: {product.sku || "—"}
-                      </p>
+                    <td className="px-4 py-3 font-medium">
+                      <Link
+                        href={`/products/${product._id}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {getProductName(product)}
+                      </Link>
                     </td>
 
-                    {MARKETPLACES.map((marketplace) => {
-                      const status = product.marketplaces.find(
-                        (item) => item.marketplace === marketplace
+                    <td className="px-4 py-3 text-gray-600">
+                      {product.sku || "—"}
+                    </td>
+
+                    {MARKETPLACES.map((marketplaceName) => {
+                      const marketplace = (
+                        product.marketplaces || []
+                      ).find(
+                        (item) => item.marketplace === marketplaceName
                       );
 
                       return (
-                        <td key={marketplace} className="px-4 py-4">
-                          {status ? (
-                            <div className="space-y-2">
-                              <AvailabilityBadge status={status} />
-                              {status.connected && (
-                                <p className="text-xs text-gray-500">
-                                  Sync: {formatLabel(status.syncStatus)}
-                                </p>
-                              )}
-                            </div>
+                        <td
+                          key={marketplaceName}
+                          className="px-4 py-3 text-center"
+                        >
+                          {marketplace ? (
+                            <MarketplaceBadge marketplace={marketplace} />
                           ) : (
-                            <span className="text-xs text-gray-500">
-                              Not Connected
-                            </span>
+                            <MarketplaceBadge
+                              marketplace={{
+                                marketplace: marketplaceName,
+                                connected: false,
+                                available: null,
+                                syncStatus: "not_connected",
+                              }}
+                            />
                           )}
                         </td>
                       );
@@ -519,45 +654,99 @@ export default function IssuesPage() {
             </tbody>
           </table>
         </div>
+
+        <div className="border-t px-4 py-3 text-xs text-gray-500">
+          Showing {filteredProducts.length} of {products.length} products
+        </div>
       </section>
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">
-            Employee Reported Issues
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Employees can report problems from the Product Details page.
-            Manage each report below.
-          </p>
+      {/* Reported issues */}
+      <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <div className="flex flex-col justify-between gap-3 border-b p-4 sm:flex-row sm:items-center sm:p-5">
+          <div>
+            <h2 className="text-xl font-bold">Reported Issues</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Update issue status or permanently delete resolved reports.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-red-100 px-3 py-1.5 font-semibold text-red-700">
+              Open: {openCount}
+            </span>
+            <span className="rounded-full bg-yellow-100 px-3 py-1.5 font-semibold text-yellow-800">
+              In Progress: {inProgressCount}
+            </span>
+            <span className="rounded-full bg-blue-100 px-3 py-1.5 font-semibold text-blue-700">
+              Fixed: {fixedCount}
+            </span>
+            <span className="rounded-full bg-gray-200 px-3 py-1.5 font-semibold text-gray-700">
+              Closed: {closedCount}
+            </span>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-3 md:flex-row">
+        <div className="grid gap-3 border-b p-4 md:grid-cols-4">
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search product, SKU, employee, note..."
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+
           <select
-            value={issueFilter}
-            onChange={(event) => setIssueFilter(event.target.value)}
-            className="rounded-lg border px-3 py-2 text-sm"
+            value={marketplaceFilter}
+            onChange={(event) => setMarketplaceFilter(event.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="all">All Marketplaces</option>
+            {MARKETPLACES.map((marketplace) => (
+              <option key={marketplace} value={marketplace}>
+                {marketplace}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           >
             <option value="all">All Issue Types</option>
             {ISSUE_TYPES.map((type) => (
               <option key={type} value={type}>
-                {formatLabel(type)}
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="all">All Statuses</option>
+            {ISSUE_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {STATUS_LABELS[status]}
               </option>
             ))}
           </select>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border bg-white">
-          <table className="w-full min-w-[1000px] text-left text-sm">
-            <thead className="bg-gray-50 text-gray-600">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1100px] text-left text-sm">
+            <thead className="bg-gray-100 text-gray-600">
               <tr>
-                <th className="px-4 py-3">Product</th>
-                <th className="px-4 py-3">Marketplace</th>
-                <th className="px-4 py-3">Issue</th>
-                <th className="px-4 py-3">Note</th>
-                <th className="px-4 py-3">Reported By</th>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 font-semibold">Product</th>
+                <th className="px-4 py-3 font-semibold">Marketplace</th>
+                <th className="px-4 py-3 font-semibold">Issue Type</th>
+                <th className="px-4 py-3 font-semibold">Note</th>
+                <th className="px-4 py-3 font-semibold">Reported By</th>
+                <th className="px-4 py-3 font-semibold">Date</th>
+                <th className="px-4 py-3 font-semibold">Status</th>
+                <th className="px-4 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
 
@@ -565,72 +754,134 @@ export default function IssuesPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={7}
-                    className="px-4 py-8 text-center text-gray-500"
+                    colSpan={8}
+                    className="px-4 py-10 text-center text-gray-500"
                   >
-                    Loading issues...
+                    Loading reported issues...
                   </td>
                 </tr>
               ) : filteredIssues.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
-                    className="px-4 py-8 text-center text-gray-500"
+                    colSpan={8}
+                    className="px-4 py-10 text-center text-gray-500"
                   >
-                    No issues found.
+                    No reported issues found.
                   </td>
                 </tr>
               ) : (
                 filteredIssues.map((issue) => (
                   <tr key={issue._id} className="align-top hover:bg-gray-50">
-                    <td className="px-4 py-4 font-medium text-gray-900">
-                      {getProductName(issue.productId)}
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/products/${
+                          typeof issue.productId === "object" &&
+                          issue.productId
+                            ? issue.productId._id
+                            : ""
+                        }`}
+                        className="font-semibold text-blue-600 hover:underline"
+                      >
+                        {getProductName(issue.productId)}
+                      </Link>
+
+                      {getProductSku(issue.productId) && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          SKU: {getProductSku(issue.productId)}
+                        </p>
+                      )}
                     </td>
 
-                    <td className="px-4 py-4">
-                      {issue.marketplace}
+                    <td className="px-4 py-3">{issue.marketplace}</td>
+
+                    <td className="px-4 py-3 capitalize">{issue.type}</td>
+
+                    <td className="max-w-[240px] whitespace-pre-wrap px-4 py-3 text-gray-600">
+                      {issue.note || "—"}
                     </td>
 
-                    <td className="px-4 py-4">
-                      {formatLabel(issue.type)}
+                    <td className="px-4 py-3">
+                      {issue.reporterName ||
+                        getEmployeeName(issue.reporterEmployeeId) ||
+                        "—"}
                     </td>
 
-                    <td className="max-w-xs whitespace-pre-wrap break-words px-4 py-4">
-                      {issue.note?.trim() || "—"}
-                    </td>
-
-                    <td className="px-4 py-4">
-                      {getEmployeeName(issue)}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-4 text-gray-500">
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-600">
                       {formatDate(issue.createdAt)}
                     </td>
 
-                    <td className="px-4 py-4">
-                      <select
-                        value={issue.status}
-                        disabled={savingIssueId === issue._id}
-                        onChange={(event) =>
-                          void updateIssueStatus(
-                            issue._id,
-                            event.target.value
-                          )
-                        }
-                        className="rounded-lg border px-2 py-2 text-xs disabled:opacity-50"
-                      >
-                        {ISSUE_STATUSES.map((status) => (
-                          <option key={status} value={status}>
-                            {formatLabel(status)}
-                          </option>
-                        ))}
-                      </select>
+                    <td className="px-4 py-3">
+                      <div className="space-y-2">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor(
+                            issue.status
+                          )}`}
+                        >
+                          {STATUS_LABELS[issue.status] || issue.status}
+                        </span>
+
+                        <select
+                          value={issue.status}
+                          disabled={
+                            updatingId === issue._id ||
+                            deletingId === issue._id
+                          }
+                          onChange={(event) =>
+                            void updateIssueStatus(
+                              issue._id,
+                              event.target.value as IssueStatus
+                            )
+                          }
+                          className="block w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs disabled:opacity-50"
+                          aria-label={`Update status for ${getProductName(
+                            issue.productId
+                          )}`}
+                        >
+                          {ISSUE_STATUSES.map((status) => (
+                            <option key={status} value={status}>
+                              {STATUS_LABELS[status]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col items-start gap-2">
+                        {typeof issue.productId === "object" &&
+                          issue.productId && (
+                            <Link
+                              href={`/products/${issue.productId._id}`}
+                              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold hover:bg-gray-100"
+                            >
+                              View Product
+                            </Link>
+                          )}
+
+                        <button
+                          type="button"
+                          onClick={() => void deleteIssue(issue._id)}
+                          disabled={
+                            deletingId === issue._id ||
+                            updatingId === issue._id
+                          }
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {deletingId === issue._id
+                            ? "Deleting..."
+                            : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="border-t px-4 py-3 text-xs text-gray-500">
+          Showing {filteredIssues.length} of {issues.length} reported issues
         </div>
       </section>
     </main>
