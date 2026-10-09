@@ -28,20 +28,31 @@ const IssueSchema = new Schema(
       required: true,
     },
 
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    reporterName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    reporterEmployeeId: {
+      type: Schema.Types.ObjectId,
+      ref: "Employee",
+      required: true,
+    },
+
     status: {
       type: String,
       enum: ["open", "in_progress", "fixed", "verified", "closed"],
       default: "open",
     },
-
-    note: {
-      type: String,
-      default: "",
-    },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 export default models.Issue || model("Issue", IssueSchema);
