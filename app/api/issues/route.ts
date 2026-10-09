@@ -1,19 +1,15 @@
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import connectDB from "@/lib/mongodb";
+
+import { connectDB } from "@/lib/mongodb";
 import Issue from "@/models/Issue";
 import Employee from "@/models/Employee";
 import "@/models/Product";
 
-const validMarketplaces = [
-  "Talabat",
-  "Snoonu",
-  "Rafeeq",
-  "Keeta",
-];
+const MARKETPLACES = ["Talabat", "Snoonu", "Rafeeq", "Keeta"];
 
-const validTypes = [
+const ISSUE_TYPES = [
   "price",
   "name",
   "description",
@@ -33,12 +29,12 @@ export async function GET() {
       .sort({ createdAt: -1 })
       .lean();
 
-    return NextResponse.json(issues);
+    return NextResponse.json(issues, { status: 200 });
   } catch (error) {
-    console.error("GET issues error:", error);
+    console.error("GET /api/issues error:", error);
 
     return NextResponse.json(
-      { message: "Failed to load issues." },
+      { message: "Failed to fetch issues" },
       { status: 500 }
     );
   }
@@ -50,47 +46,61 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    const productId = String(body.productId || "").trim();
-    const reporterEmployeeId = String(
-      body.reporterEmployeeId || ""
-    ).trim();
-    const marketplace = String(body.marketplace || "").trim();
-    const type = String(body.type || "").trim();
-    const note =
-      typeof body.note === "string" ? body.note.trim() : "";
+    const {
+      productId,
+      marketplace,
+      type,
+      note = "",
+      reporterEmployeeId,
+    } = body;
 
+    // Required-field validation
+    if (
+      !productId ||
+      !marketplace ||
+      !type ||
+      !reporterEmployeeId
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Product, marketplace, issue type, and employee are required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate MongoDB IDs
     if (
       !mongoose.isValidObjectId(productId) ||
-      !mongoose.isValidObjectId(reporterEmployeeId) ||
-      !marketplace ||
-      !type
+      !mongoose.isValidObjectId(reporterEmployeeId)
     ) {
       return NextResponse.json(
-        { message: "Please provide all required fields." },
+        { message: "Invalid product or employee ID." },
         { status: 400 }
       );
     }
 
-    if (
-      !validMarketplaces.includes(marketplace) ||
-      !validTypes.includes(type)
-    ) {
+    // Validate marketplace
+    if (!MARKETPLACES.includes(marketplace)) {
       return NextResponse.json(
-        { message: "Invalid marketplace or issue type." },
+        { message: "Invalid marketplace." },
         { status: 400 }
       );
     }
 
-    if (note.length > 2000) {
+    // Validate issue type
+    if (!ISSUE_TYPES.includes(type)) {
       return NextResponse.json(
-        { message: "Note cannot exceed 2000 characters." },
+        { message: "Invalid issue type." },
         { status: 400 }
       );
     }
 
-    const employee = await Employee.findById(
-      reporterEmployeeId
-    ).select("_id name").lean();
+    // Check that the employee exists
+    const employee = await Employee.findById(reporterEmployeeId)
+      .select("_id name active")
+      .lean();
 
     if (!employee) {
       return NextResponse.json(
@@ -99,25 +109,34 @@ export async function POST(request: Request) {
       );
     }
 
-    const reporterName = String(employee.name || "").trim();
-
-    if (!reporterName) {
+    if (employee.active === false) {
       return NextResponse.json(
-        { message: "Selected employee has no name." },
+        { message: "This employee is inactive." },
         { status: 400 }
       );
     }
 
+    const reporterName = String(employee.name || "").trim();
+
+    if (!reporterName) {
+      return NextResponse.json(
+        { message: "The selected employee does not have a name." },
+        { status: 400 }
+      );
+    }
+
+    // Create the issue
     const issue = await Issue.create({
       productId,
       marketplace,
       type,
-      note,
+      note: String(note).trim(),
       reporterName,
-      reporterEmployeeId: employee._id,
+      reporterEmployeeId,
       status: "open",
     });
 
+    // Return the saved issue with product and employee details
     const savedIssue = await Issue.findById(issue._id)
       .populate("productId")
       .populate("reporterEmployeeId")
@@ -125,7 +144,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(savedIssue, { status: 201 });
   } catch (error) {
-    console.error("POST issue error:", error);
+    console.error("POST /api/issues error:", error);
 
     return NextResponse.json(
       { message: "Failed to create issue." },
