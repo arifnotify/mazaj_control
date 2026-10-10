@@ -806,6 +806,66 @@ export default function StockReceivingPage() {
     window.print();
   }
 
+
+  // --------------------------------------------------
+  // EMAIL DAILY RECEIVING REPORT
+  // Opens the email app with the admin address and
+  // the selected day's report already filled in.
+  // --------------------------------------------------
+
+  function handleEmailReport() {
+    if (printSummary.length === 0) {
+      window.alert(
+        isArabic
+          ? `لا توجد منتجات مستلمة بتاريخ ${formatDate(printDate)}`
+          : `No receiving records found for ${formatDate(printDate)}.`
+      );
+      return;
+    }
+
+    const recipient = "admin@mazajnuts.com";
+    const subject = `MAZAJ NUTS ROASTERY - Stock Receiving Report - ${formatDate(printDate)}`;
+
+    const productLines = printSummary.map((item, index) => {
+      const productName =
+        language === "ar"
+          ? item.nameAr || item.name
+          : item.name || item.nameAr;
+
+      return [
+        `${index + 1}. ${productName}`,
+        `   SKU: ${item.sku}`,
+        `   Quantity Received: ${item.quantity}`,
+        `   Note: ${item.notes.join(", ") || "-"}`,
+      ].join("\n");
+    });
+
+    const body = [
+      "MAZAJ NUTS ROASTERY",
+      "Daily Stock Receiving Report",
+      `Date: ${formatDate(printDate)}`,
+      "",
+      "Received Products:",
+      "",
+      ...productLines,
+      "",
+      "--------------------------------",
+      `Total Products: ${printSummary.length}`,
+      `Total Quantity Received: ${printTotal}`,
+      "--------------------------------",
+      "",
+      "Best regards,",
+      "MAZAJ NUTS ROASTERY",
+    ].join("\n");
+
+    const mailtoUrl =
+      `mailto:${encodeURIComponent(recipient)}` +
+      `?subject=${encodeURIComponent(subject)}` +
+      `&body=${encodeURIComponent(body)}`;
+
+    window.location.href = mailtoUrl;
+  }
+
   return (
     <>
       <style jsx global>{`
@@ -1360,6 +1420,17 @@ export default function StockReceivingPage() {
                   {isArabic
                     ? "طباعة"
                     : "Print"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleEmailReport}
+                  className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  ✉️{" "}
+                  {isArabic
+                    ? "إرسال بالبريد"
+                    : "Email Report"}
                 </button>
               </div>
             </div>
