@@ -26,6 +26,8 @@ type Product = {
   price: number;
   stock: number;
   active: boolean;
+  lastStatusChangedByName?: string;
+  lastStatusChangedAt?: string;
   productType?: ProductType;
   singleWeight?: number | null;
   singleUnit?: Unit | null;
@@ -33,6 +35,8 @@ type Product = {
 
   createdAt?: string;
 };
+
+type Employee = { _id: string; name: string; active?: boolean };
 
 type FilterStatus = "all" | "active" | "inactive";
 
@@ -42,6 +46,10 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [statusTarget, setStatusTarget] = useState<Product | null>(null);
+  const [employeeId, setEmployeeId] = useState("");
+  const [employeeLoading, setEmployeeLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [expandedPrices, setExpandedPrices] = useState<string[]>([]);
 
@@ -94,50 +102,43 @@ export default function ProductsPage() {
   // TOGGLE PRODUCT
   // =========================
 
-  async function toggleProduct(product: Product) {
+  async function openStatusDialog(product: Product) {
+    setStatusTarget(product);
+    setEmployeeId("");
+    setEmployeeLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/employees", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to load employees");
+      const list = Array.isArray(data) ? data : Array.isArray(data.employees) ? data.employees : [];
+      setEmployees(list.filter((employee: Employee) => employee.active !== false && employee.name?.trim()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load employees");
+      setStatusTarget(null);
+    } finally {
+      setEmployeeLoading(false);
+    }
+  }
+
+  async function confirmStatusChange() {
+    if (!statusTarget || !employeeId) return;
+    const product = statusTarget;
     try {
       setActionLoading(product._id);
       setError("");
-
-      const response = await fetch(
-        `/api/products/${product._id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            active: !product.active,
-          }),
-        }
-      );
-
+      const response = await fetch(`/api/products/${product._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !product.active, statusEmployeeId: employeeId }),
+      });
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error || "Failed to update product"
-        );
-      }
-
-      setProducts((currentProducts) =>
-        currentProducts.map((item) =>
-          item._id === product._id
-            ? {
-                ...item,
-                active: !product.active,
-              }
-            : item
-        )
-      );
+      if (!response.ok) throw new Error(data.error || "Failed to update product");
+      setProducts((current) => current.map((item) => item._id === product._id ? { ...item, ...data } : item));
+      setStatusTarget(null);
+      setEmployeeId("");
     } catch (err) {
-      console.error(err);
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update product"
-      );
+      setError(err instanceof Error ? err.message : "Failed to update product");
     } finally {
       setActionLoading(null);
     }
@@ -1121,7 +1122,7 @@ export default function ProductsPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                toggleProduct(
+                                openStatusDialog(
                                   product
                                 )
                               }
@@ -1173,6 +1174,14 @@ export default function ProductsPage() {
                               </span>
 
                             </button>
+                            {product.lastStatusChangedByName && (
+                              <div className="mt-1 max-w-36 text-[11px] leading-4 text-gray-500">
+                                {product.active ? "ON" : "OFF"} by {product.lastStatusChangedByName}
+                                {product.lastStatusChangedAt && (
+                                  <div>{new Date(product.lastStatusChangedAt).toLocaleString()}</div>
+                                )}
+                              </div>
+                            )}
 
                           </td>
 
@@ -1267,6 +1276,25 @@ export default function ProductsPage() {
           )}
 
       </div>
-    </main>
+    
+      {statusTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label="Confirm product status change">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" dir={isArabic ? "rtl" : "ltr"}>
+            <h2 className="text-xl font-bold text-gray-900">{statusTarget.active ? "Turn Product OFF" : "Turn Product ON"}</h2>
+            <p className="mt-2 text-sm text-gray-600">{statusTarget.nameEn} — Select the employee making this change.</p>
+            <label htmlFor="status-employee" className="mt-5 block text-sm font-semibold text-gray-700">Employee Name *</label>
+            <select id="status-employee" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} disabled={employeeLoading || actionLoading !== null} className="mt-2 w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900">
+              <option value="">{employeeLoading ? "Loading employees..." : "Select Employee"}</option>
+              {employees.map((employee) => <option key={employee._id} value={employee._id}>{employee.name}</option>)}
+            </select>
+            {employees.length === 0 && !employeeLoading && <p className="mt-2 text-sm text-red-600">No active employees found.</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" disabled={actionLoading !== null} onClick={() => setStatusTarget(null)} className="rounded-lg border px-4 py-2 text-gray-700">Cancel</button>
+              <button type="button" disabled={!employeeId || employeeLoading || actionLoading !== null} onClick={confirmStatusChange} className="rounded-lg bg-gray-900 px-4 py-2 font-semibold text-white disabled:opacity-50">{actionLoading ? "Saving..." : `Confirm ${statusTarget.active ? "OFF" : "ON"}`}</button>
+            </div>
+          </div>
+        </div>
+      )}
+</main>
   );
 }
