@@ -100,6 +100,13 @@ export default function StockReceivingPage() {
   const [storeRequestItems, setStoreRequestItems] = useState<StoreRequestItem[]>([]);
   const [storeRequestSaving, setStoreRequestSaving] = useState(false);
   const [loadingStoreRequests, setLoadingStoreRequests] = useState(false);
+  const [storeHistoryOpen, setStoreHistoryOpen] = useState(false);
+  const [expandedRequestIds, setExpandedRequestIds] = useState<string[]>([]);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [expandedSummaryDates, setExpandedSummaryDates] = useState<string[]>([]);
+  const [expandedReceivingDates, setExpandedReceivingDates] = useState<string[]>([]);
+  const [deletingStoreRequestId, setDeletingStoreRequestId] = useState<string | null>(null);
+
 
   const [loadingProducts, setLoadingProducts] =
     useState(true);
@@ -439,6 +446,24 @@ export default function StockReceivingPage() {
       setError(err instanceof Error ? err.message : "Failed to submit store request");
     } finally {
       setStoreRequestSaving(false);
+    }
+  }
+
+  async function deleteStoreRequest(request: StoreRequest) {
+    if (!window.confirm(isArabic
+      ? `هل تريد حذف طلب ${request.date} نهائياً؟`
+      : `Permanently delete store request dated ${request.date}?`)) return;
+    try {
+      setDeletingStoreRequestId(request._id);
+      setError("");
+      const response = await fetch(`/api/store-requests/${encodeURIComponent(request._id)}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not delete store request");
+      setStoreRequests(current => current.filter(item => item._id !== request._id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete store request");
+    } finally {
+      setDeletingStoreRequestId(null);
     }
   }
 
@@ -1076,6 +1101,28 @@ export default function StockReceivingPage() {
     }
   }
 
+  const receivingByDate = useMemo(() => {
+    const groups = new Map<string, ReceivingRecord[]>();
+    filteredRecords.forEach(record => {
+      groups.set(record.date, [...(groups.get(record.date) || []), record]);
+    });
+    return [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filteredRecords]);
+
+  const summaryByDate = useMemo(() => {
+    return receivingByDate.map(([date, dailyRecords]) => {
+      const summary = new Map<string, { productId: string; name: string; nameAr: string; sku: string; quantity: number }>();
+      dailyRecords.forEach(record => {
+        const product = getProductFromRecord(record);
+        const productId = product?._id || (typeof record.productId === "string" ? record.productId : record._id);
+        const previous = summary.get(productId);
+        if (previous) previous.quantity += Number(record.quantity || 0);
+        else summary.set(productId, { productId, name: product?.nameEn || "-", nameAr: product?.nameAr || "-", sku: product?.sku || "-", quantity: Number(record.quantity || 0) });
+      });
+      return { date, products: [...summary.values()], total: dailyRecords.reduce((sum, record) => sum + Number(record.quantity || 0), 0) };
+    });
+  }, [receivingByDate]);
+
   return (
     <>
       <style jsx global>{`
@@ -1218,53 +1265,51 @@ export default function StockReceivingPage() {
             <p className="mt-2 text-xs text-gray-500">{isArabic ? "يُحفظ الطلب في سجل لوحة التحكم. سيفتح البريد كمسودة ويجب الضغط على إرسال." : "Each request is saved in dashboard history. The email opens as a draft; click Send to send it."}</p>
           </section>
 
-          {/* =========================================
-              DAILY STORE REQUEST HISTORY
-          ========================================== */}
-          <section className="no-print mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {/* Collapsible store request history */}
+          <section className="no-print mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <button type="button" onClick={() => setStoreHistoryOpen(v => !v)}
+              aria-expanded={storeHistoryOpen}
+              className="flex w-full items-center justify-between gap-3 p-5 text-start sm:p-6">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">{isArabic ? "سجل طلبات المخزن" : "Store Request History"}</h2>
-                <p className="mt-1 text-sm text-gray-500">{isArabic ? "السجل اليومي محفوظ حسب الشهر." : "Saved daily requests, grouped by month."}</p>
+                <p className="mt-1 text-sm text-gray-500">{month} · {storeRequests.length} {isArabic ? "طلبات" : "requests"}</p>
               </div>
-              <div className="text-sm text-gray-500">{isArabic ? "الشهر" : "Month"}: <strong>{month}</strong></div>
-            </div>
-
-            {loadingStoreRequests ? (
-              <p className="py-5 text-center text-sm text-gray-500">Loading request history...</p>
-            ) : storeRequests.length === 0 ? (
-              <p className="rounded-xl bg-gray-50 p-5 text-center text-sm text-gray-500">
-                {isArabic ? "لا توجد طلبات في هذا الشهر." : "No store requests recorded for this month yet."}
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {storeRequests.map((request) => (
-                  <div key={request._id} className="rounded-xl border border-gray-200 p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">
-                          {request.date} <span className="ml-2 text-xs font-normal text-gray-500">ID: {request._id}</span>
-                        </p>
-                        <p className="mt-1 text-sm text-gray-500">
-                          {request.items.length} products · {request.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} total units
-                        </p>
-                      </div>
-                      <button type="button" onClick={() => openStoreRequestEmail(request)} className="self-start rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
-                        {isArabic ? "إعادة فتح البريد" : "Open Email Draft Again"}
+              <span className="text-xl text-gray-600">{storeHistoryOpen ? "−" : "+"}</span>
+            </button>
+            {storeHistoryOpen && <div className="space-y-3 border-t p-4 sm:p-6">
+              {loadingStoreRequests ? <p>{isArabic ? "جارٍ التحميل..." : "Loading..."}</p> :
+                storeRequests.length === 0 ? <p className="text-sm text-gray-500">{isArabic ? "لا توجد طلبات" : "No requests this month"}</p> :
+                storeRequests.map(request => {
+                  const expanded = expandedRequestIds.includes(request._id);
+                  return <div key={request._id} className="rounded-xl border border-gray-200">
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                      <button type="button" aria-expanded={expanded}
+                        onClick={() => setExpandedRequestIds(current => expanded ? current.filter(id => id !== request._id) : [...current, request._id])}
+                        className="flex flex-1 items-center justify-between gap-3 text-start">
+                        <span className="font-semibold text-gray-900">{request.date} <span className="text-xs font-normal text-gray-500">({request.items.length} {isArabic ? "منتجات" : "products"})</span></span>
+                        <span>{expanded ? "−" : "+"}</span>
+                      </button>
+                      <button type="button" onClick={() => void deleteStoreRequest(request)}
+                        disabled={deletingStoreRequestId === request._id}
+                        className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
+                        {deletingStoreRequestId === request._id ? "..." : isArabic ? "حذف" : "Delete"}
                       </button>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {request.items.map((item) => (
-                        <span key={item.productId} className="rounded-lg bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
-                          {language === "ar" ? item.nameAr || item.nameEn : item.nameEn || item.nameAr} × {item.quantity}
-                        </span>
-                      ))}
-                    </div>
-                    {request.requestNote && <p className="mt-2 text-sm text-gray-600">Note: {request.requestNote}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
+                    {expanded && <div className="space-y-3 border-t p-4">
+                      <div className="flex flex-wrap gap-2">{request.items.map((item, i) =>
+                        <span key={`${item.productId}-${i}`} className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                          {isArabic ? item.nameAr || item.nameEn : item.nameEn || item.nameAr} × {item.quantity}
+                          {item.note ? ` — ${item.note}` : ""}
+                        </span>)}</div>
+                      {request.requestNote && <p className="text-sm text-gray-600">{request.requestNote}</p>}
+                      <button type="button" onClick={() => openStoreRequestEmail(request)}
+                        className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">
+                        {isArabic ? "فتح مسودة البريد" : "Open Email Draft"}
+                      </button>
+                    </div>}
+                  </div>;
+                })}
+            </div>}
           </section>
 
           {/* =========================================
@@ -2065,382 +2110,72 @@ export default function StockReceivingPage() {
                 </div>
               </div>
 
-              {/* PRODUCT SUMMARY */}
+              {/* Daily product summary: collapsed by default */}
+              <section className="mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <button type="button" aria-expanded={summaryOpen} onClick={() => setSummaryOpen(v => !v)}
+                  className="flex w-full items-center justify-between p-5 text-start">
+                  <div><h2 className="text-lg font-bold">{isArabic ? "ملخص المنتجات حسب اليوم" : "Product Summary by Day"}</h2>
+                    <p className="text-sm text-gray-500">{summaryByDate.length} {isArabic ? "أيام" : "days"}</p></div>
+                  <span className="text-xl">{summaryOpen ? "−" : "+"}</span>
+                </button>
+                {summaryOpen && <div className="space-y-3 border-t p-4">
+                  {summaryByDate.length === 0 ? <p className="text-sm text-gray-500">{isArabic ? "لا توجد بيانات" : "No records"}</p> :
+                    summaryByDate.map(day => {
+                      const expanded = expandedSummaryDates.includes(day.date);
+                      return <div key={day.date} className="overflow-hidden rounded-xl border">
+                        <button type="button" aria-expanded={expanded}
+                          onClick={() => setExpandedSummaryDates(current => expanded ? current.filter(d => d !== day.date) : [...current, day.date])}
+                          className="flex w-full items-center justify-between gap-3 bg-gray-50 px-4 py-3 text-start">
+                          <span className="font-semibold">{formatDate(day.date)} <span className="text-sm font-normal text-gray-500">· {day.products.length} {isArabic ? "منتجات" : "products"} · {day.total} {isArabic ? "وحدات" : "units"}</span></span>
+                          <span>{expanded ? "−" : "+"}</span>
+                        </button>
+                        {expanded && <div className="overflow-x-auto"><table className="w-full min-w-[500px] text-sm">
+                          <thead><tr className="border-b bg-gray-50"><th className="px-4 py-3 text-start">{isArabic ? "المنتج" : "Product"}</th><th className="px-4 py-3 text-start">SKU</th><th className="px-4 py-3 text-end">{isArabic ? "الكمية" : "Quantity"}</th></tr></thead>
+                          <tbody>{day.products.map(p => <tr key={p.productId} className="border-b"><td className="px-4 py-3">{isArabic ? p.nameAr || p.name : p.name || p.nameAr}</td><td className="px-4 py-3">{p.sku}</td><td className="px-4 py-3 text-end font-semibold">{p.quantity}</td></tr>)}</tbody>
+                          <tfoot><tr className="bg-gray-50 font-bold"><td colSpan={2} className="px-4 py-3">{isArabic ? "الإجمالي" : "Total"}</td><td className="px-4 py-3 text-end">{day.total}</td></tr></tfoot>
+                        </table></div>}
+                      </div>;
+                    })}
+                </div>}
+              </section>
 
-              <div className="mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
-                <div className="border-b border-gray-200 p-5">
-                  <h2 className="text-lg font-bold text-gray-900">
-                    {isArabic
-                      ? "ملخص المنتجات"
-                      : "Product Summary"}
-                  </h2>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    {isArabic
-                      ? `إجمالي الكميات المستلمة في ${formatMonth(
-                          month
-                        )}`
-                      : `Total quantities received in ${formatMonth(
-                          month
-                        )}`}
-                  </p>
+              {/* Daily receiving details: latest day expanded, older days collapsed */}
+              <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                <div className="border-b p-5"><h2 className="text-lg font-bold">{isArabic ? "تفاصيل الاستلام اليومية" : "Daily Receiving Details"}</h2>
+                  <p className="text-sm text-gray-500">{isArabic ? "أحدث يوم مفتوح، والأيام السابقة مصغرة" : "Latest day shown; older days collapsed"}</p></div>
+                <div className="space-y-3 p-4">
+                  {loadingRecords ? <p className="text-sm text-gray-500">{isArabic ? "جارٍ التحميل..." : "Loading..."}</p> :
+                    receivingByDate.length === 0 ? <p className="text-sm text-gray-500">{isArabic ? "لا توجد سجلات" : "No receiving records"}</p> :
+                    receivingByDate.map(([date, dailyRecords], index) => {
+                      const expanded = expandedReceivingDates.includes(date) || (index === 0 && !expandedReceivingDates.includes(`closed:${date}`));
+                      return <div key={date} className="overflow-hidden rounded-xl border">
+                        <button type="button" aria-expanded={expanded}
+                          onClick={() => setExpandedReceivingDates(current => expanded
+                            ? [...current.filter(d => d !== date), `closed:${date}`]
+                            : [...current.filter(d => d !== `closed:${date}`), date])}
+                          className="flex w-full items-center justify-between gap-3 bg-gray-50 px-4 py-3 text-start">
+                          <span className="font-semibold">{formatDate(date)} <span className="text-sm font-normal text-gray-500">· {dailyRecords.length} {isArabic ? "سجلات" : "records"}</span></span>
+                          <span>{expanded ? "−" : "+"}</span>
+                        </button>
+                        {expanded && <div className="overflow-x-auto"><table className="w-full min-w-[800px] text-sm">
+                          <thead><tr className="border-b bg-gray-50">
+                            <th className="px-3 py-3 text-start">{isArabic ? "المنتج" : "Product"}</th><th className="px-3 py-3 text-start">SKU</th>
+                            <th className="px-3 py-3 text-end">{isArabic ? "الكمية" : "Quantity"}</th><th className="px-3 py-3 text-start">{isArabic ? "ملاحظة" : "Note"}</th><th className="px-3 py-3 text-end">{isArabic ? "الإجراء" : "Action"}</th>
+                          </tr></thead>
+                          <tbody>{dailyRecords.map(record => {
+                            const product = getProductFromRecord(record);
+                            return <tr key={record._id} className="border-b">
+                              <td className="px-3 py-3"><div className="flex items-center gap-2">{product?.image ? <img src={product.image} alt={getProductName(product)} className="h-10 w-10 rounded-lg object-contain" /> : <span>📦</span>}<span>{getProductName(product)}</span></div></td>
+                              <td className="px-3 py-3">{product?.sku || "-"}</td><td className="px-3 py-3 text-end font-semibold">{record.quantity}</td><td className="px-3 py-3">{record.note || "-"}</td>
+                              <td className="px-3 py-3 text-end"><button type="button" onClick={() => handleEdit(record)} className="mr-2 text-blue-700 hover:underline">{isArabic ? "تعديل" : "Edit"}</button>
+                                <button type="button" disabled={actionLoading === record._id} onClick={() => void handleDelete(record)} className="text-red-600 hover:underline disabled:opacity-50">{isArabic ? "حذف" : "Delete"}</button></td>
+                            </tr>;
+                          })}</tbody>
+                        </table></div>}
+                      </div>;
+                    })}
                 </div>
-
-                {productSummary.length ===
-                0 ? (
-                  <div className="p-10 text-center text-sm text-gray-500">
-                    {isArabic
-                      ? "لا توجد بيانات لهذا الشهر"
-                      : "No receiving data for this month"}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[650px]">
-                      <thead>
-                        <tr className="border-b border-gray-200 bg-gray-50">
-                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            {isArabic
-                              ? "المنتج"
-                              : "Product"}
-                          </th>
-
-                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            SKU
-                          </th>
-
-                          <th className="px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            {isArabic
-                              ? "إجمالي الكمية"
-                              : "Total Received"}
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody className="divide-y divide-gray-100">
-                        {productSummary.map(
-                          (item) => (
-                            <tr
-                              key={
-                                item.productId
-                              }
-                              className="hover:bg-gray-50"
-                            >
-                              <td className="px-5 py-4">
-                                <p className="font-semibold text-gray-900">
-                                  {language ===
-                                  "ar"
-                                    ? item.nameAr ||
-                                      item.name
-                                    : item.name ||
-                                      item.nameAr}
-                                </p>
-
-                                <p className="mt-0.5 text-xs text-gray-400">
-                                  {language ===
-                                  "ar"
-                                    ? item.name
-                                    : item.nameAr}
-                                </p>
-                              </td>
-
-                              <td className="px-5 py-4">
-                                <span className="rounded-lg bg-gray-100 px-2.5 py-1 font-mono text-xs font-medium text-gray-600">
-                                  {item.sku}
-                                </span>
-                              </td>
-
-                              <td className="px-5 py-4 text-end">
-                                <span className="text-lg font-bold text-green-600">
-                                  {item.quantity}
-                                </span>
-                              </td>
-                            </tr>
-                          )
-                        )}
-                      </tbody>
-
-                      <tfoot>
-                        <tr className="border-t-2 border-gray-200 bg-gray-50">
-                          <td
-                            colSpan={2}
-                            className="px-5 py-4 text-start font-bold text-gray-900"
-                          >
-                            {isArabic
-                              ? "الإجمالي"
-                              : "Total"}
-                          </td>
-
-                          <td className="px-5 py-4 text-end text-lg font-bold text-gray-900">
-                            {records.reduce(
-                              (
-                                sum,
-                                record
-                              ) =>
-                                sum +
-                                Number(
-                                  record.quantity ||
-                                    0
-                                ),
-                              0
-                            )}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* DAILY RECORDS */}
-
-              <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-                <div className="border-b border-gray-200 p-5">
-                  <h2 className="text-lg font-bold text-gray-900">
-                    {isArabic
-                      ? "تفاصيل الاستلام اليومية"
-                      : "Daily Receiving Details"}
-                  </h2>
-                </div>
-
-                {loadingRecords ? (
-                  <div className="p-12">
-                    <div className="space-y-4">
-                      {[1, 2, 3, 4, 5].map(
-                        (item) => (
-                          <div
-                            key={item}
-                            className="flex animate-pulse items-center gap-4"
-                          >
-                            <div className="h-10 w-24 rounded bg-gray-200" />
-
-                            <div className="h-10 flex-1 rounded bg-gray-200" />
-
-                            <div className="h-10 w-20 rounded bg-gray-200" />
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                ) : filteredRecords.length ===
-                  0 ? (
-                  <div className="p-12 text-center">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-3xl">
-                      📦
-                    </div>
-
-                    <h3 className="mt-4 font-bold text-gray-900">
-                      {search
-                        ? isArabic
-                          ? "لا توجد نتائج"
-                          : "No results found"
-                        : isArabic
-                        ? "لا توجد سجلات"
-                        : "No receiving records"}
-                    </h3>
-
-                    <p className="mt-1 text-sm text-gray-500">
-                      {isArabic
-                        ? "لم يتم تسجيل أي استلام لهذا الشهر."
-                        : "No receiving records have been added for this month."}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px]">
-                      <thead>
-                        <tr className="border-b border-gray-200 bg-gray-50">
-                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            {isArabic
-                              ? "التاريخ"
-                              : "Date"}
-                          </th>
-
-                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            {isArabic
-                              ? "المنتج"
-                              : "Product"}
-                          </th>
-
-                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            SKU
-                          </th>
-
-                          <th className="px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            {isArabic
-                              ? "الكمية"
-                              : "Quantity"}
-                          </th>
-
-                          <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            {isArabic
-                              ? "ملاحظة"
-                              : "Note"}
-                          </th>
-
-                          <th className="no-print px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            {isArabic
-                              ? "الإجراء"
-                              : "Action"}
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody className="divide-y divide-gray-100">
-                        {filteredRecords.map(
-                          (record) => {
-                            const product =
-                              getProductFromRecord(
-                                record
-                              );
-
-                            const isLoading =
-                              actionLoading ===
-                              record._id;
-
-                            return (
-                              <tr
-                                key={
-                                  record._id
-                                }
-                                className="transition hover:bg-gray-50"
-                              >
-                                <td className="px-5 py-4">
-                                  <span className="font-medium text-gray-700">
-                                    {formatDate(
-                                      record.date
-                                    )}
-                                  </span>
-                                </td>
-
-                                <td className="px-5 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
-                                      {product?.image ? (
-                                        <img
-                                          src={
-                                            product.image
-                                          }
-                                          alt={getProductName(
-                                            product
-                                          )}
-                                          className="h-full w-full object-cover"
-                                        />
-                                      ) : (
-                                        <div className="flex h-full w-full items-center justify-center">
-                                          📦
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div>
-                                      <p className="font-semibold text-gray-900">
-                                        {getProductName(
-                                          product
-                                        )}
-                                      </p>
-
-                                      <p className="text-xs text-gray-400">
-                                        {language ===
-                                        "ar"
-                                          ? product?.nameEn ||
-                                            "-"
-                                          : product?.nameAr ||
-                                            "-"}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </td>
-
-                                <td className="px-5 py-4">
-                                  <span className="rounded-lg bg-gray-100 px-2.5 py-1 font-mono text-xs font-medium text-gray-600">
-                                    {product?.sku ||
-                                      "-"}
-                                  </span>
-                                </td>
-
-                                <td className="px-5 py-4 text-end">
-                                  <span className="rounded-full bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700">
-                                    +{record.quantity}
-                                  </span>
-                                </td>
-
-                                <td className="px-5 py-4">
-                                  <span className="text-sm text-gray-500">
-                                    {record.note ||
-                                      "-"}
-                                  </span>
-                                </td>
-
-                                <td className="no-print px-5 py-4">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleEdit(
-                                          record
-                                        )
-                                      }
-                                      disabled={
-                                        isLoading
-                                      }
-                                      className="rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-                                    >
-                                      {isArabic
-                                        ? "تعديل"
-                                        : "Edit"}
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleDelete(
-                                          record
-                                        )
-                                      }
-                                      disabled={
-                                        isLoading
-                                      }
-                                      className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
-                                    >
-                                      {isLoading
-                                        ? "..."
-                                        : isArabic
-                                        ? "حذف"
-                                        : "Delete"}
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          }
-                        )}
-                      </tbody>
-
-                      <tfoot>
-                        <tr className="border-t-2 border-gray-200 bg-gray-50">
-                          <td
-                            colSpan={3}
-                            className="px-5 py-4 text-start font-bold text-gray-900"
-                          >
-                            {isArabic
-                              ? "الإجمالي"
-                              : "Total"}
-                          </td>
-
-                          <td className="px-5 py-4 text-end text-lg font-bold text-green-700">
-                            +{totalReceived}
-                          </td>
-
-                          <td
-                            colSpan={2}
-                            className="no-print"
-                          />
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </div>
+              </section>
             </div>
           </div>
         </div>
