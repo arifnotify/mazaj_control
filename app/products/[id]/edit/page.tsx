@@ -10,7 +10,15 @@ type Category = {
   descriptionEn?: string;
   descriptionAr?: string;
   active: boolean;
+  productType?: ProductType;
+  singleWeight?: number | null;
+  singleUnit?: Unit | null;
+  variants?: WeightOption[];
 };
+
+type Unit = "g" | "kg" | "pcs" | "ml" | "L";
+type WeightOption = { weight: number; unit: Unit; price: number };
+type ProductType = "single" | "multiple";
 
 type Product = {
   _id: string;
@@ -34,6 +42,10 @@ export default function EditProductPage() {
   const id = params.id as string;
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [productType, setProductType] = useState<ProductType>("single");
+  const [variants, setVariants] = useState<WeightOption[]>([]);
+  const [singleWeight, setSingleWeight] = useState("");
+  const [singleUnit, setSingleUnit] = useState<Unit>("g");
   const [categories, setCategories] = useState<Category[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -79,6 +91,10 @@ export default function EditProductPage() {
         }
 
         setProduct(productData);
+        setProductType(productData.productType === "multiple" ? "multiple" : "single");
+        setVariants(Array.isArray(productData.variants) ? productData.variants.map((v: WeightOption) => ({ weight: v.weight, unit: v.unit, price: v.price })) : []);
+        setSingleWeight(productData.singleWeight == null ? "" : String(productData.singleWeight));
+        setSingleUnit(productData.singleUnit || "g");
 
         setForm({
           sku: productData.sku || "",
@@ -259,7 +275,7 @@ export default function EditProductPage() {
       return;
     }
 
-    if (!form.price.trim()) {
+    if (productType === "single" && !form.price.trim()) {
       setError("Price is required.");
       setSaving(false);
       return;
@@ -268,7 +284,7 @@ export default function EditProductPage() {
     const price = Number(form.price);
     const stock = Number(form.stock || 0);
 
-    if (Number.isNaN(price) || price < 0) {
+    if (productType === "single" && (Number.isNaN(price) || price < 0)) {
       setError("Please enter a valid price.");
       setSaving(false);
       return;
@@ -288,6 +304,17 @@ export default function EditProductPage() {
       return;
     }
 
+    const cleanedVariants = variants.map(v => ({ weight: Number(v.weight), unit: v.unit, price: Number(v.price) }));
+    if (productType === "multiple" && (cleanedVariants.length === 0 || cleanedVariants.some(v => !Number.isFinite(v.weight) || v.weight <= 0 || !Number.isFinite(v.price) || v.price < 0))) {
+      setError("Add valid weight and price for every option."); setSaving(false); return;
+    }
+    if (productType === "single" && singleWeight.trim() && (!Number.isFinite(Number(singleWeight)) || Number(singleWeight) <= 0)) {
+      setError("Enter a valid single weight."); setSaving(false); return;
+    }
+    const normalized = cleanedVariants.map(v => `${v.unit === "kg" ? "g" : v.unit === "L" ? "ml" : v.unit}:${Math.round(v.weight * (v.unit === "kg" || v.unit === "L" ? 1000 : 1) * 1000000)}`);
+    if (productType === "multiple" && new Set(normalized).size !== normalized.length) {
+      setError("Duplicate weights are not allowed."); setSaving(false); return;
+    }
     try {
       const response = await fetch(
         `/api/products/${id}`,
@@ -310,9 +337,13 @@ export default function EditProductPage() {
             categoryEn: form.categoryEn.trim(),
             categoryAr: form.categoryAr.trim(),
 
-            price,
+            price: productType === "multiple" ? Math.min(...cleanedVariants.map(v => v.price)) : price,
             stock,
             active: form.active,
+            productType,
+            singleWeight: productType === "single" && singleWeight.trim() ? Number(singleWeight) : null,
+            singleUnit: productType === "single" && singleWeight.trim() ? singleUnit : null,
+            variants: productType === "multiple" ? cleanedVariants : [],
           }),
         }
       );
@@ -446,7 +477,7 @@ export default function EditProductPage() {
               {/* Price */}
               <div>
                 <label className="mb-2 block font-medium text-gray-700">
-                  Price (QAR) *
+                  {productType === "multiple" ? "Base Price (auto from weights)" : "Price (QAR) *"}
                 </label>
 
                 <input
@@ -456,7 +487,8 @@ export default function EditProductPage() {
                   min="0"
                   value={form.price}
                   onChange={handleChange}
-                  required
+                  required={productType === "single"}
+                  disabled={productType === "multiple"}
                   className="w-full rounded-lg border border-gray-300 p-3 text-gray-900 outline-none focus:border-black"
                 />
               </div>
@@ -734,6 +766,17 @@ export default function EditProductPage() {
             </div>
           </section>
 
+          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
+            <h2 className="text-xl font-semibold">Product Type & Weight Options</h2>
+            <div className="flex gap-3">
+              {(["single", "multiple"] as const).map(type => <button key={type} type="button" onClick={() => setProductType(type)} className={`rounded-lg px-4 py-3 border ${productType === type ? "bg-gray-900 text-white" : "bg-white"}`}>{type === "single" ? "Single Item" : "Multiple Weight Items"}</button>)}
+            </div>
+            {productType === "single" ? <div className="grid grid-cols-2 gap-3"><input aria-label="Single weight" type="number" min="0.001" step="any" value={singleWeight} onChange={e => setSingleWeight(e.target.value)} placeholder="Weight (optional)" className="rounded-lg border p-3"/><select aria-label="Weight unit" value={singleUnit} onChange={e => setSingleUnit(e.target.value as Unit)} className="rounded-lg border p-3">{(["g","kg","pcs","ml","L"] as Unit[]).map(u => <option key={u}>{u}</option>)}</select></div> : <div className="space-y-3">
+              {variants.map((variant, index) => <div key={index} className="grid grid-cols-2 gap-2 md:grid-cols-4"><input aria-label={`Weight ${index+1}`} type="number" min="0.001" step="any" value={variant.weight} onChange={e => setVariants(prev => prev.map((v,i) => i === index ? {...v,weight:Number(e.target.value)} : v))} className="rounded-lg border p-3" placeholder="Weight"/><select aria-label={`Unit ${index+1}`} value={variant.unit} onChange={e => setVariants(prev => prev.map((v,i) => i === index ? {...v,unit:e.target.value as Unit} : v))} className="rounded-lg border p-3">{(["g","kg","pcs","ml","L"] as Unit[]).map(u => <option key={u}>{u}</option>)}</select><input aria-label={`Price ${index+1}`} type="number" min="0" step="0.01" value={variant.price} onChange={e => setVariants(prev => prev.map((v,i) => i === index ? {...v,price:Number(e.target.value)} : v))} className="rounded-lg border p-3" placeholder="Price"/><button type="button" onClick={() => setVariants(prev => prev.filter((_,i) => i !== index))} className="rounded-lg bg-red-50 text-red-700">Remove</button></div>)}
+              <button type="button" onClick={() => setVariants(prev => [...prev,{weight:250,unit:"g",price:0}])} className="rounded-lg bg-blue-600 px-4 py-2 text-white">+ Add Weight</button>
+            </div>}
+            <p className="text-sm text-gray-500">One product SKU and one shared stock for all weights.</p>
+          </section>
           {/* Stock & Status */}
           <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="mb-5 text-xl font-semibold text-gray-900">
