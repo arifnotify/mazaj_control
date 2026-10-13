@@ -808,7 +808,7 @@ export default function StockReceivingPage() {
 
 
   // --------------------------------------------------
-  // OPEN DAILY RECEIVING REPORT IN EMAIL APP (MAILTO)
+  // OPEN DAILY RECEIVING REPORT IN GMAIL
   // --------------------------------------------------
 
   function handleEmailReport() {
@@ -855,15 +855,26 @@ export default function StockReceivingPage() {
       "MAZAJ NUTS ROASTERY",
     ].join("\n");
 
+    const recipient = "admin@mazajnuts.com";
     const subject =
       `MAZAJ NUTS ROASTERY - Stock Receiving Report - ${formatDate(printDate)}`;
 
-    const mailtoUrl =
-      `mailto:admin@mazajnuts.com?subject=${encodeURIComponent(subject)}` +
+    const gmailUrl =
+      "https://mail.google.com/mail/?view=cm&fs=1" +
+      `&to=${encodeURIComponent(recipient)}` +
+      `&su=${encodeURIComponent(subject)}` +
       `&body=${encodeURIComponent(body)}`;
 
-    // Opens the user's default email app/handler; the user must press Send.
-    window.location.href = mailtoUrl;
+    const mailtoUrl =
+      `mailto:${recipient}?subject=${encodeURIComponent(subject)}` +
+      `&body=${encodeURIComponent(body)}`;
+
+    // Open Gmail compose in a new tab. If pop-ups are blocked, fall back to mailto.
+    const emailWindow = window.open(gmailUrl, "_blank");
+
+    if (!emailWindow) {
+      window.location.href = mailtoUrl;
+    }
   }
 
   return (
