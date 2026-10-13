@@ -1,210 +1,103 @@
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
+import { isValidObjectId } from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
 
-// GET: একটি product
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+const units = ["g", "kg", "pcs", "ml", "L"];
+const nonnegative = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+const validStock = (v: unknown) => nonnegative(v) && Number.isInteger(v);
+const error = (message: string, status = 400) => NextResponse.json({ error: message }, { status });
+
+type Context = { params: Promise<{ id: string }> };
+
+export async function GET(_request: Request, context: Context) {
   try {
+    const { id } = await context.params;
+    if (!isValidObjectId(id)) return error("Invalid product ID");
     await connectDB();
-
-    const { id } = await params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json(
-        { error: "Invalid product ID" },
-        { status: 400 }
-      );
-    }
-
-    const product = await Product.findById(id);
-
-    if (!product) {
-      return NextResponse.json(
-        { error: "Product not found" },
-        { status: 404 }
-      );
-    }
-
+    const product = await Product.findById(id).lean();
+    if (!product) return error("Product not found", 404);
     return NextResponse.json(product);
-  } catch (error) {
-    console.error("GET PRODUCT ERROR:", error);
-
-    return NextResponse.json(
-      { error: "Failed to fetch product" },
-      { status: 500 }
-    );
+  } catch (e) {
+    console.error("Product GET error", e);
+    return error("Failed to load product", 500);
   }
 }
 
-// PUT: product update
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: Request, context: Context) {
   try {
-    await connectDB();
-
-    const { id } = await params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json(
-        { error: "Invalid product ID" },
-        { status: 400 }
-      );
-    }
-
+    const { id } = await context.params;
+    if (!isValidObjectId(id)) return error("Invalid product ID");
     const body = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) return error("Invalid request body");
 
-    const updateData: Record<string, unknown> = {};
-
-    // SKU
-    if (body.sku !== undefined) {
-      updateData.sku = String(body.sku).trim();
-    }
-
-    // Name - English
-    if (body.nameEn !== undefined) {
-      updateData.nameEn = String(body.nameEn).trim();
-    }
-
-    // Name - Arabic
-    if (body.nameAr !== undefined) {
-      updateData.nameAr = String(body.nameAr).trim();
-    }
-
-    // Description - English
-    if (body.descriptionEn !== undefined) {
-      updateData.descriptionEn = String(body.descriptionEn).trim();
-    }
-
-    // Description - Arabic
-    if (body.descriptionAr !== undefined) {
-      updateData.descriptionAr = String(body.descriptionAr).trim();
-    }
-
-    // Image
-    if (body.image !== undefined) {
-      updateData.image = String(body.image).trim();
-    }
-
-    // Category - English
-    if (body.categoryEn !== undefined) {
-      updateData.categoryEn = String(body.categoryEn).trim();
-    }
-
-    // Category - Arabic
-    if (body.categoryAr !== undefined) {
-      updateData.categoryAr = String(body.categoryAr).trim();
-    }
-
-    // Price
-    if (body.price !== undefined) {
-      const price = Number(body.price);
-
-      if (Number.isNaN(price) || price < 0) {
-        return NextResponse.json(
-          { error: "Invalid price" },
-          { status: 400 }
-        );
+    const update: Record<string, unknown> = {};
+    const strings = ["sku", "nameEn", "nameAr", "descriptionEn", "descriptionAr", "image", "categoryEn", "categoryAr"];
+    for (const key of strings) {
+      if (body[key] !== undefined) {
+        if (typeof body[key] !== "string") return error(`Invalid ${key}`);
+        update[key] = body[key].trim();
       }
-
-      updateData.price = price;
     }
-
-    // Stock
+    for (const key of ["sku", "nameEn", "nameAr"]) {
+      if (update[key] === "") return error(`${key} cannot be empty`);
+    }
     if (body.stock !== undefined) {
-      const stock = Number(body.stock);
-
-      if (Number.isNaN(stock) || stock < 0) {
-        return NextResponse.json(
-          { error: "Invalid stock" },
-          { status: 400 }
-        );
-      }
-
-      updateData.stock = stock;
+      if (!validStock(body.stock)) return error("Stock must be a nonnegative whole number");
+      update.stock = body.stock;
     }
-
-    // ON / OFF
     if (body.active !== undefined) {
-      updateData.active = Boolean(body.active);
+      if (typeof body.active !== "boolean") return error("Invalid product status");
+      update.active = body.active;
+    }
+    if (body.price !== undefined) {
+      if (!nonnegative(body.price)) return error("Invalid price");
+      update.price = body.price;
     }
 
-    const product = await Product.findByIdAndUpdate(
-      id,
-      updateData,
-      {
-        new: true,
-        runValidators: true,
+    if (body.productType !== undefined) {
+      if (body.productType !== "single" && body.productType !== "multiple") return error("Invalid product type");
+      update.productType = body.productType;
+      if (body.productType === "single") {
+        if (body.singleWeight !== null && body.singleWeight !== undefined && (typeof body.singleWeight !== "number" || !Number.isFinite(body.singleWeight) || body.singleWeight <= 0)) return error("Invalid single weight");
+        if (body.singleWeight != null && !units.includes(body.singleUnit)) return error("Invalid single weight unit");
+        update.singleWeight = body.singleWeight ?? null;
+        update.singleUnit = body.singleWeight == null ? null : body.singleUnit;
+        update.variants = [];
+      } else {
+        if (!Array.isArray(body.variants) || !body.variants.length) return error("Add at least one weight option");
+        const variants = body.variants.map((v: { weight: number; unit: string; price: number }) => ({ weight: v?.weight, unit: v?.unit, price: v?.price }));
+        if (variants.some((v: { weight: number; unit: string; price: number }) => typeof v.weight !== "number" || !Number.isFinite(v.weight) || v.weight <= 0 || !units.includes(v.unit) || !nonnegative(v.price))) return error("Invalid weight options");
+        const keys = variants.map((v: { weight: number; unit: string }) => `${v.unit === "kg" ? "g" : v.unit === "L" ? "ml" : v.unit}:${Math.round(v.weight * (v.unit === "kg" || v.unit === "L" ? 1000 : 1) * 1e6)}`);
+        if (new Set(keys).size !== keys.length) return error("Duplicate weight options");
+        update.variants = variants;
+        update.singleWeight = null;
+        update.singleUnit = null;
+        update.price = Math.min(...variants.map((v: { price: number }) => v.price));
       }
-    );
-
-    if (!product) {
-      return NextResponse.json(
-        { error: "Product not found" },
-        { status: 404 }
-      );
     }
 
+    await connectDB();
+    const product = await Product.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true });
+    if (!product) return error("Product not found", 404);
     return NextResponse.json(product);
-  } catch (error: any) {
-    console.error("UPDATE PRODUCT ERROR:", error);
-
-    // Duplicate SKU
-    if (error?.code === 11000) {
-      return NextResponse.json(
-        { error: "SKU already exists" },
-        { status: 409 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: "Failed to update product" },
-      { status: 500 }
-    );
+  } catch (e: unknown) {
+    console.error("Product PUT error", e);
+    if (typeof e === "object" && e !== null && "code" in e && e.code === 11000) return error("SKU already exists", 409);
+    return error("Failed to update product", 500);
   }
 }
 
-// DELETE: product delete
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_request: Request, context: Context) {
   try {
+    const { id } = await context.params;
+    if (!isValidObjectId(id)) return error("Invalid product ID");
     await connectDB();
-
-    const { id } = await params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json(
-        { error: "Invalid product ID" },
-        { status: 400 }
-      );
-    }
-
-    const product = await Product.findByIdAndDelete(id);
-
-    if (!product) {
-      return NextResponse.json(
-        { error: "Product not found" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Product deleted successfully",
-    });
-  } catch (error) {
-    console.error("DELETE PRODUCT ERROR:", error);
-
-    return NextResponse.json(
-      { error: "Failed to delete product" },
-      { status: 500 }
-    );
+    const deleted = await Product.findByIdAndDelete(id);
+    if (!deleted) return error("Product not found", 404);
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    console.error("Product DELETE error", e);
+    return error("Failed to delete product", 500);
   }
 }
