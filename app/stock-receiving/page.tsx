@@ -100,8 +100,6 @@ export default function StockReceivingPage() {
 
   const [saving, setSaving] = useState(false);
 
-  const [emailSending, setEmailSending] = useState(false);
-
   const [actionLoading, setActionLoading] =
     useState<string | null>(null);
 
@@ -810,12 +808,10 @@ export default function StockReceivingPage() {
 
 
   // --------------------------------------------------
-  // EMAIL DAILY RECEIVING REPORT DIRECTLY
-  // Sends the report through our server API; it does not
-  // open the user's email application.
+  // OPEN DAILY RECEIVING REPORT IN EMAIL APP (MAILTO)
   // --------------------------------------------------
 
-  async function handleEmailReport() {
+  function handleEmailReport() {
     if (printSummary.length === 0) {
       window.alert(
         isArabic
@@ -840,6 +836,8 @@ export default function StockReceivingPage() {
     });
 
     const body = [
+      "Dear Admin,",
+      "",
       "MAZAJ NUTS ROASTERY",
       "Daily Stock Receiving Report",
       `Date: ${formatDate(printDate)}`,
@@ -857,40 +855,15 @@ export default function StockReceivingPage() {
       "MAZAJ NUTS ROASTERY",
     ].join("\n");
 
-    try {
-      setEmailSending(true);
+    const subject =
+      `MAZAJ NUTS ROASTERY - Stock Receiving Report - ${formatDate(printDate)}`;
 
-      const response = await fetch("/api/stock-receiving/email-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: printDate,
-          subject: `MAZAJ NUTS ROASTERY - Stock Receiving Report - ${formatDate(printDate)}`,
-          body,
-        }),
-      });
+    const mailtoUrl =
+      `mailto:admin@mazajnuts.com?subject=${encodeURIComponent(subject)}` +
+      `&body=${encodeURIComponent(body)}`;
 
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send email.");
-      }
-
-      window.alert(
-        isArabic
-          ? "تم إرسال تقرير الاستلام إلى admin@mazajnuts.com بنجاح."
-          : "Daily receiving report sent successfully to admin@mazajnuts.com."
-      );
-    } catch (err) {
-      console.error("Email report error:", err);
-      window.alert(
-        err instanceof Error
-          ? err.message
-          : "Could not send the report email. Please try again."
-      );
-    } finally {
-      setEmailSending(false);
-    }
+    // Opens the user's default email app/handler; the user must press Send.
+    window.location.href = mailtoUrl;
   }
 
   return (
@@ -1452,15 +1425,10 @@ export default function StockReceivingPage() {
                 <button
                   type="button"
                   onClick={handleEmailReport}
-                  disabled={emailSending}
                   className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   ✉️{" "}
-                  {emailSending
-                    ? (isArabic ? "جارٍ الإرسال..." : "Sending...")
-                    : isArabic
-                      ? "إرسال بالبريد"
-                      : "Email Report"}
+                  {isArabic ? "فتح البريد الإلكتروني" : "Open Email Draft"}
                 </button>
               </div>
             </div>
