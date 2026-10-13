@@ -414,26 +414,21 @@ export default function StockReceivingPage() {
 
       const itemLines = storeRequestItems.map((item, index) => [
         `${index + 1}. ${language === "ar" ? item.nameAr || item.nameEn : item.nameEn || item.nameAr}`,
-        `   SKU: ${item.sku}`,
-        `   Quantity Needed: ${item.quantity}`,
-        `   Note: ${item.note || "-"}`,
-      ].join("\n"));
-      const subject = `MAZAJ NUTS ROASTERY - Store Stock Request - ${storeRequestDate}`;
+        `   Quantity: ${item.quantity}`,
+        item.note ? `   Note: ${item.note}` : "",
+      ].filter(Boolean).join("\n"));
+      const subject = `Store Stock Request - ${storeRequestDate}`;
       const body = [
         "Dear Storekeeper,",
         "",
-        "Please prepare the following stock/products required for the shop.",
-        `Request Date: ${storeRequestDate}`,
-        `Request ID: ${savedRequest._id}`,
+        "Please prepare the following items for the shop:",
+        `Date: ${storeRequestDate}`,
         "",
         ...itemLines,
-        "",
-        `Total different products: ${storeRequestItems.length}`,
-        `Total quantity requested: ${storeRequestItems.reduce((sum, item) => sum + item.quantity, 0)}`,
-        storeRequestNote.trim() ? `Additional note: ${storeRequestNote.trim()}` : "",
+        storeRequestNote.trim() ? `\nRequest note: ${storeRequestNote.trim()}` : "",
         "",
         "Thank you,",
-        "MAZAJ NUTS ROASTERY",
+        "Mazaj Nuts Roastery",
       ].filter(Boolean).join("\n");
       const gmailUrl = "https://mail.google.com/mail/?view=cm&fs=1" +
         `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
@@ -1052,29 +1047,31 @@ export default function StockReceivingPage() {
   }
 
   function openStoreRequestEmail(request: StoreRequest) {
-    const itemLines = request.items.map((item, index) =>
-      `${index + 1}. ${item.nameEn} | SKU: ${item.sku} | Qty: ${item.quantity}${item.note ? ` | Note: ${item.note}` : ""}`
-    );
+    const itemLines = request.items.map((item, index) => [
+      `${index + 1}. ${item.nameEn || item.nameAr}`,
+      `   Quantity: ${item.quantity}`,
+      item.note ? `   Note: ${item.note}` : "",
+    ].filter(Boolean).join("\n"));
     const body = [
       "Dear Storekeeper,",
       "",
-      "Please prepare the following stock/products required for the shop.",
-      `Request Date: ${request.date}`,
-      `Request ID: ${request._id}`,
+      "Please prepare the following items for the shop:",
+      `Date: ${request.date}`,
       "",
       ...itemLines,
+      request.requestNote ? `\nRequest note: ${request.requestNote}` : "",
       "",
-      request.requestNote ? `Additional note: ${request.requestNote}` : "",
       "Thank you,",
-      "MAZAJ NUTS ROASTERY",
+      "Mazaj Nuts Roastery",
     ].filter(Boolean).join("\n");
+    const subject = `Store Stock Request - ${request.date}`;
     const url = "https://mail.google.com/mail/?view=cm&fs=1" +
       `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
-      `&su=${encodeURIComponent(`MAZAJ NUTS ROASTERY - Store Stock Request - ${request.date}`)}` +
+      `&su=${encodeURIComponent(subject)}` +
       `&body=${encodeURIComponent(body)}`;
     const emailWindow = window.open(url, "_blank");
     if (!emailWindow) {
-      window.location.href = `mailto:inventory@mazajnuts.com?subject=${encodeURIComponent(`MAZAJ NUTS ROASTERY - Store Stock Request - ${request.date}`)}&body=${encodeURIComponent(body)}`;
+      window.location.href = `mailto:inventory@mazajnuts.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
   }
 
@@ -1183,8 +1180,9 @@ export default function StockReceivingPage() {
                 {storeProductSearch.trim() && (
                   <div className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-gray-200 bg-white">
                     {filteredStoreProducts.length === 0 ? <p className="p-3 text-sm text-gray-500">{isArabic ? "لا توجد منتجات" : "No products found"}</p> : filteredStoreProducts.map((product) => (
-                      <button key={product._id} type="button" onClick={() => { setStoreSelectedProductId(product._id); setStoreProductSearch(getProductName(product)); }} className={`flex w-full items-center justify-between border-b border-gray-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-blue-50 ${storeSelectedProductId === product._id ? "bg-blue-50" : ""}`}>
-                        <span className="font-medium text-gray-800">{getProductName(product)}</span><span className="ml-3 shrink-0 text-xs text-gray-500">{product.sku}</span>
+                      <button key={product._id} type="button" onClick={() => { setStoreSelectedProductId(product._id); setStoreProductSearch(getProductName(product)); }} className={`flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-blue-50 ${storeSelectedProductId === product._id ? "bg-blue-50" : ""}`}>
+                        {product.image ? <img src={product.image} alt={getProductName(product)} className="h-12 w-12 shrink-0 rounded-lg border border-gray-200 bg-white object-contain" /> : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[10px] text-gray-400">No image</div>}
+                        <span className="min-w-0 flex-1"><span className="block font-medium text-gray-800">{getProductName(product)}</span><span className="mt-0.5 block text-xs text-gray-500">SKU: {product.sku}</span></span>
                       </button>
                     ))}
                   </div>
@@ -1207,7 +1205,7 @@ export default function StockReceivingPage() {
             {storeRequestItems.length > 0 && <div className="mt-5 overflow-x-auto rounded-xl border border-gray-200">
               <table className="w-full min-w-[600px] text-sm">
                 <thead className="bg-gray-50 text-gray-600"><tr><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-right">Qty Needed</th><th className="px-4 py-3 text-left">Note</th><th className="px-4 py-3 text-right">Action</th></tr></thead>
-                <tbody>{storeRequestItems.map((item) => <tr key={item.productId} className="border-t border-gray-100"><td className="px-4 py-3 font-medium text-gray-900">{language === "ar" ? item.nameAr : item.nameEn}</td><td className="px-4 py-3 text-gray-600">{item.sku}</td><td className="px-4 py-3 text-right font-semibold">{item.quantity}</td><td className="px-4 py-3 text-gray-600">{item.note || "-"}</td><td className="px-4 py-3 text-right"><button type="button" onClick={() => setStoreRequestItems((current) => current.filter((row) => row.productId !== item.productId))} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Remove</button></td></tr>)}</tbody>
+                <tbody>{storeRequestItems.map((item) => { const product = products.find((p) => p._id === item.productId); return <tr key={item.productId} className="border-t border-gray-100"><td className="px-4 py-3"><div className="flex items-center gap-3">{product?.image ? <img src={product.image} alt={item.nameEn} className="h-14 w-14 shrink-0 rounded-lg border border-gray-200 bg-white object-contain" /> : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[10px] text-gray-400">No image</div>}<div className="min-w-0"><div className="font-medium text-gray-900">{language === "ar" ? item.nameAr : item.nameEn}</div><div className="mt-1 text-xs text-gray-500">SKU: {item.sku}</div></div></div></td><td className="px-4 py-3 text-gray-600">{item.sku}</td><td className="px-4 py-3 text-right font-semibold">{item.quantity}</td><td className="px-4 py-3 text-gray-600">{item.note || "-"}</td><td className="px-4 py-3 text-right"><button type="button" onClick={() => setStoreRequestItems((current) => current.filter((row) => row.productId !== item.productId))} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Remove</button></td></tr>})}</tbody>
                 <tfoot className="border-t bg-gray-50"><tr><td colSpan={2} className="px-4 py-3 font-bold">Total</td><td className="px-4 py-3 text-right font-bold">{storeRequestItems.reduce((sum, item) => sum + item.quantity, 0)}</td><td colSpan={2} /></tr></tfoot>
               </table>
             </div>}
