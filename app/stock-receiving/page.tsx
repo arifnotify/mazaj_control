@@ -32,6 +32,23 @@ type ReceivingRecord = {
   updatedAt?: string;
 };
 
+type StoreRequestItem = {
+  productId: string;
+  sku: string;
+  nameEn: string;
+  nameAr: string;
+  quantity: number;
+  note?: string;
+};
+
+type StoreRequest = {
+  _id: string;
+  date: string;
+  items: StoreRequestItem[];
+  requestNote?: string;
+  createdAt?: string;
+};
+
 type FormState = {
   productId: string;
   date: string;
@@ -71,6 +88,18 @@ export default function StockReceivingPage() {
   const [records, setRecords] = useState<ReceivingRecord[]>(
     []
   );
+
+  // Store request list and daily history
+  const [storeRequests, setStoreRequests] = useState<StoreRequest[]>([]);
+  const [storeProductSearch, setStoreProductSearch] = useState("");
+  const [storeSelectedProductId, setStoreSelectedProductId] = useState("");
+  const [storeQuantity, setStoreQuantity] = useState("1");
+  const [storeItemNote, setStoreItemNote] = useState("");
+  const [storeRequestNote, setStoreRequestNote] = useState("");
+  const [storeRequestDate, setStoreRequestDate] = useState(getLocalDateKey());
+  const [storeRequestItems, setStoreRequestItems] = useState<StoreRequestItem[]>([]);
+  const [storeRequestSaving, setStoreRequestSaving] = useState(false);
+  const [loadingStoreRequests, setLoadingStoreRequests] = useState(false);
 
   const [loadingProducts, setLoadingProducts] =
     useState(true);
@@ -287,6 +316,151 @@ export default function StockReceivingPage() {
       );
     } finally {
       setLoadingProducts(false);
+    }
+  }
+
+  // --------------------------------------------------
+  // STORE REQUESTS: DAILY REQUESTS TO STOREKEEPER
+  // --------------------------------------------------
+
+  const filteredStoreProducts = useMemo(() => {
+    const query = storeProductSearch.trim().toLowerCase();
+    const available = products.filter((product) => product.active !== false);
+    if (!query) return available.slice(0, 40);
+    return available.filter((product) =>
+      [product.sku, product.nameEn, product.nameAr, product.categoryEn, product.categoryAr]
+        .some((value) => String(value || "").toLowerCase().includes(query))
+    ).slice(0, 40);
+  }, [products, storeProductSearch]);
+
+  async function loadStoreRequests(selectedMonth = month) {
+    try {
+      setLoadingStoreRequests(true);
+      const response = await fetch(`/api/store-requests?month=${encodeURIComponent(selectedMonth)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to load store requests");
+      setStoreRequests(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Failed to load store requests");
+    } finally {
+      setLoadingStoreRequests(false);
+    }
+  }
+
+  useEffect(() => {
+    loadStoreRequests(month);
+  }, [month]);
+
+  function addStoreRequestItem() {
+    const product = products.find((item) => item._id === storeSelectedProductId);
+    const quantity = Number(storeQuantity);
+    if (!product) {
+      window.alert(isArabic ? "يرجى اختيار منتج أولاً." : "Please select a product first.");
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      window.alert(isArabic ? "أدخل كمية صحيحة." : "Enter a valid quantity.");
+      return;
+    }
+
+    setStoreRequestItems((current) => {
+      const existing = current.find((item) => item.productId === product._id);
+      if (existing) {
+        return current.map((item) => item.productId === product._id
+          ? { ...item, quantity: item.quantity + quantity, note: [item.note, storeItemNote.trim()].filter(Boolean).join("; ") }
+          : item);
+      }
+      return [...current, {
+        productId: product._id,
+        sku: product.sku || "-",
+        nameEn: product.nameEn || product.nameAr || "-",
+        nameAr: product.nameAr || product.nameEn || "-",
+        quantity,
+        note: storeItemNote.trim(),
+      }];
+    });
+    setStoreSelectedProductId("");
+    setStoreProductSearch("");
+    setStoreQuantity("1");
+    setStoreItemNote("");
+  }
+
+  async function submitStoreRequest() {
+    if (storeRequestItems.length === 0) {
+      window.alert(isArabic ? "أضف منتجاً واحداً على الأقل." : "Please add at least one product to the request.");
+      return;
+    }
+
+    // Open synchronously so the browser does not block the email draft after the API call.
+    const emailWindow = window.open("about:blank", "_blank");
+    setStoreRequestSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/store-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: storeRequestDate,
+          items: storeRequestItems,
+          requestNote: storeRequestNote.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to save store request");
+
+      const savedRequest: StoreRequest = data.request;
+      setStoreRequests((current) => [savedRequest, ...current].filter((item, index, arr) => arr.findIndex((other) => other._id === item._id) === index));
+
+      const itemLines = storeRequestItems.map((item, index) => [
+        `${index + 1}. ${language === "ar" ? item.nameAr || item.nameEn : item.nameEn || item.nameAr}`,
+        `   SKU: ${item.sku}`,
+        `   Quantity Needed: ${item.quantity}`,
+        `   Note: ${item.note || "-"}`,
+      ].join("\n"));
+      const subject = `MAZAJ NUTS ROASTERY - Store Stock Request - ${storeRequestDate}`;
+      const body = [
+        "Dear Storekeeper,",
+        "",
+        "Please prepare the following stock/products required for the shop.",
+        `Request Date: ${storeRequestDate}`,
+        `Request ID: ${savedRequest._id}`,
+        "",
+        ...itemLines,
+        "",
+        `Total different products: ${storeRequestItems.length}`,
+        `Total quantity requested: ${storeRequestItems.reduce((sum, item) => sum + item.quantity, 0)}`,
+        storeRequestNote.trim() ? `Additional note: ${storeRequestNote.trim()}` : "",
+        "",
+        "Thank you,",
+        "MAZAJ NUTS ROASTERY",
+      ].filter(Boolean).join("\n");
+      const gmailUrl = "https://mail.google.com/mail/?view=cm&fs=1" +
+        `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
+        `&su=${encodeURIComponent(subject)}` +
+        `&body=${encodeURIComponent(body)}`;
+      const mailtoUrl = `mailto:inventory@mazajnuts.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      if (emailWindow) {
+        emailWindow.location.href = gmailUrl;
+      } else {
+        window.location.href = mailtoUrl;
+      }
+
+      setStoreRequestItems([]);
+      setStoreRequestNote("");
+      setStoreProductSearch("");
+      const requestMonth = storeRequestDate.slice(0, 7);
+      setMonth(requestMonth);
+      await loadStoreRequests(requestMonth);
+      window.alert(isArabic
+        ? "تم حفظ الطلب اليومي. تحقق من مسودة البريد واضغط إرسال لإرسال الطلب إلى مسؤول المخزن."
+        : "Daily store request saved. Review the email draft and click Send to email the storekeeper.");
+    } catch (err) {
+      if (emailWindow) emailWindow.close();
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Failed to submit store request");
+    } finally {
+      setStoreRequestSaving(false);
     }
   }
 
@@ -877,6 +1051,33 @@ export default function StockReceivingPage() {
     }
   }
 
+  function openStoreRequestEmail(request: StoreRequest) {
+    const itemLines = request.items.map((item, index) =>
+      `${index + 1}. ${item.nameEn} | SKU: ${item.sku} | Qty: ${item.quantity}${item.note ? ` | Note: ${item.note}` : ""}`
+    );
+    const body = [
+      "Dear Storekeeper,",
+      "",
+      "Please prepare the following stock/products required for the shop.",
+      `Request Date: ${request.date}`,
+      `Request ID: ${request._id}`,
+      "",
+      ...itemLines,
+      "",
+      request.requestNote ? `Additional note: ${request.requestNote}` : "",
+      "Thank you,",
+      "MAZAJ NUTS ROASTERY",
+    ].filter(Boolean).join("\n");
+    const url = "https://mail.google.com/mail/?view=cm&fs=1" +
+      `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
+      `&su=${encodeURIComponent(`MAZAJ NUTS ROASTERY - Store Stock Request - ${request.date}`)}` +
+      `&body=${encodeURIComponent(body)}`;
+    const emailWindow = window.open(url, "_blank");
+    if (!emailWindow) {
+      window.location.href = `mailto:inventory@mazajnuts.com?subject=${encodeURIComponent(`MAZAJ NUTS ROASTERY - Store Stock Request - ${request.date}`)}&body=${encodeURIComponent(body)}`;
+    }
+  }
+
   return (
     <>
       <style jsx global>{`
@@ -958,6 +1159,114 @@ export default function StockReceivingPage() {
               </p>
             </div>
           </div>
+
+          {/* =========================================
+              DAILY STORE STOCK REQUEST
+          ========================================== */}
+          <section className="no-print mb-6 rounded-2xl border border-blue-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">{isArabic ? "طلب مخزون المتجر" : "Daily Store Stock Request"}</h2>
+                <p className="mt-1 text-sm text-gray-500">{isArabic ? "اختر المنتجات والكميات المطلوبة وأرسلها إلى مسؤول المخزن." : "Quickly select the products and quantities the shop needs, then email the storekeeper."}</p>
+              </div>
+              <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">To: inventory@mazajnuts.com</div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">{isArabic ? "تاريخ الطلب" : "Request Date"}</label>
+                <input type="date" value={storeRequestDate} onChange={(e) => setStoreRequestDate(e.target.value)} className="w-full rounded-xl border border-gray-300 px-3 py-3 text-sm" />
+              </div>
+              <div className="md:col-span-3">
+                <label className="mb-2 block text-sm font-semibold text-gray-700">{isArabic ? "ابحث عن منتج" : "Search Product"}</label>
+                <input value={storeProductSearch} onChange={(e) => { setStoreProductSearch(e.target.value); setStoreSelectedProductId(""); }} placeholder={isArabic ? "اسم المنتج أو SKU..." : "Search by product name or SKU..."} className="w-full rounded-xl border border-gray-300 px-3 py-3 text-sm" />
+                {storeProductSearch.trim() && (
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-gray-200 bg-white">
+                    {filteredStoreProducts.length === 0 ? <p className="p-3 text-sm text-gray-500">{isArabic ? "لا توجد منتجات" : "No products found"}</p> : filteredStoreProducts.map((product) => (
+                      <button key={product._id} type="button" onClick={() => { setStoreSelectedProductId(product._id); setStoreProductSearch(getProductName(product)); }} className={`flex w-full items-center justify-between border-b border-gray-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-blue-50 ${storeSelectedProductId === product._id ? "bg-blue-50" : ""}`}>
+                        <span className="font-medium text-gray-800">{getProductName(product)}</span><span className="ml-3 shrink-0 text-xs text-gray-500">{product.sku}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {storeSelectedProductId && <p className="mt-1 text-xs text-green-700">{isArabic ? "تم اختيار المنتج" : "Selected product"}: {getProductName(products.find((item) => item._id === storeSelectedProductId) || null)}</p>}
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">{isArabic ? "الكمية المطلوبة" : "Quantity Needed"}</label>
+                <input type="number" min="1" step="1" value={storeQuantity} onChange={(e) => setStoreQuantity(e.target.value)} className="w-full rounded-xl border border-gray-300 px-3 py-3 text-sm" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-semibold text-gray-700">{isArabic ? "ملاحظة للمنتج (اختياري)" : "Item Note (optional)"}</label>
+                <input value={storeItemNote} onChange={(e) => setStoreItemNote(e.target.value)} placeholder={isArabic ? "مثال: مطلوب بشكل عاجل" : "e.g. Urgent / preferred pack size"} className="w-full rounded-xl border border-gray-300 px-3 py-3 text-sm" />
+              </div>
+              <div className="flex items-end">
+                <button type="button" onClick={addStoreRequestItem} disabled={!storeSelectedProductId} className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40">+ {isArabic ? "إضافة إلى الطلب" : "Add to Request"}</button>
+              </div>
+            </div>
+
+            {storeRequestItems.length > 0 && <div className="mt-5 overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full min-w-[600px] text-sm">
+                <thead className="bg-gray-50 text-gray-600"><tr><th className="px-4 py-3 text-left">Product</th><th className="px-4 py-3 text-left">SKU</th><th className="px-4 py-3 text-right">Qty Needed</th><th className="px-4 py-3 text-left">Note</th><th className="px-4 py-3 text-right">Action</th></tr></thead>
+                <tbody>{storeRequestItems.map((item) => <tr key={item.productId} className="border-t border-gray-100"><td className="px-4 py-3 font-medium text-gray-900">{language === "ar" ? item.nameAr : item.nameEn}</td><td className="px-4 py-3 text-gray-600">{item.sku}</td><td className="px-4 py-3 text-right font-semibold">{item.quantity}</td><td className="px-4 py-3 text-gray-600">{item.note || "-"}</td><td className="px-4 py-3 text-right"><button type="button" onClick={() => setStoreRequestItems((current) => current.filter((row) => row.productId !== item.productId))} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Remove</button></td></tr>)}</tbody>
+                <tfoot className="border-t bg-gray-50"><tr><td colSpan={2} className="px-4 py-3 font-bold">Total</td><td className="px-4 py-3 text-right font-bold">{storeRequestItems.reduce((sum, item) => sum + item.quantity, 0)}</td><td colSpan={2} /></tr></tfoot>
+              </table>
+            </div>}
+
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+              <textarea value={storeRequestNote} onChange={(e) => setStoreRequestNote(e.target.value)} rows={2} placeholder={isArabic ? "ملاحظة عامة للطلب (اختياري)" : "Overall note for the storekeeper (optional)"} className="w-full rounded-xl border border-gray-300 px-3 py-3 text-sm" />
+              <button type="button" onClick={submitStoreRequest} disabled={storeRequestSaving || storeRequestItems.length === 0} className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{storeRequestSaving ? (isArabic ? "جارٍ الحفظ..." : "Saving...") : (isArabic ? "حفظ وإرسال بالبريد" : "Save & Email Storekeeper")}</button>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">{isArabic ? "يُحفظ الطلب في سجل لوحة التحكم. سيفتح البريد كمسودة ويجب الضغط على إرسال." : "Each request is saved in dashboard history. The email opens as a draft; click Send to send it."}</p>
+          </section>
+
+          {/* =========================================
+              DAILY STORE REQUEST HISTORY
+          ========================================== */}
+          <section className="no-print mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">{isArabic ? "سجل طلبات المخزن" : "Store Request History"}</h2>
+                <p className="mt-1 text-sm text-gray-500">{isArabic ? "السجل اليومي محفوظ حسب الشهر." : "Saved daily requests, grouped by month."}</p>
+              </div>
+              <div className="text-sm text-gray-500">{isArabic ? "الشهر" : "Month"}: <strong>{month}</strong></div>
+            </div>
+
+            {loadingStoreRequests ? (
+              <p className="py-5 text-center text-sm text-gray-500">Loading request history...</p>
+            ) : storeRequests.length === 0 ? (
+              <p className="rounded-xl bg-gray-50 p-5 text-center text-sm text-gray-500">
+                {isArabic ? "لا توجد طلبات في هذا الشهر." : "No store requests recorded for this month yet."}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {storeRequests.map((request) => (
+                  <div key={request._id} className="rounded-xl border border-gray-200 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {request.date} <span className="ml-2 text-xs font-normal text-gray-500">ID: {request._id}</span>
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {request.items.length} products · {request.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} total units
+                        </p>
+                      </div>
+                      <button type="button" onClick={() => openStoreRequestEmail(request)} className="self-start rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
+                        {isArabic ? "إعادة فتح البريد" : "Open Email Draft Again"}
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {request.items.map((item) => (
+                        <span key={item.productId} className="rounded-lg bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
+                          {item.nameEn} × {item.quantity}
+                        </span>
+                      ))}
+                    </div>
+                    {request.requestNote && <p className="mt-2 text-sm text-gray-600">Note: {request.requestNote}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* =========================================
               ERROR
