@@ -1,83 +1,35 @@
 import mongoose, { Schema, models, model } from "mongoose";
 
+const VariantSchema = new Schema(
+  {
+    sku: { type: String, required: true, trim: true },
+    weight: { type: Number, required: true, min: 0.001 },
+    unit: { type: String, required: true, enum: ["g", "kg", "pcs", "ml", "L"] },
+    price: { type: Number, required: true, min: 0 },
+    stock: { type: Number, required: true, min: 0 },
+  },
+  { _id: true }
+);
+
 const ProductSchema = new Schema(
   {
-    sku: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
-
-    // Product Name
-    nameEn: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    nameAr: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    // Product Description
-    descriptionEn: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    descriptionAr: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    // Product Image
-    image: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    // Category
-    categoryEn: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    categoryAr: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    // Price
-    price: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    // Stock
-    stock: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    // Product ON / OFF
-    active: {
-      type: Boolean,
-      default: true,
-    },
+    sku: { type: String, required: true, unique: true, trim: true },
+    nameEn: { type: String, required: true, trim: true },
+    nameAr: { type: String, required: true, trim: true },
+    descriptionEn: { type: String, default: "" },
+    descriptionAr: { type: String, default: "" },
+    image: { type: String, default: "" },
+    categoryEn: { type: String, default: "" },
+    categoryAr: { type: String, default: "" },
+    price: { type: Number, default: 0, min: 0 },
+    stock: { type: Number, default: 0, min: 0 },
+    active: { type: Boolean, default: true },
+    productType: { type: String, enum: ["single", "multiple"], default: "single" },
+    singleWeight: { type: Number, default: null, min: 0 },
+    singleUnit: { type: String, enum: ["g", "kg", "pcs", "ml", "L", null], default: null },
+    variants: { type: [VariantSchema], default: [] },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 export default models.Product || model("Product", ProductSchema);
