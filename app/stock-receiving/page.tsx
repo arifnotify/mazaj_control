@@ -100,6 +100,8 @@ export default function StockReceivingPage() {
 
   const [saving, setSaving] = useState(false);
 
+  const [emailSending, setEmailSending] = useState(false);
+
   const [actionLoading, setActionLoading] =
     useState<string | null>(null);
 
@@ -806,6 +808,91 @@ export default function StockReceivingPage() {
     window.print();
   }
 
+
+  // --------------------------------------------------
+  // EMAIL DAILY RECEIVING REPORT DIRECTLY
+  // Sends the report through our server API; it does not
+  // open the user's email application.
+  // --------------------------------------------------
+
+  async function handleEmailReport() {
+    if (printSummary.length === 0) {
+      window.alert(
+        isArabic
+          ? `لا توجد منتجات مستلمة بتاريخ ${formatDate(printDate)}`
+          : `No receiving records found for ${formatDate(printDate)}.`
+      );
+      return;
+    }
+
+    const productLines = printSummary.map((item, index) => {
+      const productName =
+        language === "ar"
+          ? item.nameAr || item.name
+          : item.name || item.nameAr;
+
+      return [
+        `${index + 1}. ${productName}`,
+        `   SKU: ${item.sku}`,
+        `   Quantity Received: ${item.quantity}`,
+        `   Note: ${item.notes.join(", ") || "-"}`,
+      ].join("\n");
+    });
+
+    const body = [
+      "MAZAJ NUTS ROASTERY",
+      "Daily Stock Receiving Report",
+      `Date: ${formatDate(printDate)}`,
+      "",
+      "Received Products:",
+      "",
+      ...productLines,
+      "",
+      "--------------------------------",
+      `Total Products: ${printSummary.length}`,
+      `Total Quantity Received: ${printTotal}`,
+      "--------------------------------",
+      "",
+      "Best regards,",
+      "MAZAJ NUTS ROASTERY",
+    ].join("\n");
+
+    try {
+      setEmailSending(true);
+
+      const response = await fetch("/api/stock-receiving/email-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: printDate,
+          subject: `MAZAJ NUTS ROASTERY - Stock Receiving Report - ${formatDate(printDate)}`,
+          body,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send email.");
+      }
+
+      window.alert(
+        isArabic
+          ? "تم إرسال تقرير الاستلام إلى admin@mazajnuts.com بنجاح."
+          : "Daily receiving report sent successfully to admin@mazajnuts.com."
+      );
+    } catch (err) {
+      console.error("Email report error:", err);
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "Could not send the report email. Please try again."
+      );
+    } finally {
+      setEmailSending(false);
+    }
+  }
+
   return (
     <>
       <style jsx global>{`
@@ -1360,6 +1447,20 @@ export default function StockReceivingPage() {
                   {isArabic
                     ? "طباعة"
                     : "Print"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleEmailReport}
+                  disabled={emailSending}
+                  className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  ✉️{" "}
+                  {emailSending
+                    ? (isArabic ? "جارٍ الإرسال..." : "Sending...")
+                    : isArabic
+                      ? "إرسال بالبريد"
+                      : "Email Report"}
                 </button>
               </div>
             </div>
