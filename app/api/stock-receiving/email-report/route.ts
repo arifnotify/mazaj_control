@@ -6,67 +6,80 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ADMIN_EMAIL = "admin@mazajnuts.com";
-const SENDER_EMAIL = "sales@mazajnuts.com";
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getErrorDetails(error: unknown) {
+  if (error instanceof Error) {
+    const smtpError = error as Error & {
+      code?: string;
+      command?: string;
+      responseCode?: number;
+      response?: string;
+    };
+
+    return {
+      message: smtpError.message,
+      code: smtpError.code ?? null,
+      command: smtpError.command ?? null,
+      responseCode: smtpError.responseCode ?? null,
+      response: smtpError.response ?? null,
+    };
+  }
+
+  return {
+    message: "Unknown error",
+    code: null,
+    command: null,
+    responseCode: null,
+    response: null,
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Read environment variables
-    const host = process.env.ZOHO_SMTP_HOST;
-    const port = Number(process.env.ZOHO_SMTP_PORT || "465");
-    const email = process.env.ZOHO_EMAIL?.trim();
-    const password = process.env.ZOHO_APP_PASSWORD;
+    const smtpHost = process.env.ZOHO_SMTP_HOST;
+    const smtpPort = Number(process.env.ZOHO_SMTP_PORT || 465);
+    const senderEmail = process.env.ZOHO_EMAIL;
+    const appPassword = process.env.ZOHO_APP_PASSWORD;
 
-    // 2. Validate configuration
-    if (!host || !email || !password) {
-      console.error("ZOHO SMTP CONFIGURATION ERROR", {
-        hasHost: Boolean(host),
-        hasEmail: Boolean(email),
-        hasPassword: Boolean(password),
-      });
+    if (!smtpHost || !senderEmail || !appPassword) {
+      console.error("Zoho SMTP configuration is incomplete.");
 
       return NextResponse.json(
         {
           success: false,
-          error: "Zoho SMTP configuration is incomplete.",
-          details:
-            "Check ZOHO_SMTP_HOST, ZOHO_SMTP_PORT, ZOHO_EMAIL and ZOHO_APP_PASSWORD in your environment variables.",
+          error:
+            "Zoho SMTP configuration is missing. Check your Vercel environment variables.",
         },
         { status: 500 }
       );
     }
 
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    if (!Number.isInteger(smtpPort) || ![465, 587].includes(smtpPort)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid SMTP port.",
+          error: "Invalid Zoho SMTP port. Use 465 or 587.",
         },
         { status: 500 }
       );
     }
 
-    if (email.toLowerCase() !== SENDER_EMAIL.toLowerCase()) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Sender email configuration mismatch.",
-          details:
-            "ZOHO_EMAIL must match SENDER_EMAIL in route.ts.",
-        },
-        { status: 500 }
-      );
-    }
-
-    // 3. Read report data
     const data = await request.json();
 
     const date =
       typeof data.date === "string" ? data.date.trim() : "";
 
     const subject =
-      typeof data.subject === "string"
-        ? data.subject.trim()
-        : "";
+      typeof data.subject === "string" ? data.subject.trim() : "";
 
     const body =
       typeof data.body === "string" ? data.body.trim() : "";
@@ -75,8 +88,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Missing report information.",
-          details: "Date, subject and body are required.",
+          error: "Date, subject, and report body are required.",
         },
         { status: 400 }
       );
@@ -84,157 +96,112 @@ export async function POST(request: NextRequest) {
 
     if (
       date.length > 100 ||
-      subject.length > 200 ||
+      subject.length > 250 ||
       body.length > 50000
     ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Report data is too long.",
+          error: "The report is too long.",
         },
         { status: 400 }
       );
     }
 
-    // 4. Escape HTML in report content
-    const escapeHtml = (value: string) =>
-      value.replace(/[&<>"']/g, (character) => {
-        const entities: Record<string, string> = {
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;",
-        };
-
-        return entities[character];
-      });
-
-    const safeDate = escapeHtml(date);
-    const safeSubject = escapeHtml(subject);
-    const safeBody = escapeHtml(body);
-
-    // 5. Create Zoho SMTP transporter
     const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
       auth: {
-        user: email,
-        pass: password,
+        user: senderEmail,
+        pass: appPassword,
       },
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 20000,
     });
 
-    // 6. Verify SMTP connection and authentication
     try {
       await transporter.verify();
-    } catch (smtpError: unknown) {
-      const err = smtpError as {
-        message?: string;
-        code?: string;
-        command?: string;
-        responseCode?: number;
-        response?: string;
-      };
+    } catch (error) {
+      const details = getErrorDetails(error);
 
-      console.error("ZOHO SMTP VERIFY ERROR", {
-        message: err.message,
-        code: err.code,
-        command: err.command,
-        responseCode: err.responseCode,
-        response: err.response,
-      });
+      console.error("ZOHO SMTP VERIFY ERROR", details);
 
       return NextResponse.json(
         {
           success: false,
           error: "Zoho SMTP connection or authentication failed.",
-          code: err.code || null,
-          responseCode: err.responseCode || null,
+          code: details.code,
+          responseCode: details.responseCode,
           details:
             process.env.NODE_ENV === "development"
-              ? err.message || "Unknown SMTP verification error."
+              ? details.message
               : "Check Vercel function logs for ZOHO SMTP VERIFY ERROR.",
         },
         { status: 502 }
       );
     }
 
-    // 7. Send email directly to Admin
+    const safeDate = escapeHtml(date);
+    const safeSubject = escapeHtml(subject);
+    const safeBody = escapeHtml(body);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+        </head>
+        <body style="font-family: Arial, sans-serif; color: #222; line-height: 1.6;">
+          <h2>Stock Receiving Report</h2>
+          <p><strong>Report Date:</strong> ${safeDate}</p>
+          <p><strong>Subject:</strong> ${safeSubject}</p>
+          <hr />
+          <div style="white-space: pre-wrap;">${safeBody}</div>
+          <hr />
+          <p style="font-size: 12px; color: #777;">
+            Sent automatically from Mazaj Control Dashboard.
+          </p>
+        </body>
+      </html>
+    `;
+
     const result = await transporter.sendMail({
       from: {
         name: "Mazaj Control Dashboard",
-        address: SENDER_EMAIL,
+        address: senderEmail,
       },
       to: ADMIN_EMAIL,
-      subject: `${subject} - ${date}`,
-      text: [
-        "Mazaj Control Dashboard",
-        "Stock Receiving Report",
-        `Date: ${date}`,
-        `Subject: ${subject}`,
-        "",
-        body,
-      ].join("\n"),
-      html: `
-        <!DOCTYPE html>
-        <html>
-          <body style="font-family:Arial,sans-serif;color:#222;line-height:1.6">
-            <h2>Mazaj Control Dashboard</h2>
-            <h3>Stock Receiving Report</h3>
-            <p><strong>Date:</strong> ${safeDate}</p>
-            <p><strong>Subject:</strong> ${safeSubject}</p>
-            <hr />
-            <pre style="font-family:Arial,sans-serif;white-space:pre-wrap;overflow-wrap:anywhere">${safeBody}</pre>
-            <hr />
-            <p style="font-size:12px;color:#777">
-              Sent automatically by Mazaj Control Dashboard.
-            </p>
-          </body>
-        </html>
-      `,
+      subject,
+      text: `Stock Receiving Report\nDate: ${date}\n\n${body}`,
+      html,
     });
 
-    console.log("STOCK REPORT EMAIL SENT", {
+    console.log("Stock Receiving Report email sent:", {
       messageId: result.messageId,
-      recipient: ADMIN_EMAIL,
+      to: ADMIN_EMAIL,
     });
 
     return NextResponse.json({
       success: true,
-      message: "Report email sent successfully to Admin.",
-      messageId: result.messageId,
+      message: "Stock Receiving Report emailed successfully.",
+      recipient: ADMIN_EMAIL,
     });
-  } catch (error: unknown) {
-    const err = error as {
-      message?: string;
-      code?: string;
-      command?: string;
-      responseCode?: number;
-      response?: string;
-    };
+  } catch (error) {
+    const details = getErrorDetails(error);
 
-    // Never log SMTP passwords or other secrets.
-    console.error("ZOHO SMTP ERROR", {
-      message: err.message,
-      code: err.code,
-      command: err.command,
-      responseCode: err.responseCode,
-      response: err.response,
-    });
+    console.error("ZOHO SMTP ERROR", details);
 
     return NextResponse.json(
       {
         success: false,
-        error: "Zoho email sending failed.",
-        code: err.code || null,
-        responseCode: err.responseCode || null,
+        error: "Failed to send Stock Receiving Report email.",
+        code: details.code,
+        responseCode: details.responseCode,
         details:
           process.env.NODE_ENV === "development"
-            ? err.message || "Unknown error."
+            ? details.message
             : "Check Vercel function logs for ZOHO SMTP ERROR.",
       },
       { status: 500 }
