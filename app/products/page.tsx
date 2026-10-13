@@ -43,6 +43,7 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
+  const [expandedPrices, setExpandedPrices] = useState<string[]>([]);
 
   const [statusFilter, setStatusFilter] =
     useState<FilterStatus>("all");
@@ -1041,9 +1042,38 @@ export default function ProductsPage() {
                                   : Number(product.price)
                               ).toFixed(2)}
                             </span>
-                            <p className="mt-1 max-w-xs text-xs text-gray-500">
-                              {product.productType === "multiple" && product.variants?.length ? product.variants.map(v => `${v.weight}${v.unit} · QAR ${Number(v.price).toFixed(2)}`).join(" | ") : product.singleWeight ? `${product.singleWeight}${product.singleUnit || "g"}` : "Single Item"}
-                            </p>
+                            {product.productType === "multiple" && product.variants?.length ? (
+                              <div className="mt-2">
+                                <button
+                                  type="button"
+                                  aria-expanded={expandedPrices.includes(product._id)}
+                                  onClick={() => setExpandedPrices((current) =>
+                                    current.includes(product._id)
+                                      ? current.filter((id) => id !== product._id)
+                                      : [...current, product._id]
+                                  )}
+                                  className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                                >
+                                  {expandedPrices.includes(product._id)
+                                    ? (isArabic ? "إخفاء الأسعار ▲" : "Hide weight prices ▲")
+                                    : (isArabic ? `عرض ${product.variants.length} أوزان ▼` : `View ${product.variants.length} weight prices ▼`)}
+                                </button>
+                                {expandedPrices.includes(product._id) && (
+                                  <div className="mt-2 min-w-[180px] space-y-1 rounded-lg border border-gray-200 bg-white p-2 text-xs">
+                                    {product.variants.map((variant, index) => (
+                                      <div key={`${variant.weight}-${variant.unit}-${index}`} className="flex items-center justify-between gap-4">
+                                        <span className="text-gray-500">{variant.weight}{variant.unit}</span>
+                                        <span className="font-medium text-gray-900">QAR {Number(variant.price).toFixed(2)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-xs text-gray-500">
+                                {product.singleWeight ? `${product.singleWeight}${product.singleUnit || "g"}` : "Single Item"}
+                              </p>
+                            )}
 
                           </td>
 
