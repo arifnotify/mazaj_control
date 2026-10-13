@@ -22,6 +22,15 @@ const ProductSchema = new Schema(
     price: { type: Number, default: 0, min: 0 },
     stock: { type: Number, default: 0, min: 0 },
     active: { type: Boolean, default: true },
+    lastStatusChangedById: { type: Schema.Types.ObjectId, ref: "Employee", default: null },
+    lastStatusChangedByName: { type: String, default: "" },
+    lastStatusChangedAt: { type: Date, default: null },
+    statusHistory: { type: [{
+      active: { type: Boolean, required: true },
+      employeeId: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+      employeeName: { type: String, required: true },
+      changedAt: { type: Date, required: true },
+    }], default: [] },
     productType: { type: String, enum: ["single", "multiple"], default: "single" },
     singleWeight: { type: Number, default: null, min: 0 },
     singleUnit: { type: String, enum: ["g", "kg", "pcs", "ml", "L", null], default: null },
@@ -31,4 +40,5 @@ const ProductSchema = new Schema(
 );
 
 export default models.Product || model("Product", ProductSchema);
+
 
