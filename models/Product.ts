@@ -1,12 +1,10 @@
-import mongoose, { Schema, models, model } from "mongoose";
+import { Schema, models, model } from "mongoose";
 
-const VariantSchema = new Schema(
+const WeightOptionSchema = new Schema(
   {
-    sku: { type: String, required: true, trim: true },
     weight: { type: Number, required: true, min: 0.001 },
     unit: { type: String, required: true, enum: ["g", "kg", "pcs", "ml", "L"] },
     price: { type: Number, required: true, min: 0 },
-    stock: { type: Number, required: true, min: 0 },
   },
   { _id: true }
 );
@@ -27,9 +25,10 @@ const ProductSchema = new Schema(
     productType: { type: String, enum: ["single", "multiple"], default: "single" },
     singleWeight: { type: Number, default: null, min: 0 },
     singleUnit: { type: String, enum: ["g", "kg", "pcs", "ml", "L", null], default: null },
-    variants: { type: [VariantSchema], default: [] },
+    variants: { type: [WeightOptionSchema], default: [] },
   },
   { timestamps: true }
 );
 
 export default models.Product || model("Product", ProductSchema);
+
