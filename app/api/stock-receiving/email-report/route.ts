@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -30,7 +29,6 @@ export async function POST(request: Request) {
     const subject = String(body.subject || "").trim();
     const reportBody = String(body.body || "").trim();
 
-    // Validate report date
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return NextResponse.json(
         { error: "Invalid date. Use YYYY-MM-DD." },
@@ -64,8 +62,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Send email directly using Resend.
-    // This does not open the user's email application.
     const resendResponse = await fetch(
       "https://api.resend.com/emails",
       {
@@ -84,9 +80,7 @@ export async function POST(request: Request) {
       }
     );
 
-    const resendData = await resendResponse
-      .json()
-      .catch(() => null);
+    const resendData = await resendResponse.json().catch(() => null);
 
     if (!resendResponse.ok) {
       console.error("RESEND EMAIL ERROR:", resendData);
@@ -95,7 +89,7 @@ export async function POST(request: Request) {
         {
           error:
             resendData?.message ||
-            "Resend could not send the email. Check your sender verification and API key.",
+            "Resend could not send the email. Check sender verification and API key.",
         },
         { status: 502 }
       );
