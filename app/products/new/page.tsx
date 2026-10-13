@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 
 type Category = { _id: string; nameEn: string; nameAr: string; active: boolean };
 type Unit = "g" | "kg" | "pcs" | "ml" | "L";
-type Variant = { id: string; sku: string; weight: string; unit: Unit; price: string; stock: string };
+type Variant = { id: string; weight: string; unit: Unit; price: string };
 type ProductType = "single" | "multiple";
 const units: Unit[] = ["g", "kg", "pcs", "ml", "L"];
 const inputClass = "w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 const labelClass = "mb-2 block text-sm font-medium text-gray-700";
-const makeVariant = (): Variant => ({ id: crypto.randomUUID(), sku: "", weight: "", unit: "g", price: "", stock: "0" });
+const makeVariant = (): Variant => ({ id: crypto.randomUUID(), weight: "", unit: "g", price: "" });
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -94,13 +94,15 @@ export default function NewProductPage() {
       payload = { ...payload, price, stock, singleWeight: weight, singleUnit: weight === null ? null : form.singleUnit, variants: [] };
     } else {
       if (variants.length === 0) { setError("Add at least one weight option."); return; }
-      const parsed = variants.map((v) => ({ sku: v.sku.trim(), weight: Number(v.weight), unit: v.unit, price: Number(v.price), stock: Number(v.stock) }));
-      if (variants.some((v) => !v.sku.trim() || !v.weight.trim() || !v.price.trim()) || parsed.some((v) => !Number.isFinite(v.weight) || v.weight <= 0 || !Number.isFinite(v.price) || v.price < 0 || !Number.isInteger(v.stock) || v.stock < 0)) {
-        setError("Each weight option requires a SKU, positive weight, valid price and whole-number stock."); return;
+      const parsed = variants.map((v) => ({ weight: Number(v.weight), unit: v.unit, price: Number(v.price) }));
+      if (variants.some((v) => !v.weight.trim() || !v.price.trim()) || parsed.some((v) => !Number.isFinite(v.weight) || v.weight <= 0 || !Number.isFinite(v.price) || v.price < 0)) {
+        setError("Each weight option requires a positive weight and valid price."); return;
       }
-      const skus = [form.sku.trim().toLowerCase(), ...parsed.map((v) => v.sku.toLowerCase())];
-      if (new Set(skus).size !== skus.length) { setError("Each SKU must be unique."); return; }
-      payload = { ...payload, variants: parsed };
+      const stock = Number(form.stock);
+      if (!Number.isInteger(stock) || stock < 0) { setError("Enter a valid whole-number product stock."); return; }
+      const keys = parsed.map((v) => `${v.unit === "kg" ? "g" : v.unit === "L" ? "ml" : v.unit}:${v.weight * (v.unit === "kg" || v.unit === "L" ? 1000 : 1)}`);
+      if (new Set(keys).size !== keys.length) { setError("Duplicate weight options are not allowed."); return; }
+      payload = { ...payload, stock, variants: parsed };
     }
     try {
       setSaving(true);
@@ -167,19 +169,18 @@ export default function NewProductPage() {
             </section>
           ) : (
             <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold text-gray-900">Multiple Weight Options</h2><p className="text-sm text-gray-500">Add as many weights as you need. Each option has its own SKU, price and stock.</p></div><button type="button" onClick={() => setVariants((prev) => [...prev, makeVariant()])} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">+ Add Weight</button></div>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold text-gray-900">Multiple Weight Options</h2><p className="text-sm text-gray-500">Add as many weights as you need. Each weight has its own price. All weights share one product SKU and stock.</p></div><button type="button" onClick={() => setVariants((prev) => [...prev, makeVariant()])} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700">+ Add Weight</button></div>
               <div className="space-y-4">{variants.map((v, i) => (
                 <div key={v.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <div className="mb-3 flex items-center justify-between"><h3 className="font-semibold text-gray-800">Weight Option {i + 1}</h3><button type="button" onClick={() => setVariants((prev) => prev.filter((x) => x.id !== v.id))} className="text-sm font-medium text-red-600 hover:text-red-800">Remove</button></div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                    <div><label className={labelClass}>Variant SKU *</label><input className={inputClass} value={v.sku} onChange={(e) => updateVariant(v.id, "sku", e.target.value)} placeholder="NUT-250G" required /></div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div><label className={labelClass}>Weight *</label><input className={inputClass} type="number" min="0.001" step="any" value={v.weight} onChange={(e) => updateVariant(v.id, "weight", e.target.value)} placeholder="250" required /></div>
                     <div><label className={labelClass}>Unit *</label><select className={inputClass} value={v.unit} onChange={(e) => updateVariant(v.id, "unit", e.target.value)}>{units.map((u) => <option key={u} value={u}>{u}</option>)}</select></div>
                     <div><label className={labelClass}>Price (QAR) *</label><input className={inputClass} type="number" min="0" step="0.01" value={v.price} onChange={(e) => updateVariant(v.id, "price", e.target.value)} required /></div>
-                    <div><label className={labelClass}>Stock *</label><input className={inputClass} type="number" min="0" step="1" value={v.stock} onChange={(e) => updateVariant(v.id, "stock", e.target.value)} required /></div>
                   </div>
                 </div>
               ))}</div>
+              <div className="mt-5"><label className={labelClass}>Product Stock * (shared by all weights)</label><input className={inputClass} type="number" min="0" step="1" name="stock" value={form.stock} onChange={handleChange} required /><p className="mt-1 text-xs text-gray-500">One stock quantity for the whole product, not per weight.</p></div>
             </section>
           )}
           <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
