@@ -359,7 +359,7 @@ export default function StockReceivingPage() {
       window.alert(isArabic ? "يرجى اختيار منتج أولاً." : "Please select a product first.");
       return;
     }
-    if (!Number.isFinite(quantity) || quantity <= 0) {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
       window.alert(isArabic ? "أدخل كمية صحيحة." : "Enter a valid quantity.");
       return;
     }
@@ -412,29 +412,12 @@ export default function StockReceivingPage() {
       const savedRequest: StoreRequest = data.request;
       setStoreRequests((current) => [savedRequest, ...current].filter((item, index, arr) => arr.findIndex((other) => other._id === item._id) === index));
 
-      const itemLines = storeRequestItems.map((item, index) => [
-        `${index + 1}. ${language === "ar" ? item.nameAr || item.nameEn : item.nameEn || item.nameAr}`,
-        `   Quantity: ${item.quantity}`,
-        item.note ? `   Note: ${item.note}` : "",
-      ].filter(Boolean).join("\n"));
-      const subject = `Store Stock Request - ${storeRequestDate}`;
-      const body = [
-        "Dear Storekeeper,",
-        "",
-        "Please prepare the following items for the shop:",
-        `Date: ${storeRequestDate}`,
-        "",
-        ...itemLines,
-        storeRequestNote.trim() ? `\nRequest note: ${storeRequestNote.trim()}` : "",
-        "",
-        "Thank you,",
-        "Mazaj Nuts Roastery",
-      ].filter(Boolean).join("\n");
-      const gmailUrl = "https://mail.google.com/mail/?view=cm&fs=1" +
-        `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
-        `&su=${encodeURIComponent(subject)}` +
-        `&body=${encodeURIComponent(body)}`;
-      const mailtoUrl = `mailto:inventory@mazajnuts.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+       const { subject, body } = buildStoreRequestEmail(savedRequest);
+       const gmailUrl = "https://mail.google.com/mail/?view=cm&fs=1" +
+         `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
+         `&su=${encodeURIComponent(subject)}` +
+         `&body=${encodeURIComponent(body)}`;
+       const mailtoUrl = `mailto:inventory@mazajnuts.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       if (emailWindow) {
         emailWindow.location.href = gmailUrl;
       } else {
@@ -1046,25 +1029,43 @@ export default function StockReceivingPage() {
     }
   }
 
-  function openStoreRequestEmail(request: StoreRequest) {
-    const itemLines = request.items.map((item, index) => [
-      `${index + 1}. ${item.nameEn || item.nameAr}`,
-      `   Quantity: ${item.quantity}`,
-      item.note ? `   Note: ${item.note}` : "",
-    ].filter(Boolean).join("\n"));
+  // Use the dashboard language for both new and historical request emails.
+  function buildStoreRequestEmail(request: StoreRequest) {
+    const arabic = language === "ar";
+    const subject = arabic
+      ? `طلب تجهيز منتجات المتجر - ${request.date}`
+      : `Store Stock Request - ${request.date}`;
+    const itemLines = request.items.map((item, index) => {
+      const name = arabic
+        ? item.nameAr || item.nameEn
+        : item.nameEn || item.nameAr;
+      return [
+        `${index + 1}. ${name}`,
+        `   ${arabic ? "الكمية المطلوبة" : "Quantity"}: ${item.quantity}`,
+        item.note ? `   ${arabic ? "ملاحظة" : "Note"}: ${item.note}` : "",
+      ].filter(Boolean).join("\n");
+    });
     const body = [
-      "Dear Storekeeper,",
+      arabic ? "السلام عليكم،" : "Dear Storekeeper,",
       "",
-      "Please prepare the following items for the shop:",
-      `Date: ${request.date}`,
+      arabic
+        ? "يرجى تجهيز المنتجات التالية للمتجر:"
+        : "Please prepare the following items for the shop:",
+      `${arabic ? "التاريخ" : "Date"}: ${request.date}`,
       "",
       ...itemLines,
-      request.requestNote ? `\nRequest note: ${request.requestNote}` : "",
+      request.requestNote
+        ? `\n${arabic ? "ملاحظات إضافية" : "Request note"}: ${request.requestNote}`
+        : "",
       "",
-      "Thank you,",
+      arabic ? "شكراً لكم،" : "Thank you,",
       "Mazaj Nuts Roastery",
     ].filter(Boolean).join("\n");
-    const subject = `Store Stock Request - ${request.date}`;
+    return { subject, body };
+  }
+
+  function openStoreRequestEmail(request: StoreRequest) {
+    const { subject, body } = buildStoreRequestEmail(request);
     const url = "https://mail.google.com/mail/?view=cm&fs=1" +
       `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
       `&su=${encodeURIComponent(subject)}` +
@@ -1255,7 +1256,7 @@ export default function StockReceivingPage() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       {request.items.map((item) => (
                         <span key={item.productId} className="rounded-lg bg-gray-50 px-2.5 py-1 text-xs text-gray-700">
-                          {item.nameEn} × {item.quantity}
+                          {language === "ar" ? item.nameAr || item.nameEn : item.nameEn || item.nameAr} × {item.quantity}
                         </span>
                       ))}
                     </div>
