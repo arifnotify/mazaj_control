@@ -184,7 +184,26 @@ export default function NewProductPage() {
           )}
           <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-xl font-semibold text-gray-900">Product Status</h2>
-            <button type="button" onClick={() => setForm((prev) => ({ ...prev, active: !prev.active }))} className={`rounded-lg border px-5 py-3 font-semibold ${form.active ? "border-green-300 bg-green-50 text-green-700" : "border-gray-300 bg-gray-100 text-gray-700"}`}>{form.active ? "Product is ON" : "Product is OFF"}</button>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.active}
+              onClick={() => setForm((prev) => ({ ...prev, active: !prev.active }))}
+              className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 ${
+                form.active ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"
+              }`}
+            >
+              <span className="font-medium text-gray-700">
+                {form.active ? "Product is ON" : "Product is OFF"}
+              </span>
+              <span className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                form.active ? "bg-green-600" : "bg-gray-400"
+              }`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                  form.active ? "translate-x-6" : "translate-x-1"
+                }`} />
+              </span>
+            </button>
           </section>
           <div className="flex flex-wrap justify-end gap-3"><button type="button" disabled={saving} onClick={() => router.push("/products")} className="rounded-lg border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700">Cancel</button><button type="submit" disabled={saving || uploading} className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white disabled:opacity-50">{saving ? "Creating Product..." : "Create Product"}</button></div>
         </form>
