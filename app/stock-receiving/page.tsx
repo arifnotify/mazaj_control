@@ -739,6 +739,38 @@ export default function StockReceivingPage() {
     }
   }
 
+  // Delete all receiving records for a selected day. Product Summary is derived
+  // from the same records, so both sections update together.
+  async function deleteReceivingDay(date: string) {
+    const dayRecords = records.filter(record => record.date === date);
+    if (!dayRecords.length) return;
+    const confirmed = window.confirm(isArabic
+      ? `هل تريد حذف جميع سجلات الاستلام بتاريخ ${date} (${dayRecords.length} سجلات) نهائياً؟`
+      : `Permanently delete ALL ${dayRecords.length} receiving records for ${date}? This also removes that day's Product Summary.`);
+    if (!confirmed) return;
+    setActionLoading(`day:${date}`);
+    setError("");
+    const deletedIds: string[] = [];
+    try {
+      for (const record of dayRecords) {
+        const response = await fetch(`/api/stock-receiving/${encodeURIComponent(record._id)}`, { method: "DELETE" });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || `Failed to delete receiving record ${record._id}`);
+        }
+        deletedIds.push(record._id);
+      }
+      if (editingId && deletedIds.includes(editingId)) resetForm();
+    } catch (err) {
+      setError((err instanceof Error ? err.message : "Delete failed") +
+        (deletedIds.length ? ` (${deletedIds.length} records were deleted before the error.)` : ""));
+    } finally {
+      // Reload the database state, including if only part of the batch succeeded.
+      await loadRecords(month);
+      setActionLoading(null);
+    }
+  }
+
   // --------------------------------------------------
   // FILTER MONTHLY RECORDS
   // --------------------------------------------------
@@ -2129,6 +2161,11 @@ export default function StockReceivingPage() {
                           <span className="font-semibold">{formatDate(day.date)} <span className="text-sm font-normal text-gray-500">· {day.products.length} {isArabic ? "منتجات" : "products"} · {day.total} {isArabic ? "وحدات" : "units"}</span></span>
                           <span>{expanded ? "−" : "+"}</span>
                         </button>
+                        <div className="border-t px-4 py-2 text-end"><button type="button" disabled={actionLoading !== null}
+                          onClick={() => void deleteReceivingDay(day.date)}
+                          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
+                          {actionLoading === `day:${day.date}` ? "..." : isArabic ? "حذف اليوم بالكامل" : "Delete Entire Day"}
+                        </button></div>
                         {expanded && <div className="overflow-x-auto"><table className="w-full min-w-[500px] text-sm">
                           <thead><tr className="border-b bg-gray-50"><th className="px-4 py-3 text-start">{isArabic ? "المنتج" : "Product"}</th><th className="px-4 py-3 text-start">SKU</th><th className="px-4 py-3 text-end">{isArabic ? "الكمية" : "Quantity"}</th></tr></thead>
                           <tbody>{day.products.map(p => <tr key={p.productId} className="border-b"><td className="px-4 py-3">{isArabic ? p.nameAr || p.name : p.name || p.nameAr}</td><td className="px-4 py-3">{p.sku}</td><td className="px-4 py-3 text-end font-semibold">{p.quantity}</td></tr>)}</tbody>
@@ -2157,6 +2194,11 @@ export default function StockReceivingPage() {
                           <span className="font-semibold">{formatDate(date)} <span className="text-sm font-normal text-gray-500">· {dailyRecords.length} {isArabic ? "سجلات" : "records"}</span></span>
                           <span>{expanded ? "−" : "+"}</span>
                         </button>
+                        <div className="border-t px-4 py-2 text-end"><button type="button" disabled={actionLoading !== null}
+                          onClick={() => void deleteReceivingDay(date)}
+                          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">
+                          {actionLoading === `day:${date}` ? "..." : isArabic ? "حذف اليوم بالكامل" : "Delete Entire Day"}
+                        </button></div>
                         {expanded && <div className="overflow-x-auto"><table className="w-full min-w-[800px] text-sm">
                           <thead><tr className="border-b bg-gray-50">
                             <th className="px-3 py-3 text-start">{isArabic ? "المنتج" : "Product"}</th><th className="px-3 py-3 text-start">SKU</th>
