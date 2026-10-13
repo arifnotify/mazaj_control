@@ -4,6 +4,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+type Unit = "g" | "kg" | "pcs" | "ml" | "L";
+type WeightOption = { weight: number; unit: Unit; price: number };
+type ProductType = "single" | "multiple";
+
 type Product = {
   _id: string;
   sku: string;
@@ -17,6 +21,10 @@ type Product = {
   price: number;
   stock: number;
   active: boolean;
+  productType?: ProductType;
+  singleWeight?: number | null;
+  singleUnit?: Unit | null;
+  variants?: WeightOption[];
 };
 
 type MarketplaceName =
@@ -623,6 +631,16 @@ export default function ProductDetailsPage({
             </div>
           </div>
         </div>
+
+        <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-bold text-gray-900">Weight Options & Pricing</h2>
+          <p className="mt-1 text-sm text-gray-500">One SKU and one shared stock across all weight options.</p>
+          {product.productType === "multiple" && product.variants?.length ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {product.variants.map((variant, index) => <div key={index} className="rounded-xl border bg-gray-50 p-4"><p className="font-semibold text-gray-900">{variant.weight} {variant.unit}</p><p className="mt-1 text-blue-700">QAR {Number(variant.price).toFixed(2)}</p></div>)}
+            </div>
+          ) : <p className="mt-4 text-gray-700">{product.singleWeight ? `${product.singleWeight} ${product.singleUnit || "g"}` : "Single item (no weight)"} — QAR {Number(product.price).toFixed(2)}</p>}
+        </section>
 
         {/* MARKETPLACE SYNC CHECK */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
