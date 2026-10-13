@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
+import Employee from "@/models/Employee";
 
 const units = ["g", "kg", "pcs", "ml", "L"];
 const nonnegative = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
@@ -78,7 +79,24 @@ export async function PUT(request: Request, context: Context) {
     }
 
     await connectDB();
-    const product = await Product.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true });
+    const existing = await Product.findById(id);
+    if (!existing) return error("Product not found", 404);
+
+    // Only status changes require an employee selection.
+    const statusChanged = body.active !== undefined && body.active !== existing.active;
+    const push: Record<string, unknown> = {};
+    if (statusChanged) {
+      if (!isValidObjectId(body.statusEmployeeId)) return error("Select a valid employee to change product status");
+      const employee = await Employee.findOne({ _id: body.statusEmployeeId, active: { $ne: false } }).lean();
+      if (!employee || !employee.name?.trim()) return error("Employee not found or inactive", 400);
+      const changedAt = new Date();
+      update.lastStatusChangedById = employee._id;
+      update.lastStatusChangedByName = employee.name.trim();
+      update.lastStatusChangedAt = changedAt;
+      push.statusHistory = { active: body.active, employeeId: employee._id, employeeName: employee.name.trim(), changedAt };
+    }
+    const operation = Object.keys(push).length ? { $set: update, $push: push } : { $set: update };
+    const product = await Product.findByIdAndUpdate(id, operation, { new: true, runValidators: true });
     if (!product) return error("Product not found", 404);
     return NextResponse.json(product);
   } catch (e: unknown) {
