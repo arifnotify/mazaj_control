@@ -1,24 +1,34 @@
 import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 
 export const runtime = "nodejs";
 
-const ADMIN_EMAIL = "admin@mazajnuts.com";
+const DEFAULT_RECIPIENT = "admin@mazajnuts.com";
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export async function POST(request: Request) {
   try {
-    const apiKey = process.env.RESEND_API_KEY;
-    const fromEmail = process.env.EMAIL_FROM;
+    const host = process.env.ZOHO_SMTP_HOST;
+    const port = Number(process.env.ZOHO_SMTP_PORT || 465);
+    const email = process.env.ZOHO_EMAIL;
+    const password = process.env.ZOHO_APP_PASSWORD;
 
-    if (!apiKey) {
+    if (!host || !email || !password) {
       return NextResponse.json(
-        { error: "RESEND_API_KEY is not configured." },
+        {
+          error:
+            "Zoho SMTP is not configured. Check your environment variables.",
+        },
         { status: 500 }
       );
     }
 
-    if (!fromEmail) {
+    if (port !== 465 && port !== 587) {
       return NextResponse.json(
-        { error: "EMAIL_FROM is not configured." },
+        { error: "SMTP port must be 465 or 587." },
         { status: 500 }
       );
     }
@@ -28,7 +38,19 @@ export async function POST(request: Request) {
     const date = String(body.date || "").trim();
     const subject = String(body.subject || "").trim();
     const reportBody = String(body.body || "").trim();
+    const recipient = String(
+      body.to || DEFAULT_RECIPIENT
+    ).trim();
 
+    // Validate recipient email
+    if (!isValidEmail(recipient)) {
+      return NextResponse.json(
+        { error: "Please enter a valid recipient email address." },
+        { status: 400 }
+      );
+    }
+
+    // Validate date
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return NextResponse.json(
         { error: "Invalid date. Use YYYY-MM-DD." },
@@ -50,61 +72,54 @@ export async function POST(request: Request) {
 
     if (!subject || !reportBody) {
       return NextResponse.json(
-        { error: "Report subject and body are required." },
+        { error: "Subject and report body are required." },
         { status: 400 }
       );
     }
 
-    if (reportBody.length > 100_000) {
+    if (subject.length > 200 || reportBody.length > 100_000) {
       return NextResponse.json(
-        { error: "Report is too large to email." },
+        { error: "The subject or report is too large." },
         { status: 413 }
       );
     }
 
-    const resendResponse = await fetch(
-      "https://api.resend.com/emails",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: fromEmail,
-          to: [ADMIN_EMAIL],
-          subject,
-          text: reportBody,
-        }),
-        cache: "no-store",
-      }
-    );
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: {
+        user: email,
+        pass: password,
+      },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
+    });
 
-    const resendData = await resendResponse.json().catch(() => null);
-
-    if (!resendResponse.ok) {
-      console.error("RESEND EMAIL ERROR:", resendData);
-
-      return NextResponse.json(
-        {
-          error:
-            resendData?.message ||
-            "Resend could not send the email. Check sender verification and API key.",
-        },
-        { status: 502 }
-      );
-    }
+    const result = await transporter.sendMail({
+      from: {
+        name: "Mazaj Stock Reports",
+        address: email,
+      },
+      to: recipient,
+      subject,
+      text: reportBody,
+    });
 
     return NextResponse.json({
       success: true,
-      message: `Report sent to ${ADMIN_EMAIL}.`,
-      emailId: resendData?.id || null,
+      message: `Report email submitted to ${recipient}.`,
+      messageId: result.messageId,
     });
   } catch (error) {
     console.error("STOCK RECEIVING EMAIL ERROR:", error);
 
     return NextResponse.json(
-      { error: "Failed to send stock receiving report." },
+      {
+        error:
+          "Email sending failed. Check Zoho SMTP settings and credentials.",
+      },
       { status: 500 }
     );
   }
