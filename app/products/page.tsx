@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "../components/LanguageProvider";
 
+type Unit = "g" | "kg" | "pcs" | "ml" | "L";
+type WeightOption = { weight: number; unit: Unit; price: number };
+type ProductType = "single" | "multiple";
+
 type Product = {
   _id: string;
   sku: string;
@@ -22,6 +26,10 @@ type Product = {
   price: number;
   stock: number;
   active: boolean;
+  productType?: ProductType;
+  singleWeight?: number | null;
+  singleUnit?: Unit | null;
+  variants?: WeightOption[];
 
   createdAt?: string;
 };
@@ -1027,10 +1035,11 @@ export default function ProductsPage() {
 
                             <span className="font-semibold text-gray-900">
                               QAR{" "}
-                              {Number(
-                                product.price
-                              ).toFixed(2)}
+                              {Number(product.price).toFixed(2)}
                             </span>
+                            <p className="mt-1 max-w-xs text-xs text-gray-500">
+                              {product.productType === "multiple" && product.variants?.length ? product.variants.map(v => `${v.weight}${v.unit} · QAR ${Number(v.price).toFixed(2)}`).join(" | ") : product.singleWeight ? `${product.singleWeight}${product.singleUnit || "g"}` : "Single Item"}
+                            </p>
 
                           </td>
 
