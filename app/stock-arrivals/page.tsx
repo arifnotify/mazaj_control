@@ -46,10 +46,33 @@ const INITIAL_MARKETPLACES: Marketplaces = {
   keeta: false,
 };
 
+const MARKETPLACE_LIST = [
+  { key: "talabat", name: "Talabat", arabic: "طلبات" },
+  { key: "snoonu", name: "Snoonu", arabic: "سنونو" },
+  { key: "rafeeq", name: "Rafeeq", arabic: "رفيق" },
+  { key: "keeta", name: "Keeta", arabic: "كيتا" },
+] as const;
+
+function bilingual(english: string, arabic: string) {
+  return (
+    <>
+      <span>{english}</span>
+      <span className="mt-1 block text-sm font-normal" dir="rtl" lang="ar">
+        {arabic}
+      </span>
+    </>
+  );
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function StockArrivalsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [arrivals, setArrivals] = useState<Arrival[]>([]);
+
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [employeeId, setEmployeeId] = useState("");
@@ -69,12 +92,8 @@ export default function StockArrivalsPage() {
 
     try {
       const [stockRes, employeeRes] = await Promise.all([
-        fetch("/api/stock-arrivals", {
-          cache: "no-store",
-        }),
-        fetch("/api/employees/active", {
-          cache: "no-store",
-        }),
+        fetch("/api/stock-arrivals", { cache: "no-store" }),
+        fetch("/api/employees/active", { cache: "no-store" }),
       ]);
 
       const stockData = await stockRes.json();
@@ -82,32 +101,32 @@ export default function StockArrivalsPage() {
 
       if (!stockRes.ok || !stockData.success) {
         throw new Error(
-          stockData.message || "Failed to load stock arrivals"
+          stockData.message ||
+            "Failed to load stock arrivals | فشل تحميل وصول المخزون"
         );
       }
 
       if (!employeeRes.ok || !employeeData.success) {
         throw new Error(
-          employeeData.message || "Failed to load employees"
+          employeeData.message ||
+            "Failed to load employees | فشل تحميل الموظفين"
         );
       }
 
       setProducts(stockData.products || []);
       setArrivals(stockData.arrivals || []);
 
-      const employeeList: Employee[] =
-        employeeData.employees || [];
+      const employeeList: Employee[] = employeeData.employees || [];
 
       setEmployees(
-        employeeList.filter(
-          (employee) => employee.active !== false
-        )
+        employeeList.filter((employee) => employee.active !== false)
       );
     } catch (err: unknown) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load data"
+        getErrorMessage(
+          err,
+          "Failed to load data | فشل تحميل البيانات"
+        )
       );
     } finally {
       setLoading(false);
@@ -146,12 +165,21 @@ export default function StockArrivalsPage() {
     );
   }
 
+  function toggleMarketplace(key: keyof Marketplaces, checked: boolean) {
+    setMarketplaces((current) => ({
+      ...current,
+      [key]: checked,
+    }));
+  }
+
   async function createArrival() {
     setError("");
     setMessage("");
 
     if (selected.length === 0) {
-      setError("Please select at least one product.");
+      setError(
+        "Please select at least one product. | يرجى اختيار منتج واحد على الأقل."
+      );
       return;
     }
 
@@ -160,32 +188,32 @@ export default function StockArrivalsPage() {
     try {
       const res = await fetch("/api/stock-arrivals", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          productIds: selected,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productIds: selected }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
         throw new Error(
-          data.message || "Could not create stock arrival"
+          data.message ||
+            "Could not create stock arrival | تعذر إنشاء وصول المخزون"
         );
       }
 
-      setMessage("Stock arrival created successfully.");
+      setMessage(
+        "Stock arrival created successfully. | تم إنشاء وصول المخزون بنجاح."
+      );
       setSelected([]);
       setSearch("");
 
       await loadData();
     } catch (err: unknown) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to create stock arrival"
+        getErrorMessage(
+          err,
+          "Failed to create stock arrival | فشل إنشاء وصول المخزون"
+        )
       );
     } finally {
       setSaving(false);
@@ -197,23 +225,29 @@ export default function StockArrivalsPage() {
     setMessage("");
 
     if (!activeArrival) {
-      setError("Please select a pending stock arrival.");
+      setError(
+        "Please select a pending stock arrival. | يرجى اختيار وصول مخزون قيد الانتظار."
+      );
       return;
     }
 
     if (!employeeId) {
-      setError("Please select your employee account.");
+      setError(
+        "Please select your employee account. | يرجى اختيار حساب الموظف الخاص بك."
+      );
       return;
     }
 
     if (!/^\d{3}$/.test(pin)) {
-      setError("Please enter your 3-digit PIN.");
+      setError(
+        "Please enter your 3-digit PIN. | يرجى إدخال رمز PIN المكون من 3 أرقام."
+      );
       return;
     }
 
     if (!Object.values(marketplaces).every(Boolean)) {
       setError(
-        "Confirm all four marketplaces before submitting."
+        "Confirm all four marketplaces before submitting. | يرجى تأكيد جميع منصات البيع الأربع قبل الإرسال."
       );
       return;
     }
@@ -221,31 +255,30 @@ export default function StockArrivalsPage() {
     setSaving(true);
 
     try {
-      const res = await fetch(
-        "/api/stock-arrivals/confirm",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            arrivalId: activeArrival,
-            employeeId,
-            pin,
-            marketplaces,
-          }),
-        }
-      );
+      const res = await fetch("/api/stock-arrivals/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          arrivalId: activeArrival,
+          employeeId,
+          pin,
+          marketplaces,
+        }),
+      });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
         throw new Error(
-          data.message || "Confirmation failed"
+          data.message ||
+            "Confirmation failed | فشل التأكيد"
         );
       }
 
-      setMessage("Stock arrival marked as completed.");
+      setMessage(
+        "All four marketplaces confirmed successfully. | تم تأكيد منصات البيع الأربع بنجاح."
+      );
+
       setPin("");
       setEmployeeId("");
       setActiveArrival("");
@@ -254,31 +287,37 @@ export default function StockArrivalsPage() {
       await loadData();
     } catch (err: unknown) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Confirmation failed"
+        getErrorMessage(err, "Confirmation failed | فشل التأكيد")
       );
     } finally {
       setSaving(false);
     }
   }
 
+  const inputClass =
+    "w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+
+  const cardClass =
+    "rounded-xl border border-gray-200 bg-white p-4 md:p-6";
+
   return (
     <main className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
       <header>
         <h1 className="text-3xl font-bold">
-          Stock Arrivals
+          Stock Arrivals | وصول المخزون
         </h1>
         <p className="mt-2 text-sm text-gray-500">
-          Select newly arrived products and record marketplace
-          activation.
+          Select newly arrived products and record marketplace activation.
+        </p>
+        <p className="mt-1 text-sm text-gray-500" dir="rtl" lang="ar">
+          اختر المنتجات التي وصلت حديثًا وسجّل تأكيد تفعيلها على منصات البيع.
         </p>
       </header>
 
       {error && (
         <div
           role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-700"
+          className="whitespace-pre-line rounded-lg border border-red-300 bg-red-50 p-3 text-red-700"
         >
           {error}
         </div>
@@ -287,31 +326,40 @@ export default function StockArrivalsPage() {
       {message && (
         <div
           role="status"
-          className="rounded-lg border border-green-300 bg-green-50 p-3 text-green-800"
+          className="whitespace-pre-line rounded-lg border border-green-300 bg-green-50 p-3 text-green-800"
         >
           {message}
         </div>
       )}
 
       {/* Select products */}
-      <section className="rounded-xl border p-4 md:p-6">
+      <section className={cardClass}>
         <h2 className="mb-4 text-xl font-semibold">
-          1. Select products back in stock
+          {bilingual(
+            "1. Select Products Back in Stock",
+            "١. اختر المنتجات التي عادت إلى المخزون"
+          )}
         </h2>
+
+        <label className="mb-2 block text-sm font-medium">
+          Search by product name or SKU | ابحث باسم المنتج أو رمز SKU
+        </label>
 
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by product name or SKU..."
-          className="mb-4 w-full rounded-lg border p-3"
+          placeholder="Search products... | ابحث عن المنتجات..."
+          className={`${inputClass} mb-4`}
         />
 
         <div className="mb-3 text-sm text-gray-500">
-          Selected: {selected.length}
+          Selected: {selected.length} | المحدد: {selected.length}
         </div>
 
         {loading ? (
-          <p>Loading products...</p>
+          <p>
+            Loading products... | جارٍ تحميل المنتجات...
+          </p>
         ) : (
           <div className="max-h-[480px] space-y-2 overflow-y-auto">
             {filteredProducts.map((product) => (
@@ -323,7 +371,7 @@ export default function StockArrivalsPage() {
                   type="checkbox"
                   checked={selected.includes(product._id)}
                   onChange={() => toggleProduct(product._id)}
-                  className="h-4 w-4"
+                  className="h-4 w-4 shrink-0"
                 />
 
                 {product.image ? (
@@ -333,8 +381,9 @@ export default function StockArrivalsPage() {
                     className="h-14 w-14 rounded-md border object-cover"
                   />
                 ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400">
                     No image
+                    <span className="sr-only"> | لا توجد صورة</span>
                   </div>
                 )}
 
@@ -349,94 +398,110 @@ export default function StockArrivalsPage() {
 
             {filteredProducts.length === 0 && (
               <p className="p-4 text-gray-500">
-                No products found.
+                No products found. | لم يتم العثور على منتجات.
               </p>
             )}
           </div>
         )}
 
         <button
+          type="button"
           onClick={createArrival}
           disabled={saving || loading || selected.length === 0}
           className="mt-4 rounded-lg bg-black px-5 py-3 text-white disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Create Stock Arrival"}
+          {saving
+            ? "Saving... | جارٍ الحفظ..."
+            : "Create Stock Arrival | إنشاء وصول مخزون"}
         </button>
       </section>
 
-      {/* Confirm activation */}
-      <section className="rounded-xl border p-4 md:p-6">
+      {/* Confirm marketplace activation */}
+      <section className={cardClass}>
         <h2 className="mb-4 text-xl font-semibold">
-          2. Confirm marketplace activation
+          {bilingual(
+            "2. Confirm Marketplace Activation",
+            "٢. تأكيد تفعيل المنتجات على منصات البيع"
+          )}
         </h2>
 
         <label className="mb-2 block text-sm font-medium">
-          Pending stock arrival
+          Pending stock arrival | وصول المخزون قيد الانتظار
         </label>
 
         <select
           value={activeArrival}
-          onChange={(event) =>
-            setActiveArrival(event.target.value)
-          }
-          className="mb-4 w-full rounded-lg border p-3"
+          onChange={(event) => setActiveArrival(event.target.value)}
+          className={`${inputClass} mb-4`}
         >
-          <option value="">Select stock arrival</option>
+          <option value="">
+            Select stock arrival | اختر وصول المخزون
+          </option>
 
           {pending.map((arrival) => (
             <option key={arrival._id} value={arrival._id}>
               {new Date(arrival.createdAt).toLocaleString()} —{" "}
-              {arrival.products.length} product(s)
+              {arrival.products.length} product(s) | منتج
             </option>
           ))}
         </select>
 
-        <div className="mb-4 grid gap-3 sm:grid-cols-2">
-          {(
-            [
-              ["talabat", "Talabat"],
-              ["snoonu", "Snoonu"],
-              ["rafeeq", "Rafeeq"],
-              ["keeta", "Keeta"],
-            ] as const
-          ).map(([key, label]) => (
+        <p className="mb-3 text-sm text-gray-600">
+          Check all four marketplaces after verifying that the products are
+          active in each app.
+        </p>
+        <p className="mb-4 text-sm text-gray-600" dir="rtl" lang="ar">
+          ضع علامة على منصات البيع الأربع بعد التأكد من أن المنتجات مفعّلة في
+          كل تطبيق.
+        </p>
+
+        <div className="mb-5 grid gap-3 sm:grid-cols-2">
+          {MARKETPLACE_LIST.map(({ key, name, arabic }) => (
             <label
               key={key}
-              className="flex items-center gap-3 rounded-lg border p-3"
+              className="flex cursor-pointer items-center gap-3 rounded-lg border p-3"
             >
               <input
                 type="checkbox"
                 checked={marketplaces[key]}
                 onChange={(event) =>
-                  setMarketplaces((current) => ({
-                    ...current,
-                    [key]: event.target.checked,
-                  }))
+                  toggleMarketplace(key, event.target.checked)
                 }
+                className="h-4 w-4"
               />
-              <span>{label} — products are active</span>
+
+              <span>
+                <span className="block font-medium">
+                  {name} — Products are active
+                </span>
+                <span
+                  className="mt-1 block text-sm text-gray-500"
+                  dir="rtl"
+                  lang="ar"
+                >
+                  {arabic} — المنتجات مفعّلة
+                </span>
+              </span>
             </label>
           ))}
         </div>
 
         <label className="mb-2 block text-sm font-medium">
-          Your employee account
+          Your employee account | حساب الموظف الخاص بك
         </label>
 
         <select
           value={employeeId}
-          onChange={(event) =>
-            setEmployeeId(event.target.value)
-          }
-          className="mb-4 w-full rounded-lg border p-3"
+          onChange={(event) => setEmployeeId(event.target.value)}
+          className={`${inputClass} mb-4`}
           disabled={loading || employees.length === 0}
         >
           <option value="">
             {loading
-              ? "Loading employees..."
+              ? "Loading employees... | جارٍ تحميل الموظفين..."
               : employees.length === 0
-                ? "No active employees found"
-                : "Select your name"}
+                ? "No active employees found | لا يوجد موظفون نشطون"
+                : "Select your name | اختر اسمك"}
           </option>
 
           {employees.map((employee) => (
@@ -448,13 +513,17 @@ export default function StockArrivalsPage() {
 
         {!loading && employees.length === 0 && (
           <p className="mb-4 text-sm text-amber-700">
-            No active employees were returned. Check that employees
-            exist and have active set to true.
+            No active employees were returned. Check that employees exist and
+            have active set to true.
+            <span className="mt-1 block" dir="rtl" lang="ar">
+              لم يتم العثور على موظفين نشطين. تأكد من وجود الموظفين وأن حالة
+              active مضبوطة على true.
+            </span>
           </p>
         )}
 
         <label className="mb-2 block text-sm font-medium">
-          Your 3-digit PIN
+          Your 3-digit PIN | رمز PIN الخاص بك (٣ أرقام)
         </label>
 
         <input
@@ -466,35 +535,43 @@ export default function StockArrivalsPage() {
           onChange={(event) =>
             setPin(event.target.value.replace(/\D/g, "").slice(0, 3))
           }
-          placeholder="Enter your 3-digit PIN"
-          className="mb-4 w-full rounded-lg border p-3"
+          placeholder="Enter your 3-digit PIN | أدخل رمز PIN المكون من 3 أرقام"
+          className={`${inputClass} mb-4`}
         />
 
         <button
+          type="button"
           onClick={confirmArrival}
           disabled={saving || !activeArrival || loading}
           className="rounded-lg bg-green-700 px-5 py-3 text-white disabled:opacity-50"
         >
           {saving
-            ? "Verifying..."
-            : "Verify PIN & Complete Arrival"}
+            ? "Verifying... | جارٍ التحقق..."
+            : "Verify PIN & Complete All Four | تحقق وأكمل المنصات الأربع"}
         </button>
 
         <p className="mt-3 text-xs text-gray-500">
-          Confirm only after checking all four marketplace apps.
-          This records your confirmation; it does not activate
-          products in external apps automatically.
+          Confirm only after checking all four marketplace apps. This records
+          your confirmation; it does not activate products in external apps
+          automatically.
+        </p>
+        <p className="mt-2 text-xs text-gray-500" dir="rtl" lang="ar">
+          أكّد فقط بعد التحقق من التطبيقات الأربعة. يسجّل هذا الإجراء تأكيدك
+          ولا يفعّل المنتجات تلقائيًا في التطبيقات الخارجية.
         </p>
       </section>
 
       {/* Pending arrivals */}
-      <section className="rounded-xl border p-4 md:p-6">
+      <section className={cardClass}>
         <h2 className="mb-4 text-xl font-semibold">
-          Pending Arrivals ({pending.length})
+          Pending Arrivals ({pending.length}) | وصول المخزون قيد الانتظار (
+          {pending.length})
         </h2>
 
         {pending.length === 0 ? (
-          <p className="text-gray-500">No pending arrivals.</p>
+          <p className="text-gray-500">
+            No pending arrivals. | لا توجد عمليات وصول معلّقة.
+          </p>
         ) : (
           <div className="space-y-4">
             {pending.map((arrival) => (
@@ -505,14 +582,15 @@ export default function StockArrivalsPage() {
       </section>
 
       {/* Completed arrivals */}
-      <section className="rounded-xl border p-4 md:p-6">
+      <section className={cardClass}>
         <h2 className="mb-4 text-xl font-semibold">
-          Completed Arrivals ({completed.length})
+          Completed Arrivals ({completed.length}) | عمليات الوصول المكتملة (
+          {completed.length})
         </h2>
 
         {completed.length === 0 ? (
           <p className="text-gray-500">
-            No completed arrivals yet.
+            No completed arrivals yet. | لا توجد عمليات وصول مكتملة حتى الآن.
           </p>
         ) : (
           <div className="space-y-4">
@@ -527,21 +605,28 @@ export default function StockArrivalsPage() {
 }
 
 function ArrivalCard({ arrival }: { arrival: Arrival }) {
+  const isCompleted = arrival.status === "completed";
+
   return (
     <article className="rounded-lg border p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm text-gray-500">
           Created: {new Date(arrival.createdAt).toLocaleString()}
+          <span className="mt-1 block" dir="rtl" lang="ar">
+            تاريخ الإنشاء: {new Date(arrival.createdAt).toLocaleString()}
+          </span>
         </span>
 
         <span
           className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            arrival.status === "completed"
+            isCompleted
               ? "bg-green-100 text-green-800"
               : "bg-yellow-100 text-yellow-800"
           }`}
         >
-          {arrival.status.toUpperCase()}
+          {isCompleted
+            ? "COMPLETED | مكتمل"
+            : "PENDING | قيد الانتظار"}
         </span>
       </div>
 
@@ -561,27 +646,43 @@ function ArrivalCard({ arrival }: { arrival: Arrival }) {
               <div className="h-12 w-12 rounded bg-gray-100" />
             )}
 
-            <div>
+            <div className="min-w-0">
               <p className="font-medium">{product.name}</p>
-              <p className="text-sm text-gray-500">
-                SKU: {product.sku}
-              </p>
+              <p className="text-sm text-gray-500">SKU: {product.sku}</p>
             </div>
           </div>
         ))}
       </div>
 
-      {arrival.status === "completed" && (
+      {isCompleted && (
         <div className="mt-4 border-t pt-3 text-sm text-gray-600">
           <p>
             Confirmed by: {arrival.confirmedByName || "Employee"}
           </p>
-          <p>
+          <p dir="rtl" lang="ar">
+            تم التأكيد بواسطة: {arrival.confirmedByName || "الموظف"}
+          </p>
+
+          <p className="mt-2">
             Confirmed at:{" "}
             {arrival.confirmedAt
               ? new Date(arrival.confirmedAt).toLocaleString()
               : "—"}
           </p>
+          <p dir="rtl" lang="ar">
+            وقت التأكيد:{" "}
+            {arrival.confirmedAt
+              ? new Date(arrival.confirmedAt).toLocaleString()
+              : "—"}
+          </p>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {MARKETPLACE_LIST.map((marketplace) => (
+              <p key={marketplace.key}>
+                ✓ {marketplace.name} | {marketplace.arabic}
+              </p>
+            ))}
+          </div>
         </div>
       )}
     </article>
