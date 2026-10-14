@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
@@ -13,7 +12,7 @@ export async function GET() {
 
     const [products, marketplaceRecords] = await Promise.all([
       Product.find()
-        .select("_id sku name nameEn nameAr")
+        .select("_id sku name nameEn nameAr category")
         .sort({ createdAt: -1 })
         .lean(),
 
@@ -62,6 +61,10 @@ export async function GET() {
           "Unnamed product",
         nameEn: product.nameEn || "",
         nameAr: product.nameAr || "",
+        category:
+          typeof product.category === "string"
+            ? product.category
+            : "",
         marketplaces,
       };
     });
