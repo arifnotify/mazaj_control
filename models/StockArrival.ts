@@ -1,19 +1,26 @@
 import mongoose, { Schema, models, model } from "mongoose";
 
+const StockArrivalProductSchema = new Schema(
+  {
+    productId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+      ref: "Product",
+    },
+    sku: { type: String, required: true },
+    // Keep a default display name for compatibility with older UI/API code.
+    name: { type: String, required: true },
+    // Save both names so the arrival history can switch language.
+    nameEn: { type: String, default: "" },
+    nameAr: { type: String, default: "" },
+    image: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
 const StockArrivalSchema = new Schema(
   {
-    products: [
-      {
-        productId: {
-          type: Schema.Types.ObjectId,
-          required: true,
-          ref: "Product",
-        },
-        sku: { type: String, required: true },
-        name: { type: String, required: true },
-        image: { type: String, default: "" },
-      },
-    ],
+    products: { type: [StockArrivalProductSchema], default: [] },
 
     status: {
       type: String,
