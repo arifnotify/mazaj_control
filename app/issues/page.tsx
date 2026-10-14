@@ -52,6 +52,8 @@ type ProductInfo = {
 
   nameAr?: string;
 
+  category?: string | { name?: string; nameEn?: string; nameAr?: string } | null;
+
 };
 
 
@@ -222,6 +224,20 @@ function getProductSku(
 
 }
 
+function getCategoryName(
+
+  category: ProductInfo["category"]
+
+): string {
+
+  if (!category) return "Uncategorized";
+
+  if (typeof category === "string") return category.trim() || "Uncategorized";
+
+  return category.nameEn || category.name || category.nameAr || "Uncategorized";
+
+}
+
 
 
 function getEmployeeName(
@@ -376,6 +392,8 @@ export default function IssuesPage() {
 
   const [availabilityFilter, setAvailabilityFilter] = useState("all");
 
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
 
 
   const [error, setError] = useState("");
@@ -488,6 +506,16 @@ export default function IssuesPage() {
 
 
 
+  const productCategories = useMemo(() => {
+
+    const categories = products.map((product) => getCategoryName(product.category));
+
+    return Array.from(new Set(categories)).sort((a, b) => a.localeCompare(b));
+
+  }, [products]);
+
+
+
   const filteredProducts = useMemo(() => {
 
     const term = search.trim().toLowerCase();
@@ -507,6 +535,14 @@ export default function IssuesPage() {
         product.nameAr?.toLowerCase().includes(term) ||
 
         product.sku?.toLowerCase().includes(term);
+
+
+
+      const matchesCategory =
+
+        categoryFilter === "all" ||
+
+        getCategoryName(product.category) === categoryFilter;
 
 
 
@@ -584,6 +620,8 @@ export default function IssuesPage() {
 
         Boolean(matchesSearch) &&
 
+        matchesCategory &&
+
         matchesMarketplace &&
 
         matchesAvailability
@@ -597,6 +635,8 @@ export default function IssuesPage() {
     products,
 
     search,
+
+    categoryFilter,
 
     marketplaceFilter,
 
@@ -1068,7 +1108,7 @@ export default function IssuesPage() {
 
 
 
-        <div className="grid gap-3 border-b p-4 md:grid-cols-3">
+        <div className="grid gap-3 border-b p-4 md:grid-cols-2 xl:grid-cols-4">
 
           <input
 
@@ -1083,6 +1123,32 @@ export default function IssuesPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
 
           />
+
+
+
+          <select
+
+            value={categoryFilter}
+
+            onChange={(event) => setCategoryFilter(event.target.value)}
+
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+
+          >
+
+            <option value="all">All Categories</option>
+
+            {productCategories.map((category) => (
+
+              <option key={category} value={category}>
+
+                {category}
+
+              </option>
+
+            ))}
+
+          </select>
 
 
 
@@ -1229,6 +1295,12 @@ export default function IssuesPage() {
                         {getProductName(product)}
 
                       </Link>
+
+                      <p className="mt-1 text-xs text-gray-500">
+
+                        Category: {getCategoryName(product.category)}
+
+                      </p>
 
                     </td>
 
@@ -1771,4 +1843,5 @@ export default function IssuesPage() {
     </main>
 
   );
+
 }
