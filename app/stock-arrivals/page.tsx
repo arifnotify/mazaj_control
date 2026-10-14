@@ -1,642 +1,690 @@
+
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLanguage } from "@/app/components/LanguageProvider";
+import { useEffect, useMemo, useState } from "react";
 
-type Marketplace = "Talabat" | "Snoonu" | "Rafeeq" | "Keeta";
-
-type ArrivalProduct = {
-  _id?: string;
-  id?: string;
-  sku?: string;
-  name?: string;
-  nameEn?: string;
-  nameAr?: string;
-  englishName?: string;
-  arabicName?: string;
-  product?: {
-    _id?: string;
-    sku?: string;
-    name?: string;
-    nameEn?: string;
-    nameAr?: string;
-    englishName?: string;
-    arabicName?: string;
-  };
-};
-
-type StockArrival = {
+type Product = {
   _id: string;
-  id?: string;
-  status?: string;
-  arrivalNumber?: string;
-  reference?: string;
-  products?: ArrivalProduct[];
-  items?: ArrivalProduct[];
-  createdAt?: string;
+  sku: string;
+  name: string;
+  image?: string;
 };
 
 type Employee = {
   _id: string;
-  id?: string;
   name: string;
   active?: boolean;
 };
 
-const MARKETPLACES: Marketplace[] = [
-  "Talabat",
-  "Snoonu",
-  "Rafeeq",
-  "Keeta",
-];
-
-const MARKETPLACE_AR: Record<Marketplace, string> = {
-  Talabat: "طلبات",
-  Snoonu: "سنونو",
-  Rafeeq: "رفيق",
-  Keeta: "كيتا",
+type ArrivalProduct = {
+  productId: string;
+  sku: string;
+  name: string;
+  image?: string;
 };
 
-function getId(item: { _id?: string; id?: string }) {
-  return item._id || item.id || "";
+type Arrival = {
+  _id: string;
+  products: ArrivalProduct[];
+  status: "pending" | "completed";
+  confirmedByName?: string;
+  confirmedAt?: string;
+  createdAt: string;
+};
+
+type Marketplaces = {
+  talabat: boolean;
+  snoonu: boolean;
+  rafeeq: boolean;
+  keeta: boolean;
+};
+
+const INITIAL_MARKETPLACES: Marketplaces = {
+  talabat: false,
+  snoonu: false,
+  rafeeq: false,
+  keeta: false,
+};
+
+const MARKETPLACE_LIST = [
+  { key: "talabat", name: "Talabat", arabic: "طلبات" },
+  { key: "snoonu", name: "Snoonu", arabic: "سنونو" },
+  { key: "rafeeq", name: "Rafeeq", arabic: "رفيق" },
+  { key: "keeta", name: "Keeta", arabic: "كيتا" },
+] as const;
+
+function bilingual(english: string, arabic: string) {
+  return (
+    <>
+      <span>{english}</span>
+      <span className="mt-1 block text-sm font-normal" dir="rtl" lang="ar">
+        {arabic}
+      </span>
+    </>
+  );
 }
 
-function getList<T>(result: unknown, keys: string[]): T[] {
-  if (Array.isArray(result)) return result as T[];
-
-  if (result && typeof result === "object") {
-    const data = result as Record<string, unknown>;
-
-    for (const key of keys) {
-      if (Array.isArray(data[key])) {
-        return data[key] as T[];
-      }
-    }
-
-    if (data.data && Array.isArray(data.data)) {
-      return data.data as T[];
-    }
-  }
-
-  return [];
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 export default function StockArrivalsPage() {
-  const { isArabic } = useLanguage();
-
-  const [arrivals, setArrivals] = useState<StockArrival[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [arrivals, setArrivals] = useState<Arrival[]>([]);
 
-  const [selectedArrivalId, setSelectedArrivalId] = useState("");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [pin, setPin] = useState("");
-
-  const [checkedMarketplaces, setCheckedMarketplaces] = useState<
-    Record<Marketplace, boolean>
-  >({
-    Talabat: false,
-    Snoonu: false,
-    Rafeeq: false,
-    Keeta: false,
-  });
+  const [activeArrival, setActiveArrival] = useState("");
+  const [marketplaces, setMarketplaces] =
+    useState<Marketplaces>(INITIAL_MARKETPLACES);
 
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
-  const text = useMemo(
-    () => ({
-      title: isArabic ? "وصول المخزون" : "Stock Arrivals",
-      subtitle: isArabic
-        ? "تأكيد استلام المخزون والتحقق من الأسواق"
-        : "Confirm stock arrivals and verify marketplaces",
-      refresh: isArabic ? "تحديث" : "Refresh",
-      loading: isArabic ? "جاري التحميل..." : "Loading...",
-      selectArrival: isArabic
-        ? "اختر استلام المخزون"
-        : "Select Stock Arrival",
-      noArrivals: isArabic
-        ? "لا توجد عمليات استلام مخزون معلقة"
-        : "No pending stock arrivals found",
-      selectEmployee: isArabic ? "اختر الموظف" : "Select Employee",
-      noEmployees: isArabic
-        ? "لا يوجد موظفون نشطون"
-        : "No active employees found",
-      pin: isArabic
-        ? "رمز PIN المكون من 3 أرقام"
-        : "3-digit Employee PIN",
-      marketplaces: isArabic
-        ? "قائمة التحقق من الأسواق"
-        : "Marketplace Checklist",
-      products: isArabic ? "المنتجات" : "Products",
-      sku: isArabic ? "رمز المنتج" : "SKU",
-      productName: isArabic ? "اسم المنتج" : "Product Name",
-      noProducts: isArabic
-        ? "لا توجد منتجات في عملية الاستلام هذه"
-        : "No products listed in this arrival",
-      confirm: isArabic ? "تأكيد الاستلام" : "Confirm Arrival",
-      submitting: isArabic ? "جارٍ التأكيد..." : "Confirming...",
-      requiredArrival: isArabic
-        ? "يرجى اختيار عملية استلام المخزون"
-        : "Please select a stock arrival",
-      requiredEmployee: isArabic
-        ? "يرجى اختيار الموظف"
-        : "Please select an employee",
-      requiredPin: isArabic
-        ? "يرجى إدخال رمز PIN المكون من 3 أرقام"
-        : "Please enter a valid 3-digit PIN",
-      requiredMarketplaces: isArabic
-        ? "يرجى تحديد الأسواق الأربعة جميعها"
-        : "Please check all four marketplaces",
-      completed: isArabic
-        ? "تم تأكيد استلام المخزون بنجاح"
-        : "Stock arrival confirmed successfully",
-      loadError: isArabic
-        ? "تعذر تحميل البيانات"
-        : "Failed to load data",
-      confirmError: isArabic
-        ? "تعذر تأكيد استلام المخزون"
-        : "Failed to confirm stock arrival",
-      status: isArabic ? "الحالة" : "Status",
-      pending: isArabic ? "قيد الانتظار" : "Pending",
-      completedStatus: isArabic ? "مكتمل" : "Completed",
-      arrival: isArabic ? "استلام رقم" : "Arrival",
-    }),
-    [isArabic]
-  );
-
-  const loadData = useCallback(async () => {
+  async function loadData() {
     setLoading(true);
     setError("");
-    setSuccess("");
 
     try {
-      const [arrivalsResponse, employeesResponse] = await Promise.all([
+      const [stockRes, employeeRes] = await Promise.all([
         fetch("/api/stock-arrivals", { cache: "no-store" }),
         fetch("/api/employees/active", { cache: "no-store" }),
       ]);
 
-      if (!arrivalsResponse.ok) {
-        throw new Error(text.loadError);
+      const stockData = await stockRes.json();
+      const employeeData = await employeeRes.json();
+
+      if (!stockRes.ok || !stockData.success) {
+        throw new Error(
+          stockData.message ||
+            "Failed to load stock arrivals | فشل تحميل وصول المخزون"
+        );
       }
 
-      if (!employeesResponse.ok) {
-        throw new Error(text.loadError);
+      if (!employeeRes.ok || !employeeData.success) {
+        throw new Error(
+          employeeData.message ||
+            "Failed to load employees | فشل تحميل الموظفين"
+        );
       }
 
-      const arrivalsResult = await arrivalsResponse.json();
-      const employeesResult = await employeesResponse.json();
+      setProducts(stockData.products || []);
+      setArrivals(stockData.arrivals || []);
 
-      const arrivalsList = getList<StockArrival>(arrivalsResult, [
-        "arrivals",
-        "stockArrivals",
-        "items",
-      ]);
+      const employeeList: Employee[] = employeeData.employees || [];
 
-      const employeesList = getList<Employee>(employeesResult, [
-        "employees",
-        "items",
-      ]);
-
-      setArrivals(arrivalsList);
       setEmployees(
-        employeesList.filter((employee) => employee.active !== false)
+        employeeList.filter((employee) => employee.active !== false)
       );
-
-      setSelectedArrivalId((current) =>
-        arrivalsList.some((arrival) => getId(arrival) === current)
-          ? current
-          : ""
+    } catch (err: unknown) {
+      setError(
+        getErrorMessage(
+          err,
+          "Failed to load data | فشل تحميل البيانات"
+        )
       );
-
-      setSelectedEmployeeId((current) =>
-        employeesList.some((employee) => getId(employee) === current)
-          ? current
-          : ""
-      );
-    } catch (err) {
-      console.error("Stock arrivals loading error:", err);
-      setError(err instanceof Error ? err.message : text.loadError);
     } finally {
       setLoading(false);
     }
-  }, [text.loadError]);
+  }
 
   useEffect(() => {
     void loadData();
-  }, [loadData]);
+  }, []);
 
-  const selectedArrival = arrivals.find(
-    (arrival) => getId(arrival) === selectedArrivalId
+  const filteredProducts = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) return products;
+
+    return products.filter(
+      (product) =>
+        (product.name || "").toLowerCase().includes(term) ||
+        (product.sku || "").toLowerCase().includes(term)
+    );
+  }, [products, search]);
+
+  const pending = arrivals.filter(
+    (arrival) => arrival.status === "pending"
   );
 
-  const arrivalProducts =
-    selectedArrival?.products ?? selectedArrival?.items ?? [];
-
-  const allMarketplacesChecked = MARKETPLACES.every(
-    (marketplace) => checkedMarketplaces[marketplace]
+  const completed = arrivals.filter(
+    (arrival) => arrival.status === "completed"
   );
 
-  function toggleMarketplace(marketplace: Marketplace) {
-    setCheckedMarketplaces((current) => ({
-      ...current,
-      [marketplace]: !current[marketplace],
-    }));
-  }
-
-  function getProductName(product: ArrivalProduct) {
-    const item = product.product ?? product;
-
-    if (isArabic) {
-      return (
-        item.arabicName ||
-        item.nameAr ||
-        item.name ||
-        item.englishName ||
-        item.nameEn ||
-        "—"
-      );
-    }
-
-    return (
-      item.englishName ||
-      item.nameEn ||
-      item.name ||
-      item.arabicName ||
-      item.nameAr ||
-      "—"
+  function toggleProduct(id: string) {
+    setSelected((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
     );
   }
 
-  function getProductSku(product: ArrivalProduct) {
-    return product.product?.sku || product.sku || "—";
+  function toggleMarketplace(key: keyof Marketplaces, checked: boolean) {
+    setMarketplaces((current) => ({
+      ...current,
+      [key]: checked,
+    }));
   }
 
-  async function handleConfirm() {
+  async function createArrival() {
     setError("");
-    setSuccess("");
+    setMessage("");
 
-    if (!selectedArrivalId) {
-      setError(text.requiredArrival);
+    if (selected.length === 0) {
+      setError(
+        "Please select at least one product. | يرجى اختيار منتج واحد على الأقل."
+      );
       return;
     }
 
-    if (!selectedEmployeeId) {
-      setError(text.requiredEmployee);
+    setSaving(true);
+
+    try {
+      const res = await fetch("/api/stock-arrivals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productIds: selected }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(
+          data.message ||
+            "Could not create stock arrival | تعذر إنشاء وصول المخزون"
+        );
+      }
+
+      setMessage(
+        "Stock arrival created successfully. | تم إنشاء وصول المخزون بنجاح."
+      );
+      setSelected([]);
+      setSearch("");
+
+      await loadData();
+    } catch (err: unknown) {
+      setError(
+        getErrorMessage(
+          err,
+          "Failed to create stock arrival | فشل إنشاء وصول المخزون"
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmArrival() {
+    setError("");
+    setMessage("");
+
+    if (!activeArrival) {
+      setError(
+        "Please select a pending stock arrival. | يرجى اختيار وصول مخزون قيد الانتظار."
+      );
+      return;
+    }
+
+    if (!employeeId) {
+      setError(
+        "Please select your employee account. | يرجى اختيار حساب الموظف الخاص بك."
+      );
       return;
     }
 
     if (!/^\d{3}$/.test(pin)) {
-      setError(text.requiredPin);
+      setError(
+        "Please enter your 3-digit PIN. | يرجى إدخال رمز PIN المكون من 3 أرقام."
+      );
       return;
     }
 
-    if (!allMarketplacesChecked) {
-      setError(text.requiredMarketplaces);
+    if (!Object.values(marketplaces).every(Boolean)) {
+      setError(
+        "Confirm all four marketplaces before submitting. | يرجى تأكيد جميع منصات البيع الأربع قبل الإرسال."
+      );
       return;
     }
 
-    setSubmitting(true);
+    setSaving(true);
 
     try {
-      const response = await fetch("/api/stock-arrivals/confirm", {
+      const res = await fetch("/api/stock-arrivals/confirm", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          arrivalId: selectedArrivalId,
-          employeeId: selectedEmployeeId,
+          arrivalId: activeArrival,
+          employeeId,
           pin,
-          marketplaces: checkedMarketplaces,
+          marketplaces,
         }),
       });
 
-      const result = await response.json().catch(() => ({}));
+      const data = await res.json();
 
-      if (!response.ok) {
+      if (!res.ok || !data.success) {
         throw new Error(
-          result.error ||
-            result.message ||
-            text.confirmError
+          data.message ||
+            "Confirmation failed | فشل التأكيد"
         );
       }
 
-      setSuccess(result.message || text.completed);
+      setMessage(
+        "All four marketplaces confirmed successfully. | تم تأكيد منصات البيع الأربع بنجاح."
+      );
+
       setPin("");
-      setCheckedMarketplaces({
-        Talabat: false,
-        Snoonu: false,
-        Rafeeq: false,
-        Keeta: false,
-      });
+      setEmployeeId("");
+      setActiveArrival("");
+      setMarketplaces(INITIAL_MARKETPLACES);
 
       await loadData();
-    } catch (err) {
-      console.error("Stock arrival confirmation error:", err);
+    } catch (err: unknown) {
       setError(
-        err instanceof Error ? err.message : text.confirmError
+        getErrorMessage(err, "Confirmation failed | فشل التأكيد")
       );
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   }
 
+  const inputClass =
+    "w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+
+  const cardClass =
+    "rounded-xl border border-gray-200 bg-white p-4 md:p-6";
+
   return (
-    <main
-      dir={isArabic ? "rtl" : "ltr"}
-      className="min-h-screen bg-gray-50 p-4 sm:p-6"
-    >
-      <div className="mx-auto max-w-5xl">
-        {/* Header */}
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-              {text.title}
-            </h1>
+    <main className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
+      <header>
+        <h1 className="text-3xl font-bold">
+          Stock Arrivals | وصول المخزون
+        </h1>
+        <p className="mt-2 text-sm text-gray-500">
+          Select newly arrived products and record marketplace activation.
+        </p>
+        <p className="mt-1 text-sm text-gray-500" dir="rtl" lang="ar">
+          اختر المنتجات التي وصلت حديثًا وسجّل تأكيد تفعيلها على منصات البيع.
+        </p>
+      </header>
 
-            <p className="mt-2 text-sm text-gray-500">
-              {text.subtitle}
-            </p>
-          </div>
+      {error && (
+        <div
+          role="alert"
+          className="whitespace-pre-line rounded-lg border border-red-300 bg-red-50 p-3 text-red-700"
+        >
+          {error}
+        </div>
+      )}
 
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            disabled={loading || submitting}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {text.refresh}
-          </button>
+      {message && (
+        <div
+          role="status"
+          className="whitespace-pre-line rounded-lg border border-green-300 bg-green-50 p-3 text-green-800"
+        >
+          {message}
+        </div>
+      )}
+
+      {/* Select products */}
+      <section className={cardClass}>
+        <h2 className="mb-4 text-xl font-semibold">
+          {bilingual(
+            "1. Select Products Back in Stock",
+            "١. اختر المنتجات التي عادت إلى المخزون"
+          )}
+        </h2>
+
+        <label className="mb-2 block text-sm font-medium">
+          Search by product name or SKU | ابحث باسم المنتج أو رمز SKU
+        </label>
+
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search products... | ابحث عن المنتجات..."
+          className={`${inputClass} mb-4`}
+        />
+
+        <div className="mb-3 text-sm text-gray-500">
+          Selected: {selected.length} | المحدد: {selected.length}
         </div>
 
-        {/* Error */}
-        {error && (
-          <div
-            role="alert"
-            className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-          >
-            {error}
-          </div>
-        )}
-
-        {/* Success */}
-        {success && (
-          <div
-            role="status"
-            className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700"
-          >
-            {success}
-          </div>
-        )}
-
         {loading ? (
-          <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500">
-            {text.loading}
-          </div>
+          <p>
+            Loading products... | جارٍ تحميل المنتجات...
+          </p>
         ) : (
-          <div className="space-y-6">
-            {/* Select stock arrival */}
-            <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">
-                {text.selectArrival}
-              </h2>
-
-              {arrivals.length === 0 ? (
-                <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">
-                  {text.noArrivals}
-                </p>
-              ) : (
-                <select
-                  value={selectedArrivalId}
-                  onChange={(event) => {
-                    setSelectedArrivalId(event.target.value);
-                    setError("");
-                    setSuccess("");
-                  }}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-                >
-                  <option value="">{text.selectArrival}</option>
-
-                  {arrivals.map((arrival) => {
-                    const id = getId(arrival);
-                    const label =
-                      arrival.arrivalNumber ||
-                      arrival.reference ||
-                      id;
-
-                    return (
-                      <option key={id} value={id}>
-                        {text.arrival} {label}
-                      </option>
-                    );
-                  })}
-                </select>
-              )}
-
-              {selectedArrival && (
-                <div className="mt-5">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-semibold text-gray-800">
-                      {text.products}
-                    </h3>
-
-                    <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
-                      {text.status}: {text.pending}
-                    </span>
-                  </div>
-
-                  {arrivalProducts.length === 0 ? (
-                    <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">
-                      {text.noProducts}
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-lg border border-gray-200">
-                      <table className="w-full min-w-[300px] text-sm">
-                        <thead className="bg-gray-50 text-gray-600">
-                          <tr>
-                            <th className="px-4 py-3 text-start font-medium">
-                              {text.productName}
-                            </th>
-                            <th className="px-4 py-3 text-start font-medium">
-                              {text.sku}
-                            </th>
-                          </tr>
-                        </thead>
-
-                        <tbody className="divide-y divide-gray-100">
-                          {arrivalProducts.map((product, index) => (
-                            <tr
-                              key={
-                                product._id ||
-                                product.id ||
-                                `${getProductSku(product)}-${index}`
-                              }
-                            >
-                              <td className="px-4 py-3 text-gray-900">
-                                {getProductName(product)}
-                              </td>
-
-                              <td className="px-4 py-3 text-gray-600">
-                                {getProductSku(product)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
-
-            {/* Employee and PIN */}
-            <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">
-                {text.selectEmployee}
-              </h2>
-
-              {employees.length === 0 ? (
-                <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">
-                  {text.noEmployees}
-                </p>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="employee"
-                      className="mb-2 block text-sm font-medium text-gray-700"
-                    >
-                      {text.selectEmployee}
-                    </label>
-
-                    <select
-                      id="employee"
-                      value={selectedEmployeeId}
-                      onChange={(event) =>
-                        setSelectedEmployeeId(event.target.value)
-                      }
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-                    >
-                      <option value="">{text.selectEmployee}</option>
-
-                      {employees.map((employee) => (
-                        <option
-                          key={getId(employee)}
-                          value={getId(employee)}
-                        >
-                          {employee.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="employee-pin"
-                      className="mb-2 block text-sm font-medium text-gray-700"
-                    >
-                      {text.pin}
-                    </label>
-
-                    <input
-                      id="employee-pin"
-                      type="password"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      maxLength={3}
-                      pattern="[0-9]{3}"
-                      value={pin}
-                      onChange={(event) => {
-                        const value = event.target.value.replace(
-                          /\D/g,
-                          ""
-                        );
-                        setPin(value.slice(0, 3));
-                      }}
-                      placeholder="•••"
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm tracking-[0.4em] outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-                    />
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {/* Marketplace checklist */}
-            <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-2 text-lg font-semibold text-gray-900">
-                {text.marketplaces}
-              </h2>
-
-              <p className="mb-5 text-sm text-gray-500">
-                {isArabic
-                  ? "حدد جميع الأسواق الأربعة قبل تأكيد الاستلام."
-                  : "Check all four marketplaces before confirming the arrival."}
-              </p>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {MARKETPLACES.map((marketplace) => (
-                  <label
-                    key={marketplace}
-                    className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition ${
-                      checkedMarketplaces[marketplace]
-                        ? "border-green-300 bg-green-50"
-                        : "border-gray-200 bg-white hover:bg-gray-50"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checkedMarketplaces[marketplace]}
-                      onChange={() => toggleMarketplace(marketplace)}
-                      className="h-5 w-5 rounded border-gray-300 accent-green-600"
-                    />
-
-                    <span className="font-medium text-gray-800">
-                      {isArabic
-                        ? MARKETPLACE_AR[marketplace]
-                        : marketplace}
-                    </span>
-
-                    <span
-                      className={`ms-auto rounded-full px-2 py-1 text-xs ${
-                        checkedMarketplaces[marketplace]
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {checkedMarketplaces[marketplace]
-                        ? isArabic
-                          ? "تم"
-                          : "Checked"
-                        : isArabic
-                          ? "مطلوب"
-                          : "Required"}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </section>
-
-            {/* Submit */}
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => void handleConfirm()}
-                disabled={
-                  submitting ||
-                  loading ||
-                  arrivals.length === 0 ||
-                  employees.length === 0
-                }
-                className="w-full rounded-lg bg-gray-900 px-6 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          <div className="max-h-[480px] space-y-2 overflow-y-auto">
+            {filteredProducts.map((product) => (
+              <label
+                key={product._id}
+                className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-gray-50"
               >
-                {submitting ? text.submitting : text.confirm}
-              </button>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(product._id)}
+                  onChange={() => toggleProduct(product._id)}
+                  className="h-4 w-4 shrink-0"
+                />
+
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="h-14 w-14 rounded-md border object-cover"
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-gray-100 text-xs text-gray-400">
+                    No image
+                    <span className="sr-only"> | لا توجد صورة</span>
+                  </div>
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{product.name}</p>
+                  <p className="text-sm text-gray-500">
+                    SKU: {product.sku}
+                  </p>
+                </div>
+              </label>
+            ))}
+
+            {filteredProducts.length === 0 && (
+              <p className="p-4 text-gray-500">
+                No products found. | لم يتم العثور على منتجات.
+              </p>
+            )}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={createArrival}
+          disabled={saving || loading || selected.length === 0}
+          className="mt-4 rounded-lg bg-black px-5 py-3 text-white disabled:opacity-50"
+        >
+          {saving
+            ? "Saving... | جارٍ الحفظ..."
+            : "Create Stock Arrival | إنشاء وصول مخزون"}
+        </button>
+      </section>
+
+      {/* Confirm marketplace activation */}
+      <section className={cardClass}>
+        <h2 className="mb-4 text-xl font-semibold">
+          {bilingual(
+            "2. Confirm Marketplace Activation",
+            "٢. تأكيد تفعيل المنتجات على منصات البيع"
+          )}
+        </h2>
+
+        <label className="mb-2 block text-sm font-medium">
+          Pending stock arrival | وصول المخزون قيد الانتظار
+        </label>
+
+        <select
+          value={activeArrival}
+          onChange={(event) => setActiveArrival(event.target.value)}
+          className={`${inputClass} mb-4`}
+        >
+          <option value="">
+            Select stock arrival | اختر وصول المخزون
+          </option>
+
+          {pending.map((arrival) => (
+            <option key={arrival._id} value={arrival._id}>
+              {new Date(arrival.createdAt).toLocaleString()} —{" "}
+              {arrival.products.length} product(s) | منتج
+            </option>
+          ))}
+        </select>
+
+        <p className="mb-3 text-sm text-gray-600">
+          Check all four marketplaces after verifying that the products are
+          active in each app.
+        </p>
+        <p className="mb-4 text-sm text-gray-600" dir="rtl" lang="ar">
+          ضع علامة على منصات البيع الأربع بعد التأكد من أن المنتجات مفعّلة في
+          كل تطبيق.
+        </p>
+
+        <div className="mb-5 grid gap-3 sm:grid-cols-2">
+          {MARKETPLACE_LIST.map(({ key, name, arabic }) => (
+            <label
+              key={key}
+              className="flex cursor-pointer items-center gap-3 rounded-lg border p-3"
+            >
+              <input
+                type="checkbox"
+                checked={marketplaces[key]}
+                onChange={(event) =>
+                  toggleMarketplace(key, event.target.checked)
+                }
+                className="h-4 w-4"
+              />
+
+              <span>
+                <span className="block font-medium">
+                  {name} — Products are active
+                </span>
+                <span
+                  className="mt-1 block text-sm text-gray-500"
+                  dir="rtl"
+                  lang="ar"
+                >
+                  {arabic} — المنتجات مفعّلة
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <label className="mb-2 block text-sm font-medium">
+          Your employee account | حساب الموظف الخاص بك
+        </label>
+
+        <select
+          value={employeeId}
+          onChange={(event) => setEmployeeId(event.target.value)}
+          className={`${inputClass} mb-4`}
+          disabled={loading || employees.length === 0}
+        >
+          <option value="">
+            {loading
+              ? "Loading employees... | جارٍ تحميل الموظفين..."
+              : employees.length === 0
+                ? "No active employees found | لا يوجد موظفون نشطون"
+                : "Select your name | اختر اسمك"}
+          </option>
+
+          {employees.map((employee) => (
+            <option key={employee._id} value={employee._id}>
+              {employee.name}
+            </option>
+          ))}
+        </select>
+
+        {!loading && employees.length === 0 && (
+          <p className="mb-4 text-sm text-amber-700">
+            No active employees were returned. Check that employees exist and
+            have active set to true.
+            <span className="mt-1 block" dir="rtl" lang="ar">
+              لم يتم العثور على موظفين نشطين. تأكد من وجود الموظفين وأن حالة
+              active مضبوطة على true.
+            </span>
+          </p>
+        )}
+
+        <label className="mb-2 block text-sm font-medium">
+          Your 3-digit PIN | رمز PIN الخاص بك (٣ أرقام)
+        </label>
+
+        <input
+          type="password"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={3}
+          value={pin}
+          onChange={(event) =>
+            setPin(event.target.value.replace(/\D/g, "").slice(0, 3))
+          }
+          placeholder="Enter your 3-digit PIN | أدخل رمز PIN المكون من 3 أرقام"
+          className={`${inputClass} mb-4`}
+        />
+
+        <button
+          type="button"
+          onClick={confirmArrival}
+          disabled={saving || !activeArrival || loading}
+          className="rounded-lg bg-green-700 px-5 py-3 text-white disabled:opacity-50"
+        >
+          {saving
+            ? "Verifying... | جارٍ التحقق..."
+            : "Verify PIN & Complete All Four | تحقق وأكمل المنصات الأربع"}
+        </button>
+
+        <p className="mt-3 text-xs text-gray-500">
+          Confirm only after checking all four marketplace apps. This records
+          your confirmation; it does not activate products in external apps
+          automatically.
+        </p>
+        <p className="mt-2 text-xs text-gray-500" dir="rtl" lang="ar">
+          أكّد فقط بعد التحقق من التطبيقات الأربعة. يسجّل هذا الإجراء تأكيدك
+          ولا يفعّل المنتجات تلقائيًا في التطبيقات الخارجية.
+        </p>
+      </section>
+
+      {/* Pending arrivals */}
+      <section className={cardClass}>
+        <h2 className="mb-4 text-xl font-semibold">
+          Pending Arrivals ({pending.length}) | وصول المخزون قيد الانتظار (
+          {pending.length})
+        </h2>
+
+        {pending.length === 0 ? (
+          <p className="text-gray-500">
+            No pending arrivals. | لا توجد عمليات وصول معلّقة.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {pending.map((arrival) => (
+              <ArrivalCard key={arrival._id} arrival={arrival} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Completed arrivals */}
+      <section className={cardClass}>
+        <h2 className="mb-4 text-xl font-semibold">
+          Completed Arrivals ({completed.length}) | عمليات الوصول المكتملة (
+          {completed.length})
+        </h2>
+
+        {completed.length === 0 ? (
+          <p className="text-gray-500">
+            No completed arrivals yet. | لا توجد عمليات وصول مكتملة حتى الآن.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {completed.map((arrival) => (
+              <ArrivalCard key={arrival._id} arrival={arrival} />
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function ArrivalCard({ arrival }: { arrival: Arrival }) {
+  const isCompleted = arrival.status === "completed";
+
+  return (
+    <article className="rounded-lg border p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm text-gray-500">
+          Created: {new Date(arrival.createdAt).toLocaleString()}
+          <span className="mt-1 block" dir="rtl" lang="ar">
+            تاريخ الإنشاء: {new Date(arrival.createdAt).toLocaleString()}
+          </span>
+        </span>
+
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            isCompleted
+              ? "bg-green-100 text-green-800"
+              : "bg-yellow-100 text-yellow-800"
+          }`}
+        >
+          {isCompleted
+            ? "COMPLETED | مكتمل"
+            : "PENDING | قيد الانتظار"}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {arrival.products.map((product, index) => (
+          <div
+            key={`${product.productId}-${index}`}
+            className="flex items-center gap-3"
+          >
+            {product.image ? (
+              <img
+                src={product.image}
+                alt={product.name}
+                className="h-12 w-12 rounded border object-cover"
+              />
+            ) : (
+              <div className="h-12 w-12 rounded bg-gray-100" />
+            )}
+
+            <div className="min-w-0">
+              <p className="font-medium">{product.name}</p>
+              <p className="text-sm text-gray-500">SKU: {product.sku}</p>
             </div>
           </div>
-        )}
+        ))}
       </div>
-    </main>
+
+      {isCompleted && (
+        <div className="mt-4 border-t pt-3 text-sm text-gray-600">
+          <p>
+            Confirmed by: {arrival.confirmedByName || "Employee"}
+          </p>
+          <p dir="rtl" lang="ar">
+            تم التأكيد بواسطة: {arrival.confirmedByName || "الموظف"}
+          </p>
+
+          <p className="mt-2">
+            Confirmed at:{" "}
+            {arrival.confirmedAt
+              ? new Date(arrival.confirmedAt).toLocaleString()
+              : "—"}
+          </p>
+          <p dir="rtl" lang="ar">
+            وقت التأكيد:{" "}
+            {arrival.confirmedAt
+              ? new Date(arrival.confirmedAt).toLocaleString()
+              : "—"}
+          </p>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {MARKETPLACE_LIST.map((marketplace) => (
+              <p key={marketplace.key}>
+                ✓ {marketplace.name} | {marketplace.arabic}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </article>
   );
 }
