@@ -1,121 +1,276 @@
-import { NextResponse } from "next/server";
-import { isValidObjectId } from "mongoose";
+import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
+
 import { connectDB } from "@/lib/mongodb";
+import { verifyEmployeePin } from "@/lib/employeePin";
+
 import Product from "@/models/Product";
 import Employee from "@/models/Employee";
 
-const units = ["g", "kg", "pcs", "ml", "L"];
-const nonnegative = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
-const validStock = (v: unknown) => nonnegative(v) && Number.isInteger(v);
-const error = (message: string, status = 400) => NextResponse.json({ error: message }, { status });
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
 
-type Context = { params: Promise<{ id: string }> };
+function errorResponse(message: string, status = 400) {
+  return NextResponse.json({ success: false, message }, { status });
+}
 
-export async function GET(_request: Request, context: Context) {
+function isValidObjectId(id: string) {
+  return mongoose.Types.ObjectId.isValid(id);
+}
+
+/**
+ * GET /api/products/[id]
+ * Get one product.
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: RouteContext
+) {
   try {
-    const { id } = await context.params;
-    if (!isValidObjectId(id)) return error("Invalid product ID");
     await connectDB();
+
+    const { id } = await params;
+
+    if (!isValidObjectId(id)) {
+      return errorResponse("Invalid product ID", 400);
+    }
+
     const product = await Product.findById(id).lean();
-    if (!product) return error("Product not found", 404);
-    return NextResponse.json(product);
-  } catch (e) {
-    console.error("Product GET error", e);
-    return error("Failed to load product", 500);
+
+    if (!product) {
+      return errorResponse("Product not found", 404);
+    }
+
+    return NextResponse.json({
+      success: true,
+      product,
+    });
+  } catch (error) {
+    console.error("GET product error:", error);
+
+    return errorResponse("Failed to load product", 500);
   }
 }
 
-export async function PUT(request: Request, context: Context) {
+/**
+ * PUT /api/products/[id]
+ * Update a product.
+ *
+ * If active status changes, employee ID and employee PIN are required.
+ * The employee PIN is checked against the stored PIN hash.
+ */
+export async function PUT(
+  request: NextRequest,
+  { params }: RouteContext
+) {
   try {
-    const { id } = await context.params;
-    if (!isValidObjectId(id)) return error("Invalid product ID");
+    await connectDB();
+
+    const { id } = await params;
+
+    if (!isValidObjectId(id)) {
+      return errorResponse("Invalid product ID", 400);
+    }
+
     const body = await request.json();
-    if (!body || typeof body !== "object" || Array.isArray(body)) return error("Invalid request body");
 
-    const update: Record<string, unknown> = {};
-    const strings = ["sku", "nameEn", "nameAr", "descriptionEn", "descriptionAr", "image", "categoryEn", "categoryAr"];
-    for (const key of strings) {
-      if (body[key] !== undefined) {
-        if (typeof body[key] !== "string") return error(`Invalid ${key}`);
-        update[key] = body[key].trim();
-      }
-    }
-    for (const key of ["sku", "nameEn", "nameAr"]) {
-      if (update[key] === "") return error(`${key} cannot be empty`);
-    }
-    if (body.stock !== undefined) {
-      if (!validStock(body.stock)) return error("Stock must be a nonnegative whole number");
-      update.stock = body.stock;
-    }
-    if (body.active !== undefined) {
-      if (typeof body.active !== "boolean") return error("Invalid product status");
-      update.active = body.active;
-    }
-    if (body.price !== undefined) {
-      if (!nonnegative(body.price)) return error("Invalid price");
-      update.price = body.price;
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return errorResponse("Product not found", 404);
     }
 
-    if (body.productType !== undefined) {
-      if (body.productType !== "single" && body.productType !== "multiple") return error("Invalid product type");
-      update.productType = body.productType;
-      if (body.productType === "single") {
-        if (body.singleWeight !== null && body.singleWeight !== undefined && (typeof body.singleWeight !== "number" || !Number.isFinite(body.singleWeight) || body.singleWeight <= 0)) return error("Invalid single weight");
-        if (body.singleWeight != null && !units.includes(body.singleUnit)) return error("Invalid single weight unit");
-        update.singleWeight = body.singleWeight ?? null;
-        update.singleUnit = body.singleWeight == null ? null : body.singleUnit;
-        update.variants = [];
-      } else {
-        if (!Array.isArray(body.variants) || !body.variants.length) return error("Add at least one weight option");
-        const variants = body.variants.map((v: { weight: number; unit: string; price: number }) => ({ weight: v?.weight, unit: v?.unit, price: v?.price }));
-        if (variants.some((v: { weight: number; unit: string; price: number }) => typeof v.weight !== "number" || !Number.isFinite(v.weight) || v.weight <= 0 || !units.includes(v.unit) || !nonnegative(v.price))) return error("Invalid weight options");
-        const keys = variants.map((v: { weight: number; unit: string }) => `${v.unit === "kg" ? "g" : v.unit === "L" ? "ml" : v.unit}:${Math.round(v.weight * (v.unit === "kg" || v.unit === "L" ? 1000 : 1) * 1e6)}`);
-        if (new Set(keys).size !== keys.length) return error("Duplicate weight options");
-        update.variants = variants;
-        update.singleWeight = null;
-        update.singleUnit = null;
-        update.price = Math.min(...variants.map((v: { price: number }) => v.price));
+    // Only update fields that are explicitly provided.
+    const allowedFields = [
+      "sku",
+      "name",
+      "nameEn",
+      "nameAr",
+      "nameBn",
+      "description",
+      "descriptionEn",
+      "descriptionAr",
+      "descriptionBn",
+      "image",
+      "category",
+      "categoryEn",
+      "categoryAr",
+      "categoryBn",
+      "price",
+      "stock",
+      "productType",
+      "weights",
+      "variants",
+    ] as const;
+
+    for (const field of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        (product as any)[field] = body[field];
       }
     }
 
-    await connectDB();
-    const existing = await Product.findById(id);
-    if (!existing) return error("Product not found", 404);
-
-    // Only status changes require an employee selection.
-    const statusChanged = body.active !== undefined && body.active !== existing.active;
-    const push: Record<string, unknown> = {};
-    if (statusChanged) {
-      if (!isValidObjectId(body.statusEmployeeId)) return error("Select a valid employee to change product status");
-      const employee = await Employee.findOne({ _id: body.statusEmployeeId, active: { $ne: false } }).lean();
-      if (!employee || !employee.name?.trim()) return error("Employee not found or inactive", 400);
-      const changedAt = new Date();
-      update.lastStatusChangedById = employee._id;
-      update.lastStatusChangedByName = employee.name.trim();
-      update.lastStatusChangedAt = changedAt;
-      push.statusHistory = { active: body.active, employeeId: employee._id, employeeName: employee.name.trim(), changedAt };
+    // Validate fields if supplied.
+    if (
+      body.sku !== undefined &&
+      (typeof body.sku !== "string" || !body.sku.trim())
+    ) {
+      return errorResponse("SKU is required", 400);
     }
-    const operation = Object.keys(push).length ? { $set: update, $push: push } : { $set: update };
-    const product = await Product.findByIdAndUpdate(id, operation, { new: true, runValidators: true });
-    if (!product) return error("Product not found", 404);
-    return NextResponse.json(product);
-  } catch (e: unknown) {
-    console.error("Product PUT error", e);
-    if (typeof e === "object" && e !== null && "code" in e && e.code === 11000) return error("SKU already exists", 409);
-    return error("Failed to update product", 500);
+
+    if (
+      body.price !== undefined &&
+      (!Number.isFinite(Number(body.price)) || Number(body.price) < 0)
+    ) {
+      return errorResponse("Price must be a valid non-negative number", 400);
+    }
+
+    if (
+      body.stock !== undefined &&
+      (!Number.isFinite(Number(body.stock)) || Number(body.stock) < 0)
+    ) {
+      return errorResponse("Stock must be a valid non-negative number", 400);
+    }
+
+    /*
+     * Status change verification.
+     *
+     * The frontend should send:
+     * {
+     *   "active": false,
+     *   "statusEmployeeId": "...",
+     *   "employeePin": "007"
+     * }
+     */
+    const changingStatus =
+      typeof body.active === "boolean" && body.active !== product.active;
+
+    if (changingStatus) {
+      const employeeId =
+        typeof body.statusEmployeeId === "string"
+          ? body.statusEmployeeId.trim()
+          : "";
+
+      // Keep PIN as a string so leading zeros are preserved.
+      const employeePin =
+        typeof body.employeePin === "string" ? body.employeePin : "";
+
+      if (!employeeId || !isValidObjectId(employeeId)) {
+        return errorResponse("Please select a valid employee", 400);
+      }
+
+      if (!/^\d{3}$/.test(employeePin)) {
+        return errorResponse(
+          "Employee PIN must contain exactly 3 digits",
+          400
+        );
+      }
+
+      // Explicitly select pinHash if the Employee schema uses select: false.
+      const employee = await Employee.findOne({
+        _id: employeeId,
+        active: { $ne: false },
+      }).select("+pinHash");
+
+      if (!employee || !employee.name?.trim()) {
+        return errorResponse("Employee not found or inactive", 400);
+      }
+
+      if (typeof employee.pinHash !== "string" || !employee.pinHash) {
+        return errorResponse(
+          "This employee does not have a PIN configured. Please contact the admin.",
+          400
+        );
+      }
+
+      // IMPORTANT: argument order is PIN first, stored hash second.
+      const pinIsValid = await verifyEmployeePin(
+        employeePin,
+        employee.pinHash
+      );
+
+      if (!pinIsValid) {
+        return errorResponse("Incorrect employee PIN", 401);
+      }
+
+      // PIN verified: record the status change.
+      product.active = body.active;
+
+      (product as any).lastStatusChangedById = employee._id;
+      (product as any).lastStatusChangedByName = employee.name;
+      (product as any).lastStatusChangedAt = new Date();
+
+      const statusHistory = Array.isArray((product as any).statusHistory)
+        ? (product as any).statusHistory
+        : [];
+
+      statusHistory.push({
+        active: body.active,
+        employeeId: employee._id,
+        employeeName: employee.name,
+        changedAt: new Date(),
+      });
+
+      (product as any).statusHistory = statusHistory;
+    } else if (typeof body.active === "boolean") {
+      // Status was supplied but did not change.
+      product.active = body.active;
+    }
+
+    await product.save();
+
+    return NextResponse.json({
+      success: true,
+      message: "Product updated successfully",
+      product,
+    });
+  } catch (error: any) {
+    console.error("PUT product error:", error);
+
+    if (error?.code === 11000) {
+      return errorResponse("This SKU already exists", 409);
+    }
+
+    if (error?.name === "ValidationError") {
+      return errorResponse(error.message, 400);
+    }
+
+    return errorResponse("Failed to update product", 500);
   }
 }
 
-export async function DELETE(_request: Request, context: Context) {
+/**
+ * DELETE /api/products/[id]
+ * Delete one product.
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: RouteContext
+) {
   try {
-    const { id } = await context.params;
-    if (!isValidObjectId(id)) return error("Invalid product ID");
     await connectDB();
-    const deleted = await Product.findByIdAndDelete(id);
-    if (!deleted) return error("Product not found", 404);
-    return NextResponse.json({ success: true });
-  } catch (e) {
-    console.error("Product DELETE error", e);
-    return error("Failed to delete product", 500);
+
+    const { id } = await params;
+
+    if (!isValidObjectId(id)) {
+      return errorResponse("Invalid product ID", 400);
+    }
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return errorResponse("Product not found", 404);
+    }
+
+    await Product.findByIdAndDelete(id);
+
+    return NextResponse.json({
+      success: true,
+      message: "Product deleted successfully",
+    });
+  } catch (error) {
+    console.error("DELETE product error:", error);
+
+    return errorResponse("Failed to delete product", 500);
   }
 }
