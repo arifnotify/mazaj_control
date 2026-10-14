@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 
 import { connectDB } from "@/lib/mongodb";
 import Employee from "@/models/Employee";
 import StockArrival from "@/models/StockArrival";
+import { verifyEmployeePin } from "@/lib/employeePin";
+
+export const runtime = "nodejs";
+
+const REQUIRED_MARKETPLACES = [
+  "talabat",
+  "snoonu",
+  "rafeeq",
+  "keeta",
+] as const;
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,77 +22,89 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { arrivalId, employeeId, pin, marketplaces } = body;
 
+    // Validate IDs and the 3-digit PIN.
     if (
       !mongoose.isValidObjectId(arrivalId) ||
       !mongoose.isValidObjectId(employeeId) ||
       typeof pin !== "string" ||
-      !pin.trim()
+      !/^\d{3}$/.test(pin)
     ) {
       return NextResponse.json(
-        { success: false, message: "Invalid confirmation details" },
+        {
+          success: false,
+          message: "Invalid confirmation details",
+        },
         { status: 400 }
       );
     }
 
-    const requiredMarketplaces = [
-      "talabat",
-      "snoonu",
-      "rafeeq",
-      "keeta",
-    ];
-
+    // All four marketplaces must be checked.
     if (
       !marketplaces ||
-      !requiredMarketplaces.every(
+      !REQUIRED_MARKETPLACES.every(
         (key) => marketplaces[key] === true
       )
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Confirm that all four marketplaces are active",
+          message: "Confirm all four marketplaces",
         },
         { status: 400 }
       );
     }
 
-    // Uses the existing Employees collection.
-    const employee: any = await Employee.findById(employeeId).select(
-      "+pinHash name active"
-    );
+    // Use the existing Employees collection.
+    const employee = await Employee.findById(employeeId)
+      .select("+pinHash name active")
+      .exec();
 
-    if (!employee || employee.active === false || !employee.pinHash) {
+    if (!employee || !employee.active || !employee.pinHash) {
       return NextResponse.json(
-        { success: false, message: "Employee is inactive or not found" },
+        {
+          success: false,
+          message: "Employee is inactive or PIN is not configured",
+        },
         { status: 401 }
       );
     }
 
-    const validPin = await bcrypt.compare(pin, employee.pinHash);
+    // IMPORTANT: Verify with the same scrypt method used to hash the PIN.
+    const validPin = await verifyEmployeePin(pin, employee.pinHash);
 
     if (!validPin) {
       return NextResponse.json(
-        { success: false, message: "Incorrect PIN" },
+        {
+          success: false,
+          message: "Incorrect PIN",
+        },
         { status: 401 }
       );
     }
 
-    const arrival: any = await StockArrival.findById(arrivalId);
+    const arrival = await StockArrival.findById(arrivalId);
 
     if (!arrival) {
       return NextResponse.json(
-        { success: false, message: "Stock arrival not found" },
+        {
+          success: false,
+          message: "Stock arrival not found",
+        },
         { status: 404 }
       );
     }
 
     if (arrival.status === "completed") {
       return NextResponse.json(
-        { success: false, message: "This arrival is already completed" },
+        {
+          success: false,
+          message: "This arrival is already completed",
+        },
         { status: 409 }
       );
     }
 
+    // One valid PIN confirms all four marketplaces together.
     arrival.marketplaceConfirmation = {
       talabat: true,
       snoonu: true,
@@ -100,13 +121,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Stock arrival confirmed",
+      message: "All four marketplaces confirmed successfully",
       arrival,
     });
   } catch (error) {
     console.error("Stock arrival confirmation error:", error);
+
     return NextResponse.json(
-      { success: false, message: "Confirmation failed" },
+      {
+        success: false,
+        message: "Confirmation failed",
+      },
       { status: 500 }
     );
   }
