@@ -22,6 +22,11 @@ const menuItems = [
     icon: "📥",
   },
   {
+    key: "stockArrivals",
+    href: "/stock-arrivals",
+    icon: "📦",
+  },
+  {
     key: "issues",
     href: "/issues",
     icon: "⚠",
@@ -82,12 +87,10 @@ export default function Sidebar() {
                   : "text-gray-700 hover:bg-gray-100"
               }`}
             >
-              {/* Icon */}
               <span className="w-5 shrink-0 text-center text-base">
                 {item.icon}
               </span>
 
-              {/* Menu Name */}
               <span>{t(item.key)}</span>
             </Link>
           );
