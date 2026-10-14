@@ -5,12 +5,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Unit = "g" | "kg" | "pcs" | "ml" | "L";
+
 type WeightOption = {
   _id?: string;
   weight: number;
   unit: Unit;
   price: number;
 };
+
 type ProductType = "single" | "multiple";
 
 type Product = {
@@ -106,6 +108,38 @@ function getErrorMessage(data: any, fallback: string) {
   return data?.message || data?.error || fallback;
 }
 
+function getMarketplaceArray(data: any): Marketplace[] {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.marketplaces)) {
+    return data.marketplaces;
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
+
+  return [];
+}
+
+function getComparisonArray(data: any): CompareResult[] {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.marketplaces)) {
+    return data.marketplaces;
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  return [];
+}
+
 export default function ProductDetailsPage({
   params,
 }: {
@@ -136,7 +170,9 @@ export default function ProductDetailsPage({
     async function loadMarketplaceComparison(productId: string) {
       try {
         const response = await fetch(
-          `/api/marketplaces/compare?productId=${encodeURIComponent(productId)}`,
+          `/api/marketplaces/compare?productId=${encodeURIComponent(
+            productId
+          )}`,
           { cache: "no-store" }
         );
 
@@ -147,14 +183,8 @@ export default function ProductDetailsPage({
           return;
         }
 
-        const results = Array.isArray(data)
-          ? data
-          : Array.isArray(data.marketplaces)
-            ? data.marketplaces
-            : [];
-
         if (!cancelled) {
-          setCompareResults(results);
+          setCompareResults(getComparisonArray(data));
         }
       } catch (error) {
         console.error("Comparison error:", error);
@@ -189,12 +219,13 @@ export default function ProductDetailsPage({
           );
         }
 
-        // Supports both { success: true, product: {...} } and direct product.
         const loadedProduct: Product | undefined =
-          productData?.product ?? productData;
+          productData?.product ?? productData?.data ?? productData;
 
         if (!loadedProduct?._id) {
-          throw new Error("The product API did not return a valid product.");
+          throw new Error(
+            "The product API did not return a valid product."
+          );
         }
 
         setProduct(loadedProduct);
@@ -202,16 +233,7 @@ export default function ProductDetailsPage({
         if (!marketplaceResponse.ok) {
           console.error("Marketplace load failed:", marketplaceData);
         } else {
-          // Supports an array or { marketplaces: [...] } response.
-          const loadedMarketplaces: Marketplace[] = Array.isArray(
-            marketplaceData
-          )
-            ? marketplaceData
-            : Array.isArray(marketplaceData?.marketplaces)
-              ? marketplaceData.marketplaces
-              : [];
-
-          setMarketplaces(loadedMarketplaces);
+          setMarketplaces(getMarketplaceArray(marketplaceData));
         }
 
         await loadMarketplaceComparison(id);
@@ -250,7 +272,9 @@ export default function ProductDetailsPage({
           ? data
           : Array.isArray(data?.employees)
             ? data.employees
-            : [];
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
 
         if (!cancelled) {
           setEmployees(
@@ -292,7 +316,9 @@ export default function ProductDetailsPage({
   async function refreshComparison(productId: string) {
     try {
       const response = await fetch(
-        `/api/marketplaces/compare?productId=${encodeURIComponent(productId)}`,
+        `/api/marketplaces/compare?productId=${encodeURIComponent(
+          productId
+        )}`,
         { cache: "no-store" }
       );
 
@@ -300,24 +326,21 @@ export default function ProductDetailsPage({
 
       if (!response.ok) {
         throw new Error(
-          getErrorMessage(data, "Failed to refresh marketplace comparison.")
+          getErrorMessage(
+            data,
+            "Failed to refresh marketplace comparison."
+          )
         );
       }
 
-      const results = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.marketplaces)
-          ? data.marketplaces
-          : [];
-
-      setCompareResults(results);
+      setCompareResults(getComparisonArray(data));
     } catch (error) {
       console.error("Comparison refresh error:", error);
     }
   }
 
   async function toggleMarketplace(name: MarketplaceName) {
-    if (!product || savingMarketplace) return;
+    if (!product || savingMarketplace !== null) return;
 
     const current = getMarketplace(name);
     const nextAvailable = current ? !current.available : true;
@@ -328,19 +351,25 @@ export default function ProductDetailsPage({
 
       const response = await fetch("/api/marketplaces", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           productId: product._id,
           marketplace: name,
           available: nextAvailable,
-          price: product.price,
-          nameEn: product.nameEn,
-          nameAr: product.nameAr,
-          descriptionEn: product.descriptionEn || "",
-          descriptionAr: product.descriptionAr || "",
-          image: product.image || "",
-          categoryEn: product.categoryEn || "",
-          categoryAr: product.categoryAr || "",
+          price: current?.price ?? product.price,
+          nameEn: current?.nameEn ?? product.nameEn,
+          nameAr: current?.nameAr ?? product.nameAr,
+          descriptionEn:
+            current?.descriptionEn ?? product.descriptionEn ?? "",
+          descriptionAr:
+            current?.descriptionAr ?? product.descriptionAr ?? "",
+          image: current?.image ?? product.image ?? "",
+          categoryEn:
+            current?.categoryEn ?? product.categoryEn ?? "",
+          categoryAr:
+            current?.categoryAr ?? product.categoryAr ?? "",
           syncStatus: "pending",
         }),
       });
@@ -353,7 +382,6 @@ export default function ProductDetailsPage({
         );
       }
 
-      // Supports direct marketplace object or wrapped response.
       const savedMarketplace: Marketplace | undefined =
         data?.marketplace ?? data?.data ?? data;
 
@@ -362,8 +390,10 @@ export default function ProductDetailsPage({
         savedMarketplace.marketplace !== name ||
         typeof savedMarketplace.available !== "boolean"
       ) {
+        console.error("Unexpected marketplace API response:", data);
+
         throw new Error(
-          "The marketplace API did not return the updated marketplace."
+          "Invalid marketplace response. Check app/api/marketplaces/route.ts."
         );
       }
 
@@ -372,13 +402,15 @@ export default function ProductDetailsPage({
           (item) => item.marketplace === name
         );
 
-        return exists
-          ? currentList.map((item) =>
-              item.marketplace === name
-                ? { ...item, ...savedMarketplace }
-                : item
-            )
-          : [...currentList, savedMarketplace];
+        if (exists) {
+          return currentList.map((item) =>
+            item.marketplace === name
+              ? { ...item, ...savedMarketplace }
+              : item
+          );
+        }
+
+        return [...currentList, savedMarketplace];
       });
 
       await refreshComparison(product._id);
@@ -418,7 +450,11 @@ export default function ProductDetailsPage({
       return;
     }
 
-    if (!employees.some((employee) => employee._id === reporterEmployeeId)) {
+    if (
+      !employees.some(
+        (employee) => employee._id === reporterEmployeeId
+      )
+    ) {
       alert("Please select a valid active employee.");
       return;
     }
@@ -446,7 +482,9 @@ export default function ProductDetailsPage({
       for (const type of selectedIssues) {
         const response = await fetch("/api/issues", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             productId: product._id,
             marketplace: selectedMarketplace,
@@ -739,6 +777,7 @@ export default function ProductDetailsPage({
           <h2 className="text-xl font-bold text-gray-900">
             Weight Options & Pricing
           </h2>
+
           <p className="mt-1 text-sm text-gray-500">
             One SKU and one shared stock across all weight options.
           </p>
@@ -757,6 +796,7 @@ export default function ProductDetailsPage({
                   <p className="font-semibold text-gray-900">
                     {variant.weight} {variant.unit}
                   </p>
+
                   <p className="mt-1 text-blue-700">
                     QAR {Number(variant.price).toFixed(2)}
                   </p>
@@ -766,7 +806,9 @@ export default function ProductDetailsPage({
           ) : (
             <p className="mt-4 text-gray-700">
               {product.singleWeight
-                ? `${product.singleWeight} ${product.singleUnit || "g"}`
+                ? `${product.singleWeight} ${
+                    product.singleUnit || "g"
+                  }`
                 : "Single item (no weight)"}{" "}
               — QAR {Number(product.price).toFixed(2)}
             </p>
@@ -780,6 +822,7 @@ export default function ProductDetailsPage({
               <h2 className="text-xl font-bold text-gray-900">
                 Marketplace Sync Check
               </h2>
+
               <p className="mt-1 text-sm text-gray-500">
                 Compare marketplace data with the master product.
               </p>
@@ -816,7 +859,10 @@ export default function ProductDetailsPage({
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white font-bold text-gray-700 shadow-sm">
                         {marketplaceInitials(name)}
                       </div>
-                      <h3 className="font-bold text-gray-900">{name}</h3>
+
+                      <h3 className="font-bold text-gray-900">
+                        {name}
+                      </h3>
                     </div>
 
                     <span className="text-xl">
@@ -839,6 +885,7 @@ export default function ProductDetailsPage({
                       <p className="font-semibold text-red-600">
                         Not Connected
                       </p>
+
                       <p className="mt-1 text-sm text-gray-500">
                         Marketplace data is not available.
                       </p>
@@ -848,6 +895,7 @@ export default function ProductDetailsPage({
                       <p className="font-semibold text-green-600">
                         Synced
                       </p>
+
                       <p className="mt-1 text-sm text-gray-500">
                         All checked fields match.
                       </p>
@@ -888,6 +936,7 @@ export default function ProductDetailsPage({
             <h2 className="text-xl font-bold text-gray-900">
               Marketplace Availability
             </h2>
+
             <p className="mt-1 text-sm text-gray-500">
               Control whether this product is marked available on each marketplace.
             </p>
@@ -909,7 +958,10 @@ export default function ProductDetailsPage({
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 font-bold text-gray-700">
                         {marketplaceInitials(name)}
                       </div>
-                      <h3 className="font-bold text-gray-900">{name}</h3>
+
+                      <h3 className="font-bold text-gray-900">
+                        {name}
+                      </h3>
                     </div>
 
                     <span
@@ -951,7 +1003,8 @@ export default function ProductDetailsPage({
                   </button>
 
                   <p className="mt-3 break-words text-center text-xs text-gray-400">
-                    Sync: {marketplaceData?.syncStatus || "not_connected"}
+                    Sync:{" "}
+                    {marketplaceData?.syncStatus || "not_connected"}
                   </p>
                 </div>
               );
@@ -965,6 +1018,7 @@ export default function ProductDetailsPage({
             <h2 className="text-xl font-bold text-gray-900">
               Report Marketplace Issue
             </h2>
+
             <p className="mt-1 text-sm text-gray-500">
               Select the marketplace, issue types, reporter and explain the problem.
             </p>
@@ -982,7 +1036,9 @@ export default function ProductDetailsPage({
             <select
               id="reporter"
               value={reporterEmployeeId}
-              onChange={(event) => setReporterEmployeeId(event.target.value)}
+              onChange={(event) =>
+                setReporterEmployeeId(event.target.value)
+              }
               disabled={loadingEmployees || reportingIssues}
               className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-500 disabled:bg-gray-100"
             >
@@ -1001,8 +1057,8 @@ export default function ProductDetailsPage({
 
             {!loadingEmployees && employees.length === 0 && (
               <p className="mt-2 text-sm text-red-600">
-                No active employees found. Check the Employees page and the
-                /api/employees response.
+                No active employees found. Check the Employees page and
+                the /api/employees response.
               </p>
             )}
           </div>
@@ -1058,6 +1114,7 @@ export default function ProductDetailsPage({
                       onChange={() => toggleIssue(issue.key)}
                       className="h-4 w-4"
                     />
+
                     <span className="ml-3 text-sm font-medium text-gray-700">
                       {issue.label}
                     </span>

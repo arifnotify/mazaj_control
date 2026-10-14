@@ -21,6 +21,7 @@ const SYNC_STATUSES = [
 ] as const;
 
 type MarketplaceName = (typeof MARKETPLACES)[number];
+type SyncStatus = (typeof SYNC_STATUSES)[number];
 
 function isValidMarketplace(
   value: unknown
@@ -31,19 +32,21 @@ function isValidMarketplace(
   );
 }
 
-function isValidSyncStatus(value: unknown): boolean {
+function isValidSyncStatus(
+  value: unknown
+): value is SyncStatus {
   return (
     typeof value === "string" &&
-    SYNC_STATUSES.includes(
-      value as (typeof SYNC_STATUSES)[number]
-    )
+    SYNC_STATUSES.includes(value as SyncStatus)
   );
 }
 
 function parseNonNegativePrice(
   value: unknown
 ): number | undefined | null {
-  if (value === undefined) return undefined;
+  if (value === undefined) {
+    return undefined;
+  }
 
   if (
     value === null ||
@@ -84,13 +87,13 @@ export async function GET(request: Request) {
       );
     }
 
-    const marketplaceData = await ProductMarketplace.find({
+    const marketplaces = await ProductMarketplace.find({
       productId,
     })
       .sort({ marketplace: 1 })
       .lean();
 
-    return NextResponse.json(marketplaceData, {
+    return NextResponse.json(marketplaces, {
       status: 200,
     });
   } catch (error) {
@@ -103,12 +106,24 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: Create or update marketplace data
+// POST /api/marketplaces
+// Create or update marketplace data
 export async function POST(request: Request) {
   try {
     await connectDB();
 
     const body = await request.json();
+
+    if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 }
+      );
+    }
 
     const {
       productId,
@@ -125,6 +140,7 @@ export async function POST(request: Request) {
       syncStatus,
     } = body;
 
+    // Validate product ID
     if (!productId) {
       return NextResponse.json(
         { error: "Product ID is required." },
@@ -139,6 +155,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate marketplace
     if (!isValidMarketplace(marketplace)) {
       return NextResponse.json(
         { error: "Invalid marketplace." },
@@ -146,7 +163,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify the product exists.
+    // Verify that the product exists
     const productExists = await Product.exists({
       _id: productId,
     });
@@ -158,7 +175,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Only accept actual boolean values for availability.
+    // Validate availability
     if (
       available !== undefined &&
       typeof available !== "boolean"
@@ -172,15 +189,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate price
     const parsedPrice = parseNonNegativePrice(price);
 
     if (parsedPrice === null) {
       return NextResponse.json(
-        { error: "Invalid price. Price must be zero or greater." },
+        {
+          error: "Invalid price. Price must be zero or greater.",
+        },
         { status: 400 }
       );
     }
 
+    // Validate sync status
     if (
       syncStatus !== undefined &&
       !isValidSyncStatus(syncStatus)
@@ -191,8 +212,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Update only the fields actually provided.
-    // This prevents price-only updates from accidentally setting OFF.
+    // Only update fields supplied by the frontend.
+    // This prevents a price update from unintentionally
+    // changing marketplace availability.
     const updateData: Record<string, unknown> = {};
 
     if (available !== undefined) {
@@ -235,6 +257,7 @@ export async function POST(request: Request) {
       updateData.syncStatus = syncStatus;
     }
 
+    // Create or update marketplace record
     const marketplaceData =
       await ProductMarketplace.findOneAndUpdate(
         {
@@ -256,9 +279,24 @@ export async function POST(request: Request) {
         }
       );
 
-    return NextResponse.json(marketplaceData, {
-      status: 200,
-    });
+    if (!marketplaceData) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Failed to create or update marketplace record.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // Return a consistent response for the frontend
+    return NextResponse.json(
+      {
+        success: true,
+        marketplace: marketplaceData,
+      },
+      { status: 200 }
+    );
   } catch (error: unknown) {
     console.error("SAVE MARKETPLACE ERROR:", error);
 
@@ -270,6 +308,7 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json(
         {
+          success: false,
           error:
             "Duplicate marketplace record exists for this product.",
         },
@@ -283,6 +322,7 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json(
         {
+          success: false,
           error: "Invalid marketplace data.",
           details: error.message,
         },
@@ -290,8 +330,21 @@ export async function POST(request: Request) {
       );
     }
 
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid JSON request body.",
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Failed to save marketplace data." },
+      {
+        success: false,
+        error: "Failed to save marketplace data.",
+      },
       { status: 500 }
     );
   }
