@@ -169,6 +169,8 @@ export default function StockArrivalsPage() {
   const [message, setMessage] = useState("");
 
   const [error, setError] = useState("");
+  const [completedExpanded, setCompletedExpanded] = useState(false);
+  const [deletingArrivalId, setDeletingArrivalId] = useState("");
 
   const copy = useMemo(() => {
 
@@ -263,6 +265,13 @@ export default function StockArrivalsPage() {
         note: "This records your confirmation. It does not activate products in external marketplace apps automatically.",
 
         refresh: "Refresh",
+        expand: "Show completed arrivals",
+        collapse: "Hide completed arrivals",
+        delete: "Delete",
+        deleting: "Deleting...",
+        deleteConfirm: "Delete this completed stock arrival? This cannot be undone.",
+        deleted: "Completed arrival deleted.",
+        deleteError: "Could not delete completed arrival.",
 
       },
 
@@ -355,6 +364,13 @@ export default function StockArrivalsPage() {
         note: "يسجل هذا الإجراء تأكيدك ولا يفعّل المنتجات تلقائيًا في تطبيقات الأسواق الخارجية.",
 
         refresh: "تحديث",
+        expand: "عرض عمليات الاستلام المكتملة",
+        collapse: "إخفاء عمليات الاستلام المكتملة",
+        delete: "حذف",
+        deleting: "جارٍ الحذف...",
+        deleteConfirm: "هل تريد حذف عملية استلام المخزون المكتملة؟ لا يمكن التراجع عن هذا الإجراء.",
+        deleted: "تم حذف عملية الاستلام المكتملة.",
+        deleteError: "تعذر حذف عملية الاستلام المكتملة.",
 
       },
 
@@ -644,6 +660,31 @@ export default function StockArrivalsPage() {
 
     }
 
+  }
+
+  async function deleteCompletedArrival(arrivalId: string) {
+    if (!window.confirm(copy.deleteConfirm)) return;
+
+    setError("");
+    setMessage("");
+    setDeletingArrivalId(arrivalId);
+    try {
+      const res = await fetch("/api/stock-arrivals", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arrivalId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || copy.deleteError);
+      }
+      setMessage(copy.deleted);
+      setArrivals((current) => current.filter((arrival) => arrival._id !== arrivalId));
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, copy.deleteError));
+    } finally {
+      setDeletingArrivalId("");
+    }
   }
 
   const inputClass =
@@ -955,17 +996,16 @@ export default function StockArrivalsPage() {
       {/* Completed arrivals */}
 
       <ArrivalList
-
         title={`${copy.completedList} (${completed.length})`}
-
         arrivals={completed}
-
         emptyText={copy.noCompleted}
-
         language={language}
-
         copy={copy}
-
+        collapsible
+        expanded={completedExpanded}
+        onToggle={() => setCompletedExpanded((value) => !value)}
+        onDelete={deleteCompletedArrival}
+        deletingArrivalId={deletingArrivalId}
       />
 
     </main>
@@ -975,185 +1015,147 @@ export default function StockArrivalsPage() {
 }
 
 type ArrivalCopy = {
-
   pending: string;
-
   completed: string;
-
   createdAt: string;
-
   confirmedBy: string;
-
   confirmedAt: string;
-
+  expand: string;
+  collapse: string;
+  delete: string;
+  deleting: string;
 };
 
 function ArrivalList({
-
   title,
-
   arrivals,
-
   emptyText,
-
   language,
-
   copy,
-
+  collapsible = false,
+  expanded = true,
+  onToggle,
+  onDelete,
+  deletingArrivalId = "",
 }: {
-
   title: string;
-
   arrivals: Arrival[];
-
   emptyText: string;
-
   language: "en" | "ar";
-
   copy: ArrivalCopy;
-
+  collapsible?: boolean;
+  expanded?: boolean;
+  onToggle?: () => void;
+  onDelete?: (arrivalId: string) => void;
+  deletingArrivalId?: string;
 }) {
-
   return (
-
     <section className="rounded-xl border border-gray-200 bg-white p-4 md:p-6">
-
-      <h2 className="mb-4 text-xl font-semibold">{title}</h2>
-
-      {arrivals.length === 0 ? (
-
-        <p className="text-gray-500">{emptyText}</p>
-
-      ) : (
-
-        <div className="space-y-4">
-
-          {arrivals.map((arrival) => (
-
-            <ArrivalCard key={arrival._id} arrival={arrival} language={language} copy={copy} />
-
-          ))}
-
-        </div>
-
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">{title}</h2>
+        {collapsible && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            <span aria-hidden="true" className="me-2">{expanded ? "−" : "+"}</span>
+            {expanded ? copy.collapse : copy.expand}
+          </button>
+        )}
+      </div>
+      {(!collapsible || expanded) && (
+        arrivals.length === 0 ? (
+          <p className="text-gray-500">{emptyText}</p>
+        ) : (
+          <div className="space-y-4">
+            {arrivals.map((arrival) => (
+              <ArrivalCard
+                key={arrival._id}
+                arrival={arrival}
+                language={language}
+                copy={copy}
+                onDelete={onDelete}
+                deleting={deletingArrivalId === arrival._id}
+              />
+            ))}
+          </div>
+        )
       )}
-
     </section>
-
   );
-
 }
 
 function ArrivalCard({
-
   arrival,
-
   language,
-
   copy,
-
+  onDelete,
+  deleting = false,
 }: {
-
   arrival: Arrival;
-
   language: "en" | "ar";
-
   copy: ArrivalCopy;
-
+  onDelete?: (arrivalId: string) => void;
+  deleting?: boolean;
 }) {
-
   const isCompleted = arrival.status === "completed";
-
   const dateLocale = language === "ar" ? "ar" : "en";
 
   return (
-
     <article className="rounded-lg border p-4">
-
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-
         <span className="text-sm text-gray-500">
-
           {copy.createdAt}: {new Date(arrival.createdAt).toLocaleString(dateLocale)}
-
         </span>
-
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
-
           {isCompleted ? copy.completed : copy.pending}
-
         </span>
-
       </div>
-
       <div className="space-y-3">
-
         {arrival.products.map((product, index) => {
-
           const name = language === "ar"
-
             ? product.nameAr || product.arabicName || product.name
-
             : product.nameEn || product.englishName || product.name;
-
           return (
-
             <div key={`${product.productId}-${index}`} className="flex items-center gap-3">
-
               {product.image ? (
-
                 <img src={product.image} alt={name} className="h-12 w-12 rounded border object-cover" />
-
               ) : (
-
                 <div className="h-12 w-12 rounded bg-gray-100" />
-
               )}
-
               <div className="min-w-0">
-
                 <p className="font-medium">{name}</p>
-
                 <p className="text-sm text-gray-500">SKU: {product.sku}</p>
-
               </div>
-
             </div>
-
           );
-
         })}
-
       </div>
-
       {isCompleted && (
-
         <div className="mt-4 border-t pt-3 text-sm text-gray-600">
-
           <p>{copy.confirmedBy}: {arrival.confirmedByName || "—"}</p>
-
           <p className="mt-2">
-
             {copy.confirmedAt}: {arrival.confirmedAt ? new Date(arrival.confirmedAt).toLocaleString(dateLocale) : "—"}
-
           </p>
-
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-
             {MARKETPLACE_LIST.map((marketplace) => (
-
               <p key={marketplace.key}>✓ {language === "ar" ? marketplace.arabic : marketplace.name}</p>
-
             ))}
-
           </div>
-
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(arrival._id)}
+              disabled={deleting}
+              className="mt-4 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              {deleting ? copy.deleting : copy.delete}
+            </button>
+          )}
         </div>
-
       )}
-
     </article>
-
   );
-
 }

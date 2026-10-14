@@ -224,3 +224,63 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+
+// DELETE: Delete a completed stock arrival only.
+export async function DELETE(req: NextRequest) {
+  try {
+    await connectDB();
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Invalid JSON request body" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("arrivalId" in body) ||
+      typeof body.arrivalId !== "string" ||
+      !mongoose.isValidObjectId(body.arrivalId)
+    ) {
+      return NextResponse.json(
+        { success: false, message: "A valid stock arrival ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const deleted = await StockArrival.findOneAndDelete({
+      _id: body.arrivalId,
+      status: "completed",
+    });
+
+    if (!deleted) {
+      const exists = await StockArrival.exists({ _id: body.arrivalId });
+      return NextResponse.json(
+        {
+          success: false,
+          message: exists
+            ? "Only completed stock arrivals can be deleted"
+            : "Stock arrival not found",
+        },
+        { status: exists ? 400 : 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Completed stock arrival deleted successfully",
+    });
+  } catch (error) {
+    console.error("Stock arrival DELETE error:", error);
+    return NextResponse.json(
+      { success: false, message: "Failed to delete stock arrival" },
+      { status: 500 }
+    );
+  }
+}
