@@ -1,13 +1,23 @@
-import { Schema, models, model } from "mongoose";
+import mongoose, { Schema, models, model } from "mongoose";
 
-const EmployeeSchema = new Schema(
+export interface IEmployee {
+  name: string;
+  email: string;
+  phone?: string;
+  role: "admin" | "manager" | "employee";
+  active: boolean;
+  pinHash: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const EmployeeSchema = new Schema<IEmployee>(
   {
     name: {
       type: String,
       required: true,
       trim: true,
     },
-
     email: {
       type: String,
       required: true,
@@ -15,32 +25,29 @@ const EmployeeSchema = new Schema(
       lowercase: true,
       trim: true,
     },
-
     phone: {
       type: String,
       default: "",
       trim: true,
     },
-
     role: {
       type: String,
-      enum: [
-        "admin",
-        "manager",
-        "employee",
-      ],
+      enum: ["admin", "manager", "employee"],
       default: "employee",
+      required: true,
     },
-
     active: {
       type: Boolean,
       default: true,
     },
+    pinHash: {
+      type: String,
+      required: true,
+      select: false,
+    },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 export default models.Employee ||
-  model("Employee", EmployeeSchema);
+  model<IEmployee>("Employee", EmployeeSchema);

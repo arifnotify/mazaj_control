@@ -1,75 +1,89 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Employee from "@/models/Employee";
+import { isAdminSessionValid } from "@/lib/adminSession";
+import {
+  hashEmployeePin,
+  isValidEmployeePin,
+} from "@/lib/employeePin";
+
+export const runtime = "nodejs";
 
 export async function GET() {
+  if (!(await isAdminSessionValid())) {
+    return NextResponse.json(
+      { error: "Admin authentication required" },
+      { status: 401 }
+    );
+  }
+
   try {
     await connectDB();
 
-    const employees = await Employee.find()
+    const employees = await Employee.find({})
+      .select("-pinHash")
       .sort({ createdAt: -1 })
       .lean();
 
     return NextResponse.json(employees);
-  } catch (error) {
-    console.error("GET EMPLOYEES ERROR:", error);
-
+  } catch {
     return NextResponse.json(
-      { error: "Failed to fetch employees" },
+      { error: "Failed to load employees" },
       { status: 500 }
     );
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    await connectDB();
+export async function POST(request: NextRequest) {
+  if (!(await isAdminSessionValid())) {
+    return NextResponse.json(
+      { error: "Admin authentication required" },
+      { status: 401 }
+    );
+  }
 
+  try {
     const body = await request.json();
 
-    const name = String(body.name || "").trim();
-    const email = String(body.email || "")
-      .trim()
-      .toLowerCase();
+    const name =
+      typeof body.name === "string" ? body.name.trim() : "";
+    const email =
+      typeof body.email === "string"
+        ? body.email.trim().toLowerCase()
+        : "";
+    const phone =
+      typeof body.phone === "string" ? body.phone.trim() : "";
+    const role = body.role;
+    const pin = body.pin;
 
-    const phone = String(body.phone || "").trim();
-
-    const role = body.role || "employee";
-
-    if (!name) {
+    if (!name || !email) {
       return NextResponse.json(
-        { error: "Employee name is required" },
+        { error: "Name and email are required" },
         { status: 400 }
       );
     }
 
-    if (!email) {
+    if (!["admin", "manager", "employee"].includes(role)) {
       return NextResponse.json(
-        { error: "Employee email is required" },
+        { error: "Invalid role" },
         { status: 400 }
       );
     }
 
-    const validRoles = [
-      "admin",
-      "manager",
-      "employee",
-    ];
-
-    if (!validRoles.includes(role)) {
+    if (!isValidEmployeePin(pin)) {
       return NextResponse.json(
-        { error: "Invalid employee role" },
+        { error: "Employee PIN must contain exactly 3 digits" },
         { status: 400 }
       );
     }
 
-    const existingEmployee = await Employee.findOne({
-      email,
-    });
+    await connectDB();
 
-    if (existingEmployee) {
+    const existing = await Employee.findOne({ email });
+
+    if (existing) {
       return NextResponse.json(
-        { error: "Employee with this email already exists" },
+        { error: "An employee with this email already exists" },
         { status: 409 }
       );
     }
@@ -80,13 +94,38 @@ export async function POST(request: Request) {
       phone,
       role,
       active: true,
+      pinHash: await hashEmployeePin(pin),
     });
 
-    return NextResponse.json(employee, {
-      status: 201,
-    });
-  } catch (error) {
-    console.error("CREATE EMPLOYEE ERROR:", error);
+    return NextResponse.json(
+      {
+        success: true,
+        employee: {
+          _id: employee._id,
+          name: employee.name,
+          email: employee.email,
+          phone: employee.phone,
+          role: employee.role,
+          active: employee.active,
+          createdAt: employee.createdAt,
+        },
+      },
+      { status: 201 }
+    );
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === 11000
+    ) {
+      return NextResponse.json(
+        { error: "An employee with this email already exists" },
+        { status: 409 }
+      );
+    }
+
+    console.error("Create employee error:", error);
 
     return NextResponse.json(
       { error: "Failed to create employee" },

@@ -1,24 +1,34 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Employee from "@/models/Employee";
+import { isAdminSessionValid } from "@/lib/adminSession";
+import {
+  hashEmployeePin,
+  isValidEmployeePin,
+} from "@/lib/employeePin";
 
-const validRoles = [
-  "admin",
-  "manager",
-  "employee",
-];
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+export const runtime = "nodejs";
 
 export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  context: RouteContext
 ) {
+  if (!(await isAdminSessionValid())) {
+    return NextResponse.json(
+      { error: "Admin authentication required" },
+      { status: 401 }
+    );
+  }
+
   try {
-    await connectDB();
+    const { id } = await context.params;
 
-    const { id } = await params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json(
         { error: "Invalid employee ID" },
         { status: 400 }
@@ -26,139 +36,88 @@ export async function PUT(
     }
 
     const body = await request.json();
+    const update: Record<string, unknown> = {};
 
-    const name =
-      body.name !== undefined
-        ? String(body.name).trim()
-        : undefined;
-
-    const email =
-      body.email !== undefined
-        ? String(body.email).trim().toLowerCase()
-        : undefined;
-
-    const phone =
-      body.phone !== undefined
-        ? String(body.phone).trim()
-        : undefined;
-
-    const role =
-      body.role !== undefined
-        ? String(body.role)
-        : undefined;
-
-    if (name !== undefined && !name) {
-      return NextResponse.json(
-        { error: "Employee name is required" },
-        { status: 400 }
-      );
-    }
-
-    if (email !== undefined && !email) {
-      return NextResponse.json(
-        { error: "Employee email is required" },
-        { status: 400 }
-      );
-    }
-
-    if (
-      role !== undefined &&
-      !validRoles.includes(role)
-    ) {
-      return NextResponse.json(
-        { error: "Invalid employee role" },
-        { status: 400 }
-      );
-    }
-
-    if (email !== undefined) {
-      const duplicate = await Employee.findOne({
-        email,
-        _id: { $ne: id },
-      });
-
-      if (duplicate) {
+    if (body.name !== undefined) {
+      if (typeof body.name !== "string" || !body.name.trim()) {
         return NextResponse.json(
-          {
-            error:
-              "Another employee already uses this email",
-          },
-          { status: 409 }
+          { error: "Name is required" },
+          { status: 400 }
         );
       }
+      update.name = body.name.trim();
     }
 
-    const updateData: Record<string, unknown> = {};
-
-    if (name !== undefined) {
-      updateData.name = name;
+    if (body.email !== undefined) {
+      if (
+        typeof body.email !== "string" ||
+        !body.email.trim()
+      ) {
+        return NextResponse.json(
+          { error: "Valid email is required" },
+          { status: 400 }
+        );
+      }
+      update.email = body.email.trim().toLowerCase();
     }
 
-    if (email !== undefined) {
-      updateData.email = email;
+    if (body.phone !== undefined) {
+      if (typeof body.phone !== "string") {
+        return NextResponse.json(
+          { error: "Invalid phone" },
+          { status: 400 }
+        );
+      }
+      update.phone = body.phone.trim();
     }
 
-    if (phone !== undefined) {
-      updateData.phone = phone;
-    }
-
-    if (role !== undefined) {
-      updateData.role = role;
+    if (body.role !== undefined) {
+      if (
+        !["admin", "manager", "employee"].includes(body.role)
+      ) {
+        return NextResponse.json(
+          { error: "Invalid role" },
+          { status: 400 }
+        );
+      }
+      update.role = body.role;
     }
 
     if (body.active !== undefined) {
-      updateData.active = Boolean(body.active);
+      if (typeof body.active !== "boolean") {
+        return NextResponse.json(
+          { error: "Invalid active status" },
+          { status: 400 }
+        );
+      }
+      update.active = body.active;
     }
 
-    const employee =
-      await Employee.findByIdAndUpdate(
-        id,
-        updateData,
-        {
-          new: true,
-          runValidators: true,
-        }
-      );
-
-    if (!employee) {
-      return NextResponse.json(
-        { error: "Employee not found" },
-        { status: 404 }
-      );
+    // Only Admin can reset the employee PIN.
+    if (body.pin !== undefined) {
+      if (!isValidEmployeePin(body.pin)) {
+        return NextResponse.json(
+          { error: "PIN must contain exactly 3 digits" },
+          { status: 400 }
+        );
+      }
+      update.pinHash = await hashEmployeePin(body.pin);
     }
 
-    return NextResponse.json(employee);
-  } catch (error) {
-    console.error(
-      "UPDATE EMPLOYEE ERROR:",
-      error
-    );
-
-    return NextResponse.json(
-      { error: "Failed to update employee" },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    await connectDB();
-
-    const { id } = await params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (Object.keys(update).length === 0) {
       return NextResponse.json(
-        { error: "Invalid employee ID" },
+        { error: "No valid changes provided" },
         { status: 400 }
       );
     }
 
-    const employee =
-      await Employee.findByIdAndDelete(id);
+    await connectDB();
+
+    const employee = await Employee.findByIdAndUpdate(
+      id,
+      { $set: update },
+      { new: true, runValidators: true }
+    ).select("-pinHash");
 
     if (!employee) {
       return NextResponse.json(
@@ -169,13 +128,65 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: "Employee deleted successfully",
+      employee,
     });
-  } catch (error) {
-    console.error(
-      "DELETE EMPLOYEE ERROR:",
-      error
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === 11000
+    ) {
+      return NextResponse.json(
+        { error: "Email already belongs to another employee" },
+        { status: 409 }
+      );
+    }
+
+    console.error("Update employee error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to update employee" },
+      { status: 500 }
     );
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  context: RouteContext
+) {
+  if (!(await isAdminSessionValid())) {
+    return NextResponse.json(
+      { error: "Admin authentication required" },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const { id } = await context.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return NextResponse.json(
+        { error: "Invalid employee ID" },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const employee = await Employee.findByIdAndDelete(id);
+
+    if (!employee) {
+      return NextResponse.json(
+        { error: "Employee not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Delete employee error:", error);
 
     return NextResponse.json(
       { error: "Failed to delete employee" },

@@ -33,7 +33,7 @@ const menuItems = [
   },
   {
     key: "employees",
-    href: "/employees",
+    href: "/admin/employees",
     icon: "♙",
   },
 ];
@@ -51,13 +51,15 @@ export default function Sidebar() {
     >
       {/* Logo / Header */}
       <div className="border-b border-gray-200 px-6 py-6">
-        <h1 className="text-xl font-bold tracking-wide text-gray-900">
-          MAZAJ CONTROL
-        </h1>
+        <Link href="/" className="block">
+          <h1 className="text-xl font-bold tracking-wide text-gray-900">
+            MAZAJ CONTROL
+          </h1>
 
-        <p className="mt-1 text-xs text-gray-500">
-          {isArabic ? "إدارة المنتجات" : "Product Management"}
-        </p>
+          <p className="mt-1 text-xs text-gray-500">
+            {isArabic ? "إدارة المنتجات" : "Product Management"}
+          </p>
+        </Link>
       </div>
 
       {/* Navigation */}
@@ -66,13 +68,15 @@ export default function Sidebar() {
           const active =
             item.href === "/"
               ? pathname === "/"
-              : pathname.startsWith(item.href);
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`);
 
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition ${
+              aria-current={active ? "page" : undefined}
+              className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
                 active
                   ? "bg-black text-white"
                   : "text-gray-700 hover:bg-gray-100"
