@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -15,18 +16,34 @@ type Employee = {
   active?: boolean;
 };
 
+type ArrivalProduct = {
+  productId: string;
+  sku: string;
+  name: string;
+  image?: string;
+};
+
 type Arrival = {
   _id: string;
-  products: {
-    productId: string;
-    sku: string;
-    name: string;
-    image?: string;
-  }[];
+  products: ArrivalProduct[];
   status: "pending" | "completed";
   confirmedByName?: string;
   confirmedAt?: string;
   createdAt: string;
+};
+
+type Marketplaces = {
+  talabat: boolean;
+  snoonu: boolean;
+  rafeeq: boolean;
+  keeta: boolean;
+};
+
+const INITIAL_MARKETPLACES: Marketplaces = {
+  talabat: false,
+  snoonu: false,
+  rafeeq: false,
+  keeta: false,
 };
 
 export default function StockArrivalsPage() {
@@ -38,12 +55,9 @@ export default function StockArrivalsPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [pin, setPin] = useState("");
   const [activeArrival, setActiveArrival] = useState("");
-  const [marketplaces, setMarketplaces] = useState({
-    talabat: false,
-    snoonu: false,
-    rafeeq: false,
-    keeta: false,
-  });
+  const [marketplaces, setMarketplaces] =
+    useState<Marketplaces>(INITIAL_MARKETPLACES);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -51,41 +65,57 @@ export default function StockArrivalsPage() {
 
   async function loadData() {
     setLoading(true);
+    setError("");
 
     try {
       const [stockRes, employeeRes] = await Promise.all([
-        fetch("/api/stock-arrivals", { cache: "no-store" }),
-        fetch("/api/employees", { cache: "no-store" }),
+        fetch("/api/stock-arrivals", {
+          cache: "no-store",
+        }),
+        fetch("/api/employees/active", {
+          cache: "no-store",
+        }),
       ]);
 
       const stockData = await stockRes.json();
       const employeeData = await employeeRes.json();
 
       if (!stockRes.ok || !stockData.success) {
-        throw new Error(stockData.message || "Failed to load products");
+        throw new Error(
+          stockData.message || "Failed to load stock arrivals"
+        );
+      }
+
+      if (!employeeRes.ok || !employeeData.success) {
+        throw new Error(
+          employeeData.message || "Failed to load employees"
+        );
       }
 
       setProducts(stockData.products || []);
       setArrivals(stockData.arrivals || []);
 
-      const employeeList = Array.isArray(employeeData)
-        ? employeeData
-        : employeeData.employees || [];
+      const employeeList: Employee[] =
+        employeeData.employees || [];
 
       setEmployees(
         employeeList.filter(
-          (employee: Employee) => employee.active !== false
+          (employee) => employee.active !== false
         )
       );
-    } catch (e: any) {
-      setError(e.message || "Failed to load data");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load data"
+      );
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   const filteredProducts = useMemo(() => {
@@ -94,11 +124,19 @@ export default function StockArrivalsPage() {
     if (!term) return products;
 
     return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(term) ||
-        p.sku.toLowerCase().includes(term)
+      (product) =>
+        (product.name || "").toLowerCase().includes(term) ||
+        (product.sku || "").toLowerCase().includes(term)
     );
   }, [products, search]);
+
+  const pending = arrivals.filter(
+    (arrival) => arrival.status === "pending"
+  );
+
+  const completed = arrivals.filter(
+    (arrival) => arrival.status === "completed"
+  );
 
   function toggleProduct(id: string) {
     setSelected((current) =>
@@ -112,7 +150,7 @@ export default function StockArrivalsPage() {
     setError("");
     setMessage("");
 
-    if (!selected.length) {
+    if (selected.length === 0) {
       setError("Please select at least one product.");
       return;
     }
@@ -122,22 +160,33 @@ export default function StockArrivalsPage() {
     try {
       const res = await fetch("/api/stock-arrivals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productIds: selected }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          productIds: selected,
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "Could not create arrival");
+        throw new Error(
+          data.message || "Could not create stock arrival"
+        );
       }
 
       setMessage("Stock arrival created successfully.");
       setSelected([]);
       setSearch("");
+
       await loadData();
-    } catch (e: any) {
-      setError(e.message || "Failed to create arrival");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to create stock arrival"
+      );
     } finally {
       setSaving(false);
     }
@@ -152,78 +201,99 @@ export default function StockArrivalsPage() {
       return;
     }
 
-    if (!employeeId || !pin) {
-      setError("Select your employee account and enter your PIN.");
+    if (!employeeId) {
+      setError("Please select your employee account.");
+      return;
+    }
+
+    if (!/^\d{3}$/.test(pin)) {
+      setError("Please enter your 3-digit PIN.");
       return;
     }
 
     if (!Object.values(marketplaces).every(Boolean)) {
-      setError("Confirm all four marketplaces before submitting.");
+      setError(
+        "Confirm all four marketplaces before submitting."
+      );
       return;
     }
 
     setSaving(true);
 
     try {
-      const res = await fetch("/api/stock-arrivals/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          arrivalId: activeArrival,
-          employeeId,
-          pin,
-          marketplaces,
-        }),
-      });
+      const res = await fetch(
+        "/api/stock-arrivals/confirm",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            arrivalId: activeArrival,
+            employeeId,
+            pin,
+            marketplaces,
+          }),
+        }
+      );
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "Confirmation failed");
+        throw new Error(
+          data.message || "Confirmation failed"
+        );
       }
 
       setMessage("Stock arrival marked as completed.");
       setPin("");
+      setEmployeeId("");
       setActiveArrival("");
-      setMarketplaces({
-        talabat: false,
-        snoonu: false,
-        rafeeq: false,
-        keeta: false,
-      });
+      setMarketplaces(INITIAL_MARKETPLACES);
 
       await loadData();
-    } catch (e: any) {
-      setError(e.message || "Confirmation failed");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Confirmation failed"
+      );
     } finally {
       setSaving(false);
     }
   }
 
-  const pending = arrivals.filter((a) => a.status === "pending");
-  const completed = arrivals.filter((a) => a.status === "completed");
-
   return (
     <main className="mx-auto max-w-7xl space-y-8 p-4 md:p-8">
       <header>
-        <h1 className="text-3xl font-bold">Stock Arrivals</h1>
+        <h1 className="text-3xl font-bold">
+          Stock Arrivals
+        </h1>
         <p className="mt-2 text-sm text-gray-500">
-          Select newly arrived products and record marketplace activation.
+          Select newly arrived products and record marketplace
+          activation.
         </p>
       </header>
 
       {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-700">
+        <div
+          role="alert"
+          className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-700"
+        >
           {error}
         </div>
       )}
 
       {message && (
-        <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-green-800">
+        <div
+          role="status"
+          className="rounded-lg border border-green-300 bg-green-50 p-3 text-green-800"
+        >
           {message}
         </div>
       )}
 
+      {/* Select products */}
       <section className="rounded-xl border p-4 md:p-6">
         <h2 className="mb-4 text-xl font-semibold">
           1. Select products back in stock
@@ -231,7 +301,7 @@ export default function StockArrivalsPage() {
 
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(event) => setSearch(event.target.value)}
           placeholder="Search by product name or SKU..."
           className="mb-4 w-full rounded-lg border p-3"
         />
@@ -277,21 +347,24 @@ export default function StockArrivalsPage() {
               </label>
             ))}
 
-            {!filteredProducts.length && (
-              <p className="p-4 text-gray-500">No products found.</p>
+            {filteredProducts.length === 0 && (
+              <p className="p-4 text-gray-500">
+                No products found.
+              </p>
             )}
           </div>
         )}
 
         <button
           onClick={createArrival}
-          disabled={saving || !selected.length}
+          disabled={saving || loading || selected.length === 0}
           className="mt-4 rounded-lg bg-black px-5 py-3 text-white disabled:opacity-50"
         >
           {saving ? "Saving..." : "Create Stock Arrival"}
         </button>
       </section>
 
+      {/* Confirm activation */}
       <section className="rounded-xl border p-4 md:p-6">
         <h2 className="mb-4 text-xl font-semibold">
           2. Confirm marketplace activation
@@ -303,10 +376,13 @@ export default function StockArrivalsPage() {
 
         <select
           value={activeArrival}
-          onChange={(e) => setActiveArrival(e.target.value)}
+          onChange={(event) =>
+            setActiveArrival(event.target.value)
+          }
           className="mb-4 w-full rounded-lg border p-3"
         >
           <option value="">Select stock arrival</option>
+
           {pending.map((arrival) => (
             <option key={arrival._id} value={arrival._id}>
               {new Date(arrival.createdAt).toLocaleString()} —{" "}
@@ -331,10 +407,10 @@ export default function StockArrivalsPage() {
               <input
                 type="checkbox"
                 checked={marketplaces[key]}
-                onChange={(e) =>
+                onChange={(event) =>
                   setMarketplaces((current) => ({
                     ...current,
-                    [key]: e.target.checked,
+                    [key]: event.target.checked,
                   }))
                 }
               />
@@ -349,10 +425,20 @@ export default function StockArrivalsPage() {
 
         <select
           value={employeeId}
-          onChange={(e) => setEmployeeId(e.target.value)}
+          onChange={(event) =>
+            setEmployeeId(event.target.value)
+          }
           className="mb-4 w-full rounded-lg border p-3"
+          disabled={loading || employees.length === 0}
         >
-          <option value="">Select your name</option>
+          <option value="">
+            {loading
+              ? "Loading employees..."
+              : employees.length === 0
+                ? "No active employees found"
+                : "Select your name"}
+          </option>
+
           {employees.map((employee) => (
             <option key={employee._id} value={employee._id}>
               {employee.name}
@@ -360,35 +446,48 @@ export default function StockArrivalsPage() {
           ))}
         </select>
 
+        {!loading && employees.length === 0 && (
+          <p className="mb-4 text-sm text-amber-700">
+            No active employees were returned. Check that employees
+            exist and have active set to true.
+          </p>
+        )}
+
         <label className="mb-2 block text-sm font-medium">
-          Your PIN
+          Your 3-digit PIN
         </label>
 
         <input
           type="password"
           inputMode="numeric"
-          autoComplete="current-password"
+          autoComplete="off"
+          maxLength={3}
           value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          placeholder="Enter your personal PIN"
+          onChange={(event) =>
+            setPin(event.target.value.replace(/\D/g, "").slice(0, 3))
+          }
+          placeholder="Enter your 3-digit PIN"
           className="mb-4 w-full rounded-lg border p-3"
         />
 
         <button
           onClick={confirmArrival}
-          disabled={saving || !activeArrival}
+          disabled={saving || !activeArrival || loading}
           className="rounded-lg bg-green-700 px-5 py-3 text-white disabled:opacity-50"
         >
-          {saving ? "Verifying..." : "Verify PIN & Complete Arrival"}
+          {saving
+            ? "Verifying..."
+            : "Verify PIN & Complete Arrival"}
         </button>
 
         <p className="mt-3 text-xs text-gray-500">
-          Only confirm after checking all four marketplace apps. This records
-          your confirmation; it does not activate products in external apps
-          automatically.
+          Confirm only after checking all four marketplace apps.
+          This records your confirmation; it does not activate
+          products in external apps automatically.
         </p>
       </section>
 
+      {/* Pending arrivals */}
       <section className="rounded-xl border p-4 md:p-6">
         <h2 className="mb-4 text-xl font-semibold">
           Pending Arrivals ({pending.length})
@@ -405,13 +504,16 @@ export default function StockArrivalsPage() {
         )}
       </section>
 
+      {/* Completed arrivals */}
       <section className="rounded-xl border p-4 md:p-6">
         <h2 className="mb-4 text-xl font-semibold">
           Completed Arrivals ({completed.length})
         </h2>
 
         {completed.length === 0 ? (
-          <p className="text-gray-500">No completed arrivals yet.</p>
+          <p className="text-gray-500">
+            No completed arrivals yet.
+          </p>
         ) : (
           <div className="space-y-4">
             {completed.map((arrival) => (
@@ -461,7 +563,9 @@ function ArrivalCard({ arrival }: { arrival: Arrival }) {
 
             <div>
               <p className="font-medium">{product.name}</p>
-              <p className="text-sm text-gray-500">SKU: {product.sku}</p>
+              <p className="text-sm text-gray-500">
+                SKU: {product.sku}
+              </p>
             </div>
           </div>
         ))}
@@ -469,7 +573,9 @@ function ArrivalCard({ arrival }: { arrival: Arrival }) {
 
       {arrival.status === "completed" && (
         <div className="mt-4 border-t pt-3 text-sm text-gray-600">
-          <p>Confirmed by: {arrival.confirmedByName || "Employee"}</p>
+          <p>
+            Confirmed by: {arrival.confirmedByName || "Employee"}
+          </p>
           <p>
             Confirmed at:{" "}
             {arrival.confirmedAt
