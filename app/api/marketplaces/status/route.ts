@@ -12,7 +12,9 @@ export async function GET() {
 
     const [products, marketplaceRecords] = await Promise.all([
       Product.find()
-        .select("_id sku name nameEn nameAr category")
+        .select(
+          "_id sku nameEn nameAr categoryEn categoryAr"
+        )
         .sort({ createdAt: -1 })
         .lean(),
 
@@ -54,17 +56,10 @@ export async function GET() {
       return {
         _id: String(product._id),
         sku: product.sku || "",
-        name:
-          product.nameEn ||
-          product.name ||
-          product.nameAr ||
-          "Unnamed product",
         nameEn: product.nameEn || "",
         nameAr: product.nameAr || "",
-        category:
-          typeof product.category === "string"
-            ? product.category
-            : "",
+        categoryEn: product.categoryEn || "",
+        categoryAr: product.categoryAr || "",
         marketplaces,
       };
     });
