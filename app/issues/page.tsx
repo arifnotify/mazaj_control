@@ -1,12 +1,8 @@
 "use client";
 
-
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
-
-
 
 type MarketplaceName = "Talabat" | "Snoonu" | "Rafeeq" | "Keeta";
 
@@ -38,8 +34,6 @@ type IssueStatus =
 
   | "closed";
 
-
-
 type ProductInfo = {
 
   _id: string;
@@ -52,11 +46,11 @@ type ProductInfo = {
 
   nameAr?: string;
 
+  categoryEn?: string;
+  categoryAr?: string;
   category?: string | { name?: string; nameEn?: string; nameAr?: string } | null;
 
 };
-
-
 
 type MarketplaceStatus = {
 
@@ -70,15 +64,11 @@ type MarketplaceStatus = {
 
 };
 
-
-
 type ProductStatus = ProductInfo & {
 
   marketplaces: MarketplaceStatus[];
 
 };
-
-
 
 type EmployeeInfo = {
 
@@ -87,8 +77,6 @@ type EmployeeInfo = {
   name?: string;
 
 };
-
-
 
 type IssueRecord = {
 
@@ -114,8 +102,6 @@ type IssueRecord = {
 
 };
 
-
-
 const MARKETPLACES: MarketplaceName[] = [
 
   "Talabat",
@@ -127,8 +113,6 @@ const MARKETPLACES: MarketplaceName[] = [
   "Keeta",
 
 ];
-
-
 
 const ISSUE_TYPES: IssueType[] = [
 
@@ -148,8 +132,6 @@ const ISSUE_TYPES: IssueType[] = [
 
 ];
 
-
-
 const ISSUE_STATUSES: IssueStatus[] = [
 
   "open",
@@ -163,8 +145,6 @@ const ISSUE_STATUSES: IssueStatus[] = [
   "closed",
 
 ];
-
-
 
 const STATUS_LABELS: Record<IssueStatus, string> = {
 
@@ -180,8 +160,6 @@ const STATUS_LABELS: Record<IssueStatus, string> = {
 
 };
 
-
-
 function getProductName(
 
   product: ProductInfo | string | null | undefined
@@ -191,8 +169,6 @@ function getProductName(
   if (!product) return "Unknown product";
 
   if (typeof product === "string") return product;
-
-
 
   return (
 
@@ -210,8 +186,6 @@ function getProductName(
 
 }
 
-
-
 function getProductSku(
 
   product: ProductInfo | string | null | undefined
@@ -224,21 +198,27 @@ function getProductSku(
 
 }
 
-function getCategoryName(
+function getCategoryName(product: ProductInfo): string {
+  const categoryEn = product.categoryEn?.trim();
+  const categoryAr = product.categoryAr?.trim();
 
-  category: ProductInfo["category"]
+  if (categoryEn) return categoryEn;
+  if (categoryAr) return categoryAr;
 
-): string {
+  const category = product.category;
 
   if (!category) return "Uncategorized";
+  if (typeof category === "string") {
+    return category.trim() || "Uncategorized";
+  }
 
-  if (typeof category === "string") return category.trim() || "Uncategorized";
-
-  return category.nameEn || category.name || category.nameAr || "Uncategorized";
-
+  return (
+    category.nameEn?.trim() ||
+    category.name?.trim() ||
+    category.nameAr?.trim() ||
+    "Uncategorized"
+  );
 }
-
-
 
 function getEmployeeName(
 
@@ -254,27 +234,17 @@ function getEmployeeName(
 
 }
 
-
-
 function formatDate(date?: string): string {
 
   if (!date) return "—";
 
-
-
   const parsed = new Date(date);
 
-
-
   if (Number.isNaN(parsed.getTime())) return "—";
-
-
 
   return parsed.toLocaleString();
 
 }
-
-
 
 function statusColor(status: IssueStatus): string {
 
@@ -308,8 +278,6 @@ function statusColor(status: IssueStatus): string {
 
 }
 
-
-
 function MarketplaceBadge({
 
   marketplace,
@@ -334,8 +302,6 @@ function MarketplaceBadge({
 
   }
 
-
-
   if (marketplace.available === true) {
 
     return (
@@ -350,8 +316,6 @@ function MarketplaceBadge({
 
   }
 
-
-
   return (
 
     <span className="inline-flex rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
@@ -364,23 +328,17 @@ function MarketplaceBadge({
 
 }
 
-
-
 export default function IssuesPage() {
 
   const [issues, setIssues] = useState<IssueRecord[]>([]);
 
   const [products, setProducts] = useState<ProductStatus[]>([]);
 
-
-
   const [loading, setLoading] = useState(true);
 
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-
 
   const [search, setSearch] = useState("");
 
@@ -394,21 +352,15 @@ export default function IssuesPage() {
 
   const [categoryFilter, setCategoryFilter] = useState("all");
 
-
-
   const [error, setError] = useState("");
 
   const [success, setSuccess] = useState("");
-
-
 
   const loadData = useCallback(async () => {
 
     setLoading(true);
 
     setError("");
-
-
 
     try {
 
@@ -420,13 +372,9 @@ export default function IssuesPage() {
 
       ]);
 
-
-
       const issuesData = await issuesResponse.json();
 
       const productsData = await productsResponse.json();
-
-
 
       if (!issuesResponse.ok) {
 
@@ -438,8 +386,6 @@ export default function IssuesPage() {
 
       }
 
-
-
       if (!productsResponse.ok) {
 
         throw new Error(
@@ -449,8 +395,6 @@ export default function IssuesPage() {
         );
 
       }
-
-
 
       const issueList = Array.isArray(issuesData)
 
@@ -462,8 +406,6 @@ export default function IssuesPage() {
 
           : [];
 
-
-
       const productList = Array.isArray(productsData)
 
         ? productsData
@@ -473,8 +415,6 @@ export default function IssuesPage() {
           ? productsData.products
 
           : [];
-
-
 
       setIssues(issueList);
 
@@ -496,31 +436,23 @@ export default function IssuesPage() {
 
   }, []);
 
-
-
   useEffect(() => {
 
     void loadData();
 
   }, [loadData]);
 
-
-
   const productCategories = useMemo(() => {
 
-    const categories = products.map((product) => getCategoryName(product.category));
+    const categories = products.map((product) => getCategoryName(product));
 
     return Array.from(new Set(categories)).sort((a, b) => a.localeCompare(b));
 
   }, [products]);
 
-
-
   const filteredProducts = useMemo(() => {
 
     const term = search.trim().toLowerCase();
-
-
 
     return products.filter((product) => {
 
@@ -536,15 +468,11 @@ export default function IssuesPage() {
 
         product.sku?.toLowerCase().includes(term);
 
-
-
       const matchesCategory =
 
         categoryFilter === "all" ||
 
-        getCategoryName(product.category) === categoryFilter;
-
-
+        getCategoryName(product) === categoryFilter;
 
       const matchesMarketplace =
 
@@ -555,8 +483,6 @@ export default function IssuesPage() {
           (item) => item.marketplace === marketplaceFilter
 
         );
-
-
 
       const matchesAvailability =
 
@@ -576,15 +502,11 @@ export default function IssuesPage() {
 
           }
 
-
-
           if (availabilityFilter === "connected") {
 
             return item.connected;
 
           }
-
-
 
           if (availabilityFilter === "on") {
 
@@ -592,15 +514,11 @@ export default function IssuesPage() {
 
           }
 
-
-
           if (availabilityFilter === "off") {
 
             return item.connected && item.available === false;
 
           }
-
-
 
           if (availabilityFilter === "not_connected") {
 
@@ -608,13 +526,9 @@ export default function IssuesPage() {
 
           }
 
-
-
           return true;
 
         });
-
-
 
       return (
 
@@ -644,13 +558,9 @@ export default function IssuesPage() {
 
   ]);
 
-
-
   const filteredIssues = useMemo(() => {
 
     const term = search.trim().toLowerCase();
-
-
 
     return issues.filter((issue) => {
 
@@ -661,8 +571,6 @@ export default function IssuesPage() {
       const employeeName =
 
         issue.reporterName || getEmployeeName(issue.reporterEmployeeId);
-
-
 
       const matchesSearch =
 
@@ -676,27 +584,19 @@ export default function IssuesPage() {
 
         employeeName.toLowerCase().includes(term);
 
-
-
       const matchesMarketplace =
 
         marketplaceFilter === "all" ||
 
         issue.marketplace === marketplaceFilter;
 
-
-
       const matchesType =
 
         typeFilter === "all" || issue.type === typeFilter;
 
-
-
       const matchesStatus =
 
         statusFilter === "all" || issue.status === statusFilter;
-
-
 
       return (
 
@@ -726,8 +626,6 @@ export default function IssuesPage() {
 
   ]);
 
-
-
   const marketplaceCounts = useMemo(() => {
 
     let on = 0;
@@ -735,8 +633,6 @@ export default function IssuesPage() {
     let off = 0;
 
     let notConnected = 0;
-
-
 
     for (const product of products) {
 
@@ -760,13 +656,9 @@ export default function IssuesPage() {
 
     }
 
-
-
     return { on, off, notConnected };
 
   }, [products]);
-
-
 
   async function updateIssueStatus(
 
@@ -781,8 +673,6 @@ export default function IssuesPage() {
     setSuccess("");
 
     setUpdatingId(issueId);
-
-
 
     try {
 
@@ -800,19 +690,13 @@ export default function IssuesPage() {
 
       });
 
-
-
       const data = await response.json();
-
-
 
       if (!response.ok) {
 
         throw new Error(data.message || "Failed to update issue status.");
 
       }
-
-
 
       setIssues((previous) =>
 
@@ -827,8 +711,6 @@ export default function IssuesPage() {
         )
 
       );
-
-
 
       setSuccess("Issue status updated successfully.");
 
@@ -852,8 +734,6 @@ export default function IssuesPage() {
 
   }
 
-
-
   async function deleteIssue(issueId: string) {
 
     const confirmed = window.confirm(
@@ -862,19 +742,13 @@ export default function IssuesPage() {
 
     );
 
-
-
     if (!confirmed) return;
-
-
 
     setError("");
 
     setSuccess("");
 
     setDeletingId(issueId);
-
-
 
     try {
 
@@ -884,19 +758,13 @@ export default function IssuesPage() {
 
       });
 
-
-
       const data = await response.json();
-
-
 
       if (!response.ok) {
 
         throw new Error(data.message || "Failed to delete issue.");
 
       }
-
-
 
       // Remove from the screen only after the server confirms deletion.
 
@@ -905,8 +773,6 @@ export default function IssuesPage() {
         previous.filter((issue) => issue._id !== issueId)
 
       );
-
-
 
       setSuccess("Issue permanently deleted from the database.");
 
@@ -925,8 +791,6 @@ export default function IssuesPage() {
     }
 
   }
-
-
 
   const openCount = issues.filter((issue) => issue.status === "open").length;
 
@@ -947,8 +811,6 @@ export default function IssuesPage() {
     (issue) => issue.status === "closed"
 
   ).length;
-
-
 
   return (
 
@@ -972,8 +834,6 @@ export default function IssuesPage() {
 
         </div>
 
-
-
         <button
 
           type="button"
@@ -992,8 +852,6 @@ export default function IssuesPage() {
 
       </div>
 
-
-
       {error && (
 
         <div
@@ -1009,8 +867,6 @@ export default function IssuesPage() {
         </div>
 
       )}
-
-
 
       {success && (
 
@@ -1028,9 +884,7 @@ export default function IssuesPage() {
 
       )}
 
-
-
-      {/* Summary cards */}
+      {/\* Summary cards \*/}
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
 
@@ -1041,8 +895,6 @@ export default function IssuesPage() {
           <p className="mt-2 text-3xl font-bold">{products.length}</p>
 
         </div>
-
-
 
         <div className="rounded-xl border bg-white p-4 shadow-sm">
 
@@ -1056,8 +908,6 @@ export default function IssuesPage() {
 
         </div>
 
-
-
         <div className="rounded-xl border bg-white p-4 shadow-sm">
 
           <p className="text-sm text-gray-500">Marketplace OFF</p>
@@ -1069,8 +919,6 @@ export default function IssuesPage() {
           </p>
 
         </div>
-
-
 
         <div className="rounded-xl border bg-white p-4 shadow-sm">
 
@@ -1086,9 +934,7 @@ export default function IssuesPage() {
 
       </section>
 
-
-
-      {/* Marketplace status table */}
+      {/\* Marketplace status table \*/}
 
       <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
 
@@ -1106,8 +952,6 @@ export default function IssuesPage() {
 
         </div>
 
-
-
         <div className="grid gap-3 border-b p-4 md:grid-cols-2 xl:grid-cols-4">
 
           <input
@@ -1123,8 +967,6 @@ export default function IssuesPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
 
           />
-
-
 
           <select
 
@@ -1150,8 +992,6 @@ export default function IssuesPage() {
 
           </select>
 
-
-
           <select
 
             value={marketplaceFilter}
@@ -1176,8 +1016,6 @@ export default function IssuesPage() {
 
           </select>
 
-
-
           <select
 
             value={availabilityFilter}
@@ -1201,8 +1039,6 @@ export default function IssuesPage() {
           </select>
 
         </div>
-
-
 
         <div className="max-h-[65vh] overflow-auto">
 
@@ -1235,8 +1071,6 @@ export default function IssuesPage() {
               </tr>
 
             </thead>
-
-
 
             <tbody className="divide-y">
 
@@ -1298,21 +1132,17 @@ export default function IssuesPage() {
 
                       <p className="mt-1 text-xs text-gray-500">
 
-                        Category: {getCategoryName(product.category)}
+                        Category: {getCategoryName(product)}
 
                       </p>
 
                     </td>
-
-
 
                     <td className="px-4 py-3 text-gray-600">
 
                       {product.sku || "—"}
 
                     </td>
-
-
 
                     {MARKETPLACES.map((marketplaceName) => {
 
@@ -1325,8 +1155,6 @@ export default function IssuesPage() {
                         (item) => item.marketplace === marketplaceName
 
                       );
-
-
 
                       return (
 
@@ -1380,8 +1208,6 @@ export default function IssuesPage() {
 
         </div>
 
-
-
         <div className="border-t px-4 py-3 text-xs text-gray-500">
 
           Showing {filteredProducts.length} of {products.length} products
@@ -1390,9 +1216,7 @@ export default function IssuesPage() {
 
       </section>
 
-
-
-      {/* Reported issues */}
+      {/\* Reported issues \*/}
 
       <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
 
@@ -1409,8 +1233,6 @@ export default function IssuesPage() {
             </p>
 
           </div>
-
-
 
           <div className="flex flex-wrap gap-2 text-xs">
 
@@ -1442,8 +1264,6 @@ export default function IssuesPage() {
 
         </div>
 
-
-
         <div className="grid gap-3 border-b p-4 md:grid-cols-4">
 
           <input
@@ -1459,8 +1279,6 @@ export default function IssuesPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
 
           />
-
-
 
           <select
 
@@ -1486,8 +1304,6 @@ export default function IssuesPage() {
 
           </select>
 
-
-
           <select
 
             value={typeFilter}
@@ -1511,8 +1327,6 @@ export default function IssuesPage() {
             ))}
 
           </select>
-
-
 
           <select
 
@@ -1539,8 +1353,6 @@ export default function IssuesPage() {
           </select>
 
         </div>
-
-
 
         <div className="overflow-x-auto">
 
@@ -1569,8 +1381,6 @@ export default function IssuesPage() {
               </tr>
 
             </thead>
-
-
 
             <tbody className="divide-y">
 
@@ -1640,8 +1450,6 @@ export default function IssuesPage() {
 
                       </Link>
 
-
-
                       {getProductSku(issue.productId) && (
 
                         <p className="mt-1 text-xs text-gray-500">
@@ -1654,23 +1462,15 @@ export default function IssuesPage() {
 
                     </td>
 
-
-
                     <td className="px-4 py-3">{issue.marketplace}</td>
 
-
-
                     <td className="px-4 py-3 capitalize">{issue.type}</td>
-
-
 
                     <td className="max-w-[240px] whitespace-pre-wrap px-4 py-3 text-gray-600">
 
                       {issue.note || "—"}
 
                     </td>
-
-
 
                     <td className="px-4 py-3">
 
@@ -1682,15 +1482,11 @@ export default function IssuesPage() {
 
                     </td>
 
-
-
                     <td className="whitespace-nowrap px-4 py-3 text-gray-600">
 
                       {formatDate(issue.createdAt)}
 
                     </td>
-
-
 
                     <td className="px-4 py-3">
 
@@ -1709,8 +1505,6 @@ export default function IssuesPage() {
                           {STATUS_LABELS[issue.status] || issue.status}
 
                         </span>
-
-
 
                         <select
 
@@ -1762,8 +1556,6 @@ export default function IssuesPage() {
 
                     </td>
 
-
-
                     <td className="px-4 py-3">
 
                       <div className="flex flex-col items-start gap-2">
@@ -1785,8 +1577,6 @@ export default function IssuesPage() {
                             </Link>
 
                           )}
-
-
 
                         <button
 
@@ -1829,8 +1619,6 @@ export default function IssuesPage() {
           </table>
 
         </div>
-
-
 
         <div className="border-t px-4 py-3 text-xs text-gray-500">
 
