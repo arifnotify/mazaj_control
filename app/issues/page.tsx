@@ -990,7 +990,7 @@ export default function IssuesPage() {
 
 
 
-      {/\* Summary cards \*/}
+      {/* Summary cards */}
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
 
@@ -1048,7 +1048,7 @@ export default function IssuesPage() {
 
 
 
-      {/\* Marketplace status table \*/}
+      {/* Marketplace status table */}
 
       <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
 
@@ -1320,7 +1320,7 @@ export default function IssuesPage() {
 
 
 
-      {/\* Reported issues \*/}
+      {/* Reported issues */}
 
       <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
 
@@ -1771,5 +1771,4 @@ export default function IssuesPage() {
     </main>
 
   );
-
 }
