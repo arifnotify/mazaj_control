@@ -5,7 +5,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Unit = "g" | "kg" | "pcs" | "ml" | "L";
-type WeightOption = { weight: number; unit: Unit; price: number };
+type WeightOption = {
+  _id?: string;
+  weight: number;
+  unit: Unit;
+  price: number;
+};
 type ProductType = "single" | "multiple";
 
 type Product = {
@@ -15,7 +20,7 @@ type Product = {
   nameAr: string;
   descriptionEn?: string;
   descriptionAr?: string;
-  image: string;
+  image?: string;
   categoryEn?: string;
   categoryAr?: string;
   price: number;
@@ -27,11 +32,7 @@ type Product = {
   variants?: WeightOption[];
 };
 
-type MarketplaceName =
-  | "Talabat"
-  | "Snoonu"
-  | "Rafeeq"
-  | "Keeta";
+type MarketplaceName = "Talabat" | "Snoonu" | "Rafeeq" | "Keeta";
 
 type Marketplace = {
   _id?: string;
@@ -43,7 +44,7 @@ type Marketplace = {
   nameAr?: string;
   descriptionEn?: string;
   descriptionAr?: string;
-  image: string;
+  image?: string;
   categoryEn?: string;
   categoryAr?: string;
   syncStatus: string;
@@ -97,20 +98,26 @@ function employeeDisplayName(employee: Employee) {
   return employee.name?.trim() || "Unnamed employee";
 }
 
+async function readJson(response: Response): Promise<any> {
+  return response.json().catch(() => ({}));
+}
+
+function getErrorMessage(data: any, fallback: string) {
+  return data?.message || data?.error || fallback;
+}
+
 export default function ProductDetailsPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const [product, setProduct] = useState<Product | null>(null);
-
   const [marketplaces, setMarketplaces] = useState<Marketplace[]>([]);
   const [compareResults, setCompareResults] = useState<CompareResult[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
-
   const [savingMarketplace, setSavingMarketplace] =
     useState<string | null>(null);
 
@@ -121,65 +128,103 @@ export default function ProductDetailsPage({
   const [reporterEmployeeId, setReporterEmployeeId] = useState("");
   const [issueNote, setIssueNote] = useState("");
   const [reportingIssues, setReportingIssues] = useState(false);
+  const [pageError, setPageError] = useState("");
 
-  async function loadMarketplaceComparison(productId: string) {
-    try {
-      const response = await fetch(
-        `/api/marketplaces/compare?productId=${encodeURIComponent(productId)}`,
-        { cache: "no-store" }
-      );
-
-      const data = await response.json();
-
-      if (response.ok && Array.isArray(data.marketplaces)) {
-        setCompareResults(data.marketplaces);
-      }
-    } catch (error) {
-      console.error("Comparison error:", error);
-    }
-  }
-
-  // Load product and marketplace data.
   useEffect(() => {
     let cancelled = false;
 
+    async function loadMarketplaceComparison(productId: string) {
+      try {
+        const response = await fetch(
+          `/api/marketplaces/compare?productId=${encodeURIComponent(productId)}`,
+          { cache: "no-store" }
+        );
+
+        const data = await readJson(response);
+
+        if (!response.ok) {
+          console.error("Marketplace comparison failed:", data);
+          return;
+        }
+
+        const results = Array.isArray(data)
+          ? data
+          : Array.isArray(data.marketplaces)
+            ? data.marketplaces
+            : [];
+
+        if (!cancelled) {
+          setCompareResults(results);
+        }
+      } catch (error) {
+        console.error("Comparison error:", error);
+      }
+    }
+
     async function loadData() {
       try {
+        setLoading(true);
+        setPageError("");
+
         const { id } = await params;
 
         const [productResponse, marketplaceResponse] = await Promise.all([
-          fetch(`/api/products/${id}`, { cache: "no-store" }),
+          fetch(`/api/products/${encodeURIComponent(id)}`, {
+            cache: "no-store",
+          }),
           fetch(
             `/api/marketplaces?productId=${encodeURIComponent(id)}`,
             { cache: "no-store" }
           ),
         ]);
 
-        const productData = await productResponse.json();
-        const marketplaceData = await marketplaceResponse.json();
+        const productData = await readJson(productResponse);
+        const marketplaceData = await readJson(marketplaceResponse);
 
         if (cancelled) return;
 
-        if (productResponse.ok) {
-          setProduct(productData);
-        } else {
-          console.error("Product load failed:", productData);
+        if (!productResponse.ok) {
+          throw new Error(
+            getErrorMessage(productData, "Failed to load product.")
+          );
         }
 
-        if (
-          marketplaceResponse.ok &&
-          Array.isArray(marketplaceData)
-        ) {
-          setMarketplaces(marketplaceData);
-        } else if (!marketplaceResponse.ok) {
+        // Supports both { success: true, product: {...} } and direct product.
+        const loadedProduct: Product | undefined =
+          productData?.product ?? productData;
+
+        if (!loadedProduct?._id) {
+          throw new Error("The product API did not return a valid product.");
+        }
+
+        setProduct(loadedProduct);
+
+        if (!marketplaceResponse.ok) {
           console.error("Marketplace load failed:", marketplaceData);
+        } else {
+          // Supports an array or { marketplaces: [...] } response.
+          const loadedMarketplaces: Marketplace[] = Array.isArray(
+            marketplaceData
+          )
+            ? marketplaceData
+            : Array.isArray(marketplaceData?.marketplaces)
+              ? marketplaceData.marketplaces
+              : [];
+
+          setMarketplaces(loadedMarketplaces);
         }
 
-        if (!cancelled) {
-          await loadMarketplaceComparison(id);
-        }
+        await loadMarketplaceComparison(id);
       } catch (error) {
         console.error("Failed to load product:", error);
+
+        if (!cancelled) {
+          setPageError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load product."
+          );
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -193,27 +238,27 @@ export default function ProductDetailsPage({
           cache: "no-store",
         });
 
-        const data = await response.json();
+        const data = await readJson(response);
 
         if (!response.ok) {
           throw new Error(
-            data.message || data.error || "Failed to load employees"
+            getErrorMessage(data, "Failed to load employees.")
           );
         }
 
         const allEmployees: Employee[] = Array.isArray(data)
           ? data
-          : Array.isArray(data.employees)
+          : Array.isArray(data?.employees)
             ? data.employees
             : [];
 
-        // Exclude employees explicitly marked inactive.
-        const activeEmployees = allEmployees.filter(
-          (employee) => employee.active !== false
-        );
-
         if (!cancelled) {
-          setEmployees(activeEmployees);
+          setEmployees(
+            allEmployees.filter(
+              (employee) =>
+                employee.active !== false && Boolean(employee._id)
+            )
+          );
         }
       } catch (error) {
         console.error("Failed to load employees:", error);
@@ -228,86 +273,131 @@ export default function ProductDetailsPage({
       }
     }
 
-    loadData();
-    loadEmployees();
+    void loadData();
+    void loadEmployees();
 
     return () => {
       cancelled = true;
     };
   }, [params]);
 
-  function getMarketplace(marketplace: MarketplaceName) {
-    return marketplaces.find(
-      (item) => item.marketplace === marketplace
-    );
+  function getMarketplace(name: MarketplaceName) {
+    return marketplaces.find((item) => item.marketplace === name);
   }
 
-  function getCompareResult(marketplace: MarketplaceName) {
-    return compareResults.find(
-      (item) => item.marketplace === marketplace
-    );
+  function getCompareResult(name: MarketplaceName) {
+    return compareResults.find((item) => item.marketplace === name);
   }
 
-  async function toggleMarketplace(marketplace: MarketplaceName) {
-    if (!product) return;
+  async function refreshComparison(productId: string) {
+    try {
+      const response = await fetch(
+        `/api/marketplaces/compare?productId=${encodeURIComponent(productId)}`,
+        { cache: "no-store" }
+      );
 
-    const current = getMarketplace(marketplace);
+      const data = await readJson(response);
+
+      if (!response.ok) {
+        throw new Error(
+          getErrorMessage(data, "Failed to refresh marketplace comparison.")
+        );
+      }
+
+      const results = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.marketplaces)
+          ? data.marketplaces
+          : [];
+
+      setCompareResults(results);
+    } catch (error) {
+      console.error("Comparison refresh error:", error);
+    }
+  }
+
+  async function toggleMarketplace(name: MarketplaceName) {
+    if (!product || savingMarketplace) return;
+
+    const current = getMarketplace(name);
+    const nextAvailable = current ? !current.available : true;
 
     try {
-      setSavingMarketplace(marketplace);
+      setSavingMarketplace(name);
+      setPageError("");
 
       const response = await fetch("/api/marketplaces", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productId: product._id,
-          marketplace,
-          available: current ? !current.available : true,
+          marketplace: name,
+          available: nextAvailable,
           price: product.price,
           nameEn: product.nameEn,
           nameAr: product.nameAr,
           descriptionEn: product.descriptionEn || "",
           descriptionAr: product.descriptionAr || "",
-          image: product.image,
+          image: product.image || "",
           categoryEn: product.categoryEn || "",
           categoryAr: product.categoryAr || "",
           syncStatus: "pending",
         }),
       });
 
-      const data = await response.json();
+      const data = await readJson(response);
 
       if (!response.ok) {
-        alert(
-          data.error ||
-            data.message ||
-            "Failed to update marketplace"
+        throw new Error(
+          getErrorMessage(data, "Failed to update marketplace.")
         );
-        return;
+      }
+
+      // Supports direct marketplace object or wrapped response.
+      const savedMarketplace: Marketplace | undefined =
+        data?.marketplace ?? data?.data ?? data;
+
+      if (
+        !savedMarketplace ||
+        savedMarketplace.marketplace !== name ||
+        typeof savedMarketplace.available !== "boolean"
+      ) {
+        throw new Error(
+          "The marketplace API did not return the updated marketplace."
+        );
       }
 
       setMarketplaces((currentList) => {
         const exists = currentList.some(
-          (item) => item.marketplace === marketplace
+          (item) => item.marketplace === name
         );
 
         return exists
           ? currentList.map((item) =>
-              item.marketplace === marketplace ? data : item
+              item.marketplace === name
+                ? { ...item, ...savedMarketplace }
+                : item
             )
-          : [...currentList, data];
+          : [...currentList, savedMarketplace];
       });
 
-      await loadMarketplaceComparison(product._id);
+      await refreshComparison(product._id);
     } catch (error) {
       console.error("Marketplace update error:", error);
-      alert("Failed to update marketplace.");
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to update marketplace."
+      );
     } finally {
       setSavingMarketplace(null);
     }
   }
 
   function toggleIssue(type: string) {
+    if (reportingIssues) return;
+
     setSelectedIssues((current) =>
       current.includes(type)
         ? current.filter((item) => item !== type)
@@ -316,7 +406,7 @@ export default function ProductDetailsPage({
   }
 
   async function reportIssues() {
-    if (!product) return;
+    if (!product || reportingIssues) return;
 
     if (loadingEmployees) {
       alert("Please wait until employees finish loading.");
@@ -325,6 +415,11 @@ export default function ProductDetailsPage({
 
     if (!reporterEmployeeId) {
       alert("Please select the employee reporting this issue.");
+      return;
+    }
+
+    if (!employees.some((employee) => employee._id === reporterEmployeeId)) {
+      alert("Please select a valid active employee.");
       return;
     }
 
@@ -348,7 +443,6 @@ export default function ProductDetailsPage({
 
       let successfulCount = 0;
 
-      // Save every selected issue with the chosen employee and note.
       for (const type of selectedIssues) {
         const response = await fetch("/api/issues", {
           method: "POST",
@@ -362,17 +456,17 @@ export default function ProductDetailsPage({
           }),
         });
 
-        const data = await response.json();
+        const data = await readJson(response);
 
         if (!response.ok) {
-          const message =
-            data.message ||
-            data.error ||
-            "Failed to create issue.";
+          const message = getErrorMessage(
+            data,
+            "Failed to create issue."
+          );
 
           if (successfulCount > 0) {
             throw new Error(
-              `${successfulCount} issue(s) were saved, but another issue failed: ${message}. Please check the Issues page before submitting again.`
+              `${successfulCount} issue(s) were saved, but another issue failed: ${message}. Check the Issues page before submitting again.`
             );
           }
 
@@ -424,14 +518,15 @@ export default function ProductDetailsPage({
     return (
       <main className="min-h-screen bg-gray-50 p-6 md:p-8">
         <div className="mx-auto max-w-5xl rounded-2xl border bg-white p-12 text-center shadow-sm">
-          <div className="text-2xl">📦</div>
+          <div className="text-3xl">📦</div>
 
           <h1 className="mt-5 text-2xl font-bold text-gray-900">
             Product not found
           </h1>
 
           <p className="mt-2 text-gray-500">
-            The product you are looking for does not exist.
+            {pageError ||
+              "The product could not be loaded. Check the API response."}
           </p>
 
           <Link
@@ -448,6 +543,7 @@ export default function ProductDetailsPage({
   return (
     <main className="min-h-screen bg-gray-50 p-6 md:p-8">
       <div className="mx-auto max-w-7xl">
+        {/* HEADER */}
         <div className="mb-8">
           <Link
             href="/products"
@@ -504,6 +600,12 @@ export default function ProductDetailsPage({
           </div>
         </div>
 
+        {pageError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {pageError}
+          </div>
+        )}
+
         {/* PRODUCT OVERVIEW */}
         <div className="mb-6 grid gap-6 lg:grid-cols-3">
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -524,7 +626,7 @@ export default function ProductDetailsPage({
           </div>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:col-span-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
                   Master Product
@@ -534,7 +636,7 @@ export default function ProductDetailsPage({
                 </p>
               </div>
 
-              <div className="rounded-xl bg-gray-100 px-4 py-2 text-right">
+              <div className="shrink-0 rounded-xl bg-gray-100 px-4 py-2 text-right">
                 <p className="text-xs text-gray-500">Price</p>
                 <p className="text-xl font-bold text-gray-900">
                   QAR {Number(product.price).toFixed(2)}
@@ -632,17 +734,46 @@ export default function ProductDetailsPage({
           </div>
         </div>
 
+        {/* WEIGHT OPTIONS */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-bold text-gray-900">Weight Options & Pricing</h2>
-          <p className="mt-1 text-sm text-gray-500">One SKU and one shared stock across all weight options.</p>
-          {product.productType === "multiple" && product.variants?.length ? (
+          <h2 className="text-xl font-bold text-gray-900">
+            Weight Options & Pricing
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            One SKU and one shared stock across all weight options.
+          </p>
+
+          {product.productType === "multiple" &&
+          product.variants?.length ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {product.variants.map((variant, index) => <div key={index} className="rounded-xl border bg-gray-50 p-4"><p className="font-semibold text-gray-900">{variant.weight} {variant.unit}</p><p className="mt-1 text-blue-700">QAR {Number(variant.price).toFixed(2)}</p></div>)}
+              {product.variants.map((variant, index) => (
+                <div
+                  key={
+                    variant._id ||
+                    `${variant.weight}-${variant.unit}-${index}`
+                  }
+                  className="rounded-xl border bg-gray-50 p-4"
+                >
+                  <p className="font-semibold text-gray-900">
+                    {variant.weight} {variant.unit}
+                  </p>
+                  <p className="mt-1 text-blue-700">
+                    QAR {Number(variant.price).toFixed(2)}
+                  </p>
+                </div>
+              ))}
             </div>
-          ) : <p className="mt-4 text-gray-700">{product.singleWeight ? `${product.singleWeight} ${product.singleUnit || "g"}` : "Single item (no weight)"} — QAR {Number(product.price).toFixed(2)}</p>}
+          ) : (
+            <p className="mt-4 text-gray-700">
+              {product.singleWeight
+                ? `${product.singleWeight} ${product.singleUnit || "g"}`
+                : "Single item (no weight)"}{" "}
+              — QAR {Number(product.price).toFixed(2)}
+            </p>
+          )}
         </section>
 
-        {/* MARKETPLACE SYNC CHECK */}
+        {/* MARKETPLACE COMPARISON */}
         <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
@@ -654,18 +785,22 @@ export default function ProductDetailsPage({
               </p>
             </div>
 
-            <div className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600">
-              4 Marketplaces
-            </div>
+            <button
+              type="button"
+              onClick={() => void refreshComparison(product._id)}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              ↻ Refresh comparison
+            </button>
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {marketplaceNames.map((marketplace) => {
-              const result = getCompareResult(marketplace);
+            {marketplaceNames.map((name) => {
+              const result = getCompareResult(name);
 
               return (
                 <div
-                  key={marketplace}
+                  key={name}
                   className={`rounded-2xl border p-5 ${
                     !result
                       ? "border-gray-200 bg-gray-50"
@@ -676,19 +811,17 @@ export default function ProductDetailsPage({
                           : "border-red-200 bg-red-50"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white font-bold text-gray-700 shadow-sm">
-                        {marketplaceInitials(marketplace)}
+                        {marketplaceInitials(name)}
                       </div>
-                      <h3 className="font-bold text-gray-900">
-                        {marketplace}
-                      </h3>
+                      <h3 className="font-bold text-gray-900">{name}</h3>
                     </div>
 
                     <span className="text-xl">
                       {!result
-                        ? "..."
+                        ? "…"
                         : result.healthy
                           ? "✅"
                           : result.connected
@@ -699,7 +832,7 @@ export default function ProductDetailsPage({
 
                   {!result ? (
                     <p className="mt-5 text-sm text-gray-500">
-                      Checking...
+                      No comparison result available.
                     </p>
                   ) : !result.connected ? (
                     <div className="mt-5">
@@ -724,6 +857,7 @@ export default function ProductDetailsPage({
                       <p className="font-semibold text-yellow-700">
                         Mismatch Found
                       </p>
+
                       <div className="mt-3 space-y-2">
                         {result.issues.map((issue) => (
                           <div
@@ -733,6 +867,12 @@ export default function ProductDetailsPage({
                             ⚠️ {issueLabels[issue] || issue}
                           </div>
                         ))}
+
+                        {result.issues.length === 0 && (
+                          <p className="text-sm text-gray-500">
+                            Check the comparison API for details.
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -749,29 +889,27 @@ export default function ProductDetailsPage({
               Marketplace Availability
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              Control whether this product is available on each marketplace.
+              Control whether this product is marked available on each marketplace.
             </p>
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {marketplaceNames.map((marketplace) => {
-              const marketplaceData = getMarketplace(marketplace);
+            {marketplaceNames.map((name) => {
+              const marketplaceData = getMarketplace(name);
               const available = marketplaceData?.available ?? false;
-              const saving = savingMarketplace === marketplace;
+              const saving = savingMarketplace === name;
 
               return (
                 <div
-                  key={marketplace}
+                  key={name}
                   className="rounded-2xl border border-gray-200 p-5"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 font-bold text-gray-700">
-                        {marketplaceInitials(marketplace)}
+                        {marketplaceInitials(name)}
                       </div>
-                      <h3 className="font-bold text-gray-900">
-                        {marketplace}
-                      </h3>
+                      <h3 className="font-bold text-gray-900">{name}</h3>
                     </div>
 
                     <span
@@ -797,9 +935,9 @@ export default function ProductDetailsPage({
 
                   <button
                     type="button"
-                    disabled={saving}
-                    onClick={() => toggleMarketplace(marketplace)}
-                    className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 ${
+                    disabled={savingMarketplace !== null}
+                    onClick={() => void toggleMarketplace(name)}
+                    className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${
                       available
                         ? "bg-red-500 hover:bg-red-600"
                         : "bg-green-600 hover:bg-green-700"
@@ -812,7 +950,7 @@ export default function ProductDetailsPage({
                         : "Turn ON"}
                   </button>
 
-                  <p className="mt-3 text-center text-xs text-gray-400">
+                  <p className="mt-3 break-words text-center text-xs text-gray-400">
                     Sync: {marketplaceData?.syncStatus || "not_connected"}
                   </p>
                 </div>
@@ -821,14 +959,14 @@ export default function ProductDetailsPage({
           </div>
         </section>
 
-        {/* REPORT MARKETPLACE ISSUE */}
+        {/* REPORT ISSUE */}
         <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
               Report Marketplace Issue
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              Select the marketplace, issue type, reporter and explain the problem.
+              Select the marketplace, issue types, reporter and explain the problem.
             </p>
           </div>
 
@@ -844,9 +982,7 @@ export default function ProductDetailsPage({
             <select
               id="reporter"
               value={reporterEmployeeId}
-              onChange={(event) =>
-                setReporterEmployeeId(event.target.value)
-              }
+              onChange={(event) => setReporterEmployeeId(event.target.value)}
               disabled={loadingEmployees || reportingIssues}
               className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none focus:border-gray-500 disabled:bg-gray-100"
             >
@@ -865,32 +1001,32 @@ export default function ProductDetailsPage({
 
             {!loadingEmployees && employees.length === 0 && (
               <p className="mt-2 text-sm text-red-600">
-                No active employees found. Check your Employees page and
-                `/api/employees` response.
+                No active employees found. Check the Employees page and the
+                /api/employees response.
               </p>
             )}
           </div>
 
-          {/* MARKETPLACE */}
+          {/* MARKETPLACE SELECTOR */}
           <div className="mt-7">
             <p className="mb-3 text-sm font-semibold text-gray-700">
               Marketplace
             </p>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {marketplaceNames.map((marketplace) => (
+              {marketplaceNames.map((name) => (
                 <button
-                  key={marketplace}
+                  key={name}
                   type="button"
                   disabled={reportingIssues}
-                  onClick={() => setSelectedMarketplace(marketplace)}
+                  onClick={() => setSelectedMarketplace(name)}
                   className={`rounded-xl border px-4 py-3 text-sm font-semibold disabled:opacity-50 ${
-                    selectedMarketplace === marketplace
+                    selectedMarketplace === name
                       ? "border-gray-900 bg-gray-900 text-white"
                       : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  {marketplace}
+                  {name}
                 </button>
               ))}
             </div>
@@ -931,7 +1067,7 @@ export default function ProductDetailsPage({
             </div>
           </div>
 
-          {/* NOTE */}
+          {/* ISSUE NOTE */}
           <div className="mt-7">
             <label
               htmlFor="issue-note"
@@ -973,7 +1109,7 @@ export default function ProductDetailsPage({
               !issueNote.trim() ||
               loadingEmployees
             }
-            onClick={reportIssues}
+            onClick={() => void reportIssues()}
             className="mt-6 rounded-xl bg-gray-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {reportingIssues ? "Reporting..." : "Report Issue"}
