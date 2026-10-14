@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -5,13 +6,15 @@ import Link from "next/link";
 import { useLanguage } from "../components/LanguageProvider";
 
 type Unit = "g" | "kg" | "pcs" | "ml" | "L";
+type ProductType = "single" | "multiple";
+type FilterStatus = "all" | "active" | "inactive";
+
 type WeightOption = {
+  _id?: string;
   weight: number;
   unit: Unit;
   price: number;
 };
-type ProductType = "single" | "multiple";
-type FilterStatus = "all" | "active" | "inactive";
 
 type Product = {
   _id: string;
@@ -20,9 +23,9 @@ type Product = {
   nameAr: string;
   descriptionEn?: string;
   descriptionAr?: string;
-  image: string;
-  categoryEn: string;
-  categoryAr: string;
+  image?: string;
+  categoryEn?: string;
+  categoryAr?: string;
   price: number;
   stock: number;
   active: boolean;
@@ -46,25 +49,27 @@ export default function ProductsPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [statusTarget, setStatusTarget] = useState<Product | null>(null);
   const [employeeId, setEmployeeId] = useState("");
   const [employeePin, setEmployeePin] = useState("");
   const [employeeLoading, setEmployeeLoading] = useState(false);
-
   const [search, setSearch] = useState("");
   const [expandedPrices, setExpandedPrices] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] =
-    useState<FilterStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
-
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const message = (en: string, ar: string) => isArabic ? ar : en;
 
   useEffect(() => {
     void loadProducts();
   }, []);
+
+  async function readResponse(response: Response) {
+    return response.json().catch(() => ({}));
+  }
 
   async function loadProducts() {
     try {
@@ -74,15 +79,24 @@ export default function ProductsPage() {
       const response = await fetch("/api/products", {
         cache: "no-store",
       });
-      const data = await response.json();
+
+      const data = await readResponse(response);
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to load products");
+        throw new Error(
+          data.message || data.error || "Failed to load products"
+        );
       }
 
-      setProducts(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data.products)
+          ? data.products
+          : [];
+
+      setProducts(list);
     } catch (err) {
-      console.error(err);
+      console.error("Load products error:", err);
       setError(
         err instanceof Error ? err.message : "Failed to load products"
       );
@@ -99,12 +113,8 @@ export default function ProductsPage() {
 
   function getProductCategory(product: Product) {
     return language === "ar"
-      ? product.categoryAr ||
-          product.categoryEn ||
-          "بدون فئة"
-      : product.categoryEn ||
-          product.categoryAr ||
-          "No Category";
+      ? product.categoryAr || product.categoryEn || "بدون فئة"
+      : product.categoryEn || product.categoryAr || "No Category";
   }
 
   const categories = useMemo(() => {
@@ -125,11 +135,11 @@ export default function ProductsPage() {
 
     return Array.from(map.entries())
       .map(([key, value]) => ({ key, ...value }))
-      .sort((a, b) => {
-        const nameA = language === "ar" ? a.ar : a.en;
-        const nameB = language === "ar" ? b.ar : b.en;
-        return nameA.localeCompare(nameB);
-      });
+      .sort((a, b) =>
+        (language === "ar" ? a.ar : a.en).localeCompare(
+          language === "ar" ? b.ar : b.en
+        )
+      );
   }, [products, language]);
 
   const filteredProducts = useMemo(() => {
@@ -149,13 +159,12 @@ export default function ProductsPage() {
         (statusFilter === "active" && product.active) ||
         (statusFilter === "inactive" && !product.active);
 
-      const productCategoryKey = `${(
-        product.categoryEn || ""
-      ).toLowerCase()}|${(product.categoryAr || "").toLowerCase()}`;
+      const categoryKey =
+        `${(product.categoryEn || "").toLowerCase()}|` +
+        `${(product.categoryAr || "").toLowerCase()}`;
 
       const matchesCategory =
-        categoryFilter === "all" ||
-        productCategoryKey === categoryFilter;
+        categoryFilter === "all" || categoryKey === categoryFilter;
 
       return matchesSearch && matchesStatus && matchesCategory;
     });
@@ -183,6 +192,7 @@ export default function ProductsPage() {
     setStatusTarget(null);
     setEmployeeId("");
     setEmployeePin("");
+    setEmployees([]);
     setError("");
   }
 
@@ -198,10 +208,13 @@ export default function ProductsPage() {
       const response = await fetch("/api/employees", {
         cache: "no-store",
       });
-      const data = await response.json();
+
+      const data = await readResponse(response);
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to load employees");
+        throw new Error(
+          data.message || data.error || "Failed to load employees"
+        );
       }
 
       const list: Employee[] = Array.isArray(data)
@@ -217,10 +230,9 @@ export default function ProductsPage() {
         )
       );
     } catch (err) {
+      console.error("Load employees error:", err);
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load employees"
+        err instanceof Error ? err.message : "Failed to load employees"
       );
     } finally {
       setEmployeeLoading(false);
@@ -228,23 +240,20 @@ export default function ProductsPage() {
   }
 
   async function confirmStatusChange() {
-    if (!statusTarget) return;
+    if (!statusTarget || actionLoading) return;
 
     if (!employeeId) {
-      setError(
-        isArabic
-          ? "يرجى اختيار الموظف"
-          : "Please select an employee."
-      );
+      setError(message("Please select an employee.", "يرجى اختيار الموظف"));
       return;
     }
 
-    // Keep PIN as a string so PINs such as 007 remain valid.
+    // PIN must remain a string so that 007 is accepted.
     if (!/^\d{3}$/.test(employeePin)) {
       setError(
-        isArabic
-          ? "أدخل رمز PIN صحيحًا مكونًا من 3 أرقام"
-          : "Please enter a valid 3-digit employee PIN."
+        message(
+          "Please enter a valid 3-digit employee PIN.",
+          "أدخل رمز PIN صحيحًا مكونًا من 3 أرقام"
+        )
       );
       return;
     }
@@ -260,6 +269,7 @@ export default function ProductsPage() {
         headers: {
           "Content-Type": "application/json",
         },
+        cache: "no-store",
         body: JSON.stringify({
           active: !product.active,
           statusEmployeeId: employeeId,
@@ -267,32 +277,52 @@ export default function ProductsPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await readResponse(response);
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
-            (isArabic
-              ? "فشل تحديث حالة المنتج"
-              : "Failed to update product status")
+          data.message ||
+            data.error ||
+            message(
+              "Failed to update product status.",
+              "فشل تحديث حالة المنتج"
+            )
+        );
+      }
+
+      // IMPORTANT: the API returns { success, message, product }.
+      // Do not merge the outer response into the product.
+      const updatedProduct: Product | undefined = data.product;
+
+      if (
+        !updatedProduct ||
+        updatedProduct._id !== product._id ||
+        typeof updatedProduct.active !== "boolean"
+      ) {
+        throw new Error(
+          "The server did not return the updated product. Check the PUT API response."
         );
       }
 
       setProducts((current) =>
         current.map((item) =>
-          item._id === product._id ? { ...item, ...data } : item
+          item._id === product._id
+            ? { ...item, ...updatedProduct }
+            : item
         )
       );
 
       setStatusTarget(null);
       setEmployeeId("");
       setEmployeePin("");
+      setEmployees([]);
       setError("");
     } catch (err) {
+      console.error("Product status update error:", err);
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to update product status"
+          : "Failed to update product status."
       );
     } finally {
       setActionLoading(null);
@@ -300,12 +330,11 @@ export default function ProductsPage() {
   }
 
   async function deleteProduct(product: Product) {
-    const productName = getProductName(product);
-
     const confirmed = window.confirm(
-      isArabic
-        ? `هل أنت متأكد أنك تريد حذف المنتج "${productName}"؟\n\nلا يمكن التراجع عن هذا الإجراء.`
-        : `Are you sure you want to delete "${productName}"?\n\nThis action cannot be undone.`
+      message(
+        `Are you sure you want to delete "${getProductName(product)}"?\n\nThis action cannot be undone.`,
+        `هل أنت متأكد أنك تريد حذف المنتج "${getProductName(product)}"؟\n\nلا يمكن التراجع عن هذا الإجراء.`
+      )
     );
 
     if (!confirmed) return;
@@ -317,16 +346,20 @@ export default function ProductsPage() {
       const response = await fetch(`/api/products/${product._id}`, {
         method: "DELETE",
       });
-      const data = await response.json();
+
+      const data = await readResponse(response);
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to delete product");
+        throw new Error(
+          data.message || data.error || "Failed to delete product"
+        );
       }
 
       setProducts((current) =>
         current.filter((item) => item._id !== product._id)
       );
     } catch (err) {
+      console.error("Delete product error:", err);
       setError(
         err instanceof Error ? err.message : "Failed to delete product"
       );
@@ -361,9 +394,10 @@ export default function ProductsPage() {
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              {isArabic
-                ? "إدارة المنتجات والمخزون والتوفر."
-                : "Manage your products, inventory and availability."}
+              {message(
+                "Manage your products, inventory and availability.",
+                "إدارة المنتجات والمخزون والتوفر."
+              )}
             </p>
           </div>
 
@@ -438,7 +472,7 @@ export default function ProductsPage() {
           ))}
         </div>
 
-        {/* Error */}
+        {/* General error */}
         {error && !statusTarget && (
           <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <span>{error}</span>
@@ -447,12 +481,12 @@ export default function ProductsPage() {
               onClick={() => void loadProducts()}
               className="shrink-0 font-semibold underline"
             >
-              {isArabic ? "إعادة المحاولة" : "Retry"}
+              {message("Retry", "إعادة المحاولة")}
             </button>
           </div>
         )}
 
-        {/* Products card */}
+        {/* Products */}
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
           {/* Search and filters */}
           <div className="border-b border-gray-200 p-4 sm:p-5">
@@ -466,15 +500,15 @@ export default function ProductsPage() {
                   >
                     🔍
                   </span>
+
                   <input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder={
-                      isArabic
-                        ? "البحث برمز المنتج أو الاسم أو الفئة..."
-                        : "Search SKU, product or category..."
-                    }
+                    placeholder={message(
+                      "Search SKU, product or category...",
+                      "البحث برمز المنتج أو الاسم أو الفئة..."
+                    )}
                     className={`w-full rounded-xl border border-gray-300 bg-gray-50 py-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-100 ${
                       isArabic ? "pr-11 pl-4" : "pl-11 pr-4"
                     }`}
@@ -488,7 +522,7 @@ export default function ProductsPage() {
                     className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 outline-none focus:border-gray-900 focus:bg-white"
                   >
                     <option value="all">
-                      {isArabic ? "كل الفئات" : "All Categories"}
+                      {message("All Categories", "كل الفئات")}
                     </option>
                     {categories.map((category) => (
                       <option key={category.key} value={category.key}>
@@ -502,7 +536,7 @@ export default function ProductsPage() {
               <div className="flex flex-wrap items-center gap-2">
                 {(
                   [
-                    ["all", isArabic ? "الكل" : "All"],
+                    ["all", message("All", "الكل")],
                     ["active", t("active")],
                     ["inactive", t("inactive")],
                   ] as [FilterStatus, string][]
@@ -530,7 +564,7 @@ export default function ProductsPage() {
                   onClick={clearFilters}
                   className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
-                  {isArabic ? "مسح الفلاتر" : "Clear Filters"}
+                  {message("Clear Filters", "مسح الفلاتر")}
                 </button>
 
                 <button
@@ -547,20 +581,20 @@ export default function ProductsPage() {
             {!loading && (
               <div className="mt-4 flex flex-col gap-1 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  {isArabic ? "عرض " : "Showing "}
+                  {message("Showing ", "عرض ")}
                   <span className="font-semibold text-gray-900">
                     {filteredProducts.length}
                   </span>
-                  {isArabic ? " من " : " of "}
+                  {message(" of ", " من ")}
                   <span className="font-semibold text-gray-900">
                     {products.length}
                   </span>
-                  {isArabic ? " منتج" : " products"}
+                  {message(" products", " منتج")}
                 </div>
 
                 {selectedCategory && (
                   <div className="font-medium text-gray-700">
-                    {isArabic ? "الفئة: " : "Category: "}
+                    {message("Category: ", "الفئة: ")}
                     {language === "ar"
                       ? selectedCategory.ar
                       : selectedCategory.en}
@@ -570,7 +604,7 @@ export default function ProductsPage() {
             )}
           </div>
 
-          {/* Loading */}
+          {/* Loading state */}
           {loading ? (
             <div className="space-y-4 p-12">
               {[1, 2, 3, 4, 5].map((item) => (
@@ -594,32 +628,25 @@ export default function ProductsPage() {
               </div>
 
               <h2 className="mt-5 text-xl font-bold text-gray-900">
-                {search ||
-                categoryFilter !== "all" ||
-                statusFilter !== "all"
-                  ? isArabic
-                    ? "لم يتم العثور على منتجات"
-                    : "No products found"
-                  : isArabic
-                    ? "لا توجد منتجات بعد"
-                    : "No products yet"}
+                {search || categoryFilter !== "all" || statusFilter !== "all"
+                  ? message("No products found", "لم يتم العثور على منتجات")
+                  : message("No products yet", "لا توجد منتجات بعد")}
               </h2>
 
               <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">
-                {isArabic
-                  ? "حاول تغيير البحث أو الفلاتر، أو أضف منتجك الأول."
-                  : "Try changing your search or filters, or add your first product."}
+                {message(
+                  "Try changing your search or filters, or add your first product.",
+                  "حاول تغيير البحث أو الفلاتر، أو أضف منتجك الأول."
+                )}
               </p>
 
-              {search ||
-              categoryFilter !== "all" ||
-              statusFilter !== "all" ? (
+              {search || categoryFilter !== "all" || statusFilter !== "all" ? (
                 <button
                   type="button"
                   onClick={clearFilters}
                   className="mt-5 rounded-xl border border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
-                  {isArabic ? "مسح الفلاتر" : "Clear Filters"}
+                  {message("Clear Filters", "مسح الفلاتر")}
                 </button>
               ) : (
                 <Link
@@ -635,41 +662,36 @@ export default function ProductsPage() {
               <table className="w-full min-w-[1150px]">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50/80">
-                    <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      {t("name")}
-                    </th>
-                    <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      {t("sku")}
-                    </th>
-                    <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      {t("category")}
-                    </th>
-                    <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      {t("price")}
-                    </th>
-                    <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      {t("stock")}
-                    </th>
-                    <th className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      {t("status")}
-                    </th>
+                    {[
+                      t("name"),
+                      t("sku"),
+                      t("category"),
+                      t("price"),
+                      t("stock"),
+                      t("status"),
+                    ].map((heading) => (
+                      <th
+                        key={heading}
+                        className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500"
+                      >
+                        {heading}
+                      </th>
+                    ))}
                     <th className="px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      {isArabic ? "الإجراء" : "Actions"}
+                      {message("Actions", "الإجراء")}
                     </th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-gray-100">
                   {filteredProducts.map((product) => {
+                    const isActionLoading = actionLoading === product._id;
                     const stockStatus =
                       product.stock === 0
                         ? "out"
                         : product.stock <= 5
                           ? "low"
                           : "good";
-
-                    const isActionLoading =
-                      actionLoading === product._id;
 
                     const variantPrices =
                       product.productType === "multiple" &&
@@ -690,7 +712,7 @@ export default function ProductsPage() {
                         key={product._id}
                         className="group transition hover:bg-gray-50/70"
                       >
-                        {/* Product image and name */}
+                        {/* Product image and names */}
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
                             <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
@@ -741,7 +763,7 @@ export default function ProductsPage() {
                           </div>
                         </td>
 
-                        {/* Price and variants */}
+                        {/* Price and weight variants */}
                         <td className="px-5 py-4">
                           <span className="font-semibold text-gray-900">
                             QAR {highestPrice.toFixed(2)}
@@ -751,42 +773,39 @@ export default function ProductsPage() {
                             <div className="mt-2">
                               <button
                                 type="button"
-                                aria-expanded={expandedPrices.includes(
-                                  product._id
-                                )}
+                                aria-expanded={expandedPrices.includes(product._id)}
                                 onClick={() =>
                                   setExpandedPrices((current) =>
                                     current.includes(product._id)
-                                      ? current.filter(
-                                          (id) => id !== product._id
-                                        )
+                                      ? current.filter((id) => id !== product._id)
                                       : [...current, product._id]
                                   )
                                 }
                                 className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
                               >
                                 {expandedPrices.includes(product._id)
-                                  ? isArabic
-                                    ? "إخفاء الأسعار ▲"
-                                    : "Hide weight prices ▲"
-                                  : isArabic
-                                    ? `عرض ${variantPrices.length} أوزان ▼`
-                                    : `View ${variantPrices.length} weight prices ▼`}
+                                  ? message("Hide weight prices ▲", "إخفاء الأسعار ▲")
+                                  : message(
+                                      `View ${variantPrices.length} weight prices ▼`,
+                                      `عرض ${variantPrices.length} أوزان ▼`
+                                    )}
                               </button>
 
                               {expandedPrices.includes(product._id) && (
                                 <div className="mt-2 min-w-[180px] space-y-1 rounded-lg border border-gray-200 bg-white p-2 text-xs">
                                   {variantPrices.map((variant, index) => (
                                     <div
-                                      key={`${variant.weight}-${variant.unit}-${index}`}
+                                      key={
+                                        variant._id ||
+                                        `${variant.weight}-${variant.unit}-${index}`
+                                      }
                                       className="flex items-center justify-between gap-4"
                                     >
                                       <span className="text-gray-500">
                                         {variant.weight} {variant.unit}
                                       </span>
                                       <span className="font-medium text-gray-900">
-                                        QAR{" "}
-                                        {Number(variant.price).toFixed(2)}
+                                        QAR {Number(variant.price).toFixed(2)}
                                       </span>
                                     </div>
                                   ))}
@@ -797,9 +816,7 @@ export default function ProductsPage() {
                             <p className="mt-1 text-xs text-gray-500">
                               {product.singleWeight
                                 ? `${product.singleWeight}${product.singleUnit || "g"}`
-                                : isArabic
-                                  ? "منتج واحد"
-                                  : "Single Item"}
+                                : message("Single Item", "منتج واحد")}
                             </p>
                           )}
                         </td>
@@ -812,7 +829,7 @@ export default function ProductsPage() {
                             </span>
                           ) : stockStatus === "low" ? (
                             <span className="inline-flex rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-600">
-                              {product.stock} {isArabic ? "متبقي" : "left"}
+                              {product.stock} {message("left", "متبقي")}
                             </span>
                           ) : (
                             <span className="font-medium text-gray-700">
@@ -821,23 +838,19 @@ export default function ProductsPage() {
                           )}
                         </td>
 
-                        {/* Status toggle */}
+                        {/* ON/OFF toggle */}
                         <td className="px-5 py-4">
                           <button
                             type="button"
                             onClick={() => void openStatusDialog(product)}
-                            disabled={isActionLoading}
+                            disabled={isActionLoading || actionLoading !== null}
                             aria-label={
-                              product.active
-                                ? "Turn product off"
-                                : "Turn product on"
+                              product.active ? "Turn product off" : "Turn product on"
                             }
                             className={`relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-200 ${
-                              product.active
-                                ? "bg-green-500"
-                                : "bg-gray-300"
+                              product.active ? "bg-green-500" : "bg-gray-300"
                             } ${
-                              isActionLoading
+                              isActionLoading || actionLoading !== null
                                 ? "cursor-wait opacity-50"
                                 : "cursor-pointer"
                             }`}
@@ -872,7 +885,7 @@ export default function ProductsPage() {
                             <div className="mt-1 max-w-36 text-[11px] leading-4 text-gray-500">
                               <div>
                                 {product.active ? "ON" : "OFF"}{" "}
-                                {isArabic ? "بواسطة" : "by"}{" "}
+                                {message("by", "بواسطة")}{" "}
                                 {product.lastStatusChangedByName}
                               </div>
                               {product.lastStatusChangedAt && (
@@ -908,12 +921,10 @@ export default function ProductsPage() {
                             <button
                               type="button"
                               onClick={() => void deleteProduct(product)}
-                              disabled={isActionLoading}
+                              disabled={actionLoading !== null}
                               className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              {isActionLoading
-                                ? "..."
-                                : t("delete")}
+                              {isActionLoading ? "..." : t("delete")}
                             </button>
                           </div>
                         </td>
@@ -932,12 +943,10 @@ export default function ProductsPage() {
             <span>
               {isArabic
                 ? `${filteredProducts.length} منتج معروض`
-                : `${filteredProducts.length} product${
-                    filteredProducts.length !== 1 ? "s" : ""
-                  } displayed`}
+                : `${filteredProducts.length} product${filteredProducts.length !== 1 ? "s" : ""} displayed`}
             </span>
             <span>
-              {isArabic ? "الإجمالي: " : "Total: "}
+              {message("Total: ", "الإجمالي: ")}
               <span className="font-semibold text-gray-700">
                 {products.length}
               </span>
@@ -953,6 +962,9 @@ export default function ProductsPage() {
           role="dialog"
           aria-modal="true"
           aria-label="Confirm product status change"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeStatusDialog();
+          }}
         >
           <div
             className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
@@ -960,28 +972,26 @@ export default function ProductsPage() {
           >
             <h2 className="text-xl font-bold text-gray-900">
               {statusTarget.active
-                ? isArabic
-                  ? "إيقاف المنتج"
-                  : "Turn Product OFF"
-                : isArabic
-                  ? "تشغيل المنتج"
-                  : "Turn Product ON"}
+                ? message("Turn Product OFF", "إيقاف المنتج")
+                : message("Turn Product ON", "تشغيل المنتج")}
             </h2>
 
             <p className="mt-2 text-sm text-gray-600">
               {getProductName(statusTarget)}
             </p>
+
             <p className="mt-1 text-sm text-gray-500">
-              {isArabic
-                ? "اختر الموظف وأدخل رمز PIN المكون من 3 أرقام."
-                : "Select the employee and enter their 3-digit PIN."}
+              {message(
+                "Select the employee and enter their 3-digit PIN.",
+                "اختر الموظف وأدخل رمز PIN المكون من 3 أرقام."
+              )}
             </p>
 
             <label
               htmlFor="status-employee"
               className="mt-5 block text-sm font-semibold text-gray-700"
             >
-              {isArabic ? "اسم الموظف *" : "Employee Name *"}
+              {message("Employee Name *", "اسم الموظف *")}
             </label>
 
             <select
@@ -996,12 +1006,8 @@ export default function ProductsPage() {
             >
               <option value="">
                 {employeeLoading
-                  ? isArabic
-                    ? "جارٍ تحميل الموظفين..."
-                    : "Loading employees..."
-                  : isArabic
-                    ? "اختر الموظف"
-                    : "Select Employee"}
+                  ? message("Loading employees...", "جارٍ تحميل الموظفين...")
+                  : message("Select Employee", "اختر الموظف")}
               </option>
 
               {employees.map((employee) => (
@@ -1013,9 +1019,10 @@ export default function ProductsPage() {
 
             {employees.length === 0 && !employeeLoading && (
               <p className="mt-2 text-sm text-red-600">
-                {isArabic
-                  ? "لم يتم العثور على موظفين نشطين."
-                  : "No active employees found."}
+                {message(
+                  "No active employees found.",
+                  "لم يتم العثور على موظفين نشطين."
+                )}
               </p>
             )}
 
@@ -1023,7 +1030,7 @@ export default function ProductsPage() {
               htmlFor="employee-pin"
               className="mt-4 block text-sm font-semibold text-gray-700"
             >
-              {isArabic ? "رمز PIN للموظف (3 أرقام) *" : "Employee PIN (3 digits) *"}
+              {message("Employee PIN (3 digits) *", "رمز PIN للموظف (3 أرقام) *")}
             </label>
 
             <input
@@ -1045,7 +1052,7 @@ export default function ProductsPage() {
                   void confirmStatusChange();
                 }
               }}
-              placeholder={isArabic ? "أدخل 3 أرقام" : "Enter 3-digit PIN"}
+              placeholder={message("Enter 3-digit PIN", "أدخل 3 أرقام")}
               className="mt-2 w-full rounded-lg border border-gray-300 p-3 tracking-[0.35em] text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100"
               disabled={actionLoading !== null}
             />
@@ -1066,7 +1073,7 @@ export default function ProductsPage() {
                 onClick={closeStatusDialog}
                 className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                {isArabic ? "إلغاء" : "Cancel"}
+                {message("Cancel", "إلغاء")}
               </button>
 
               <button
@@ -1081,12 +1088,10 @@ export default function ProductsPage() {
                 className="rounded-lg bg-gray-900 px-4 py-2 font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {actionLoading
-                  ? isArabic
-                    ? "جارٍ الحفظ..."
-                    : "Saving..."
-                  : isArabic
-                    ? `تأكيد ${statusTarget.active ? "الإيقاف" : "التشغيل"}`
-                    : `Confirm ${statusTarget.active ? "OFF" : "ON"}`}
+                  ? message("Saving...", "جارٍ الحفظ...")
+                  : statusTarget.active
+                    ? message("Confirm OFF", "تأكيد الإيقاف")
+                    : message("Confirm ON", "تأكيد التشغيل")}
               </button>
             </div>
           </div>
