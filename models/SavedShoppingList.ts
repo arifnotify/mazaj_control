@@ -3,14 +3,14 @@ import mongoose, { Schema, models, model } from "mongoose";
 const SavedShoppingListSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 120 },
-    productIds: {
-      type: [String],
-      required: true,
+    // Keep productIds for backward compatibility with lists created by the previous version.
+    productIds: { type: [String], default: [] },
+    items: {
+      type: [{
+        productId: { type: String, required: true },
+        quantity: { type: Number, required: true, min: 1, default: 1 },
+      }],
       default: [],
-      validate: {
-        validator: (value: string[]) => value.length > 0,
-        message: "A shopping list must contain at least one product.",
-      },
     },
   },
   { timestamps: true, collection: "savedshoppinglists" }

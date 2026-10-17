@@ -24,9 +24,16 @@ export async function GET() {
     if (unauthorized) return unauthorized;
     await connectDB();
 
-    const lists = await SavedShoppingList.find({})
+    const rawLists = await SavedShoppingList.find({})
       .sort({ updatedAt: -1, createdAt: -1 })
       .lean();
+    // Older lists only have productIds; expose them as quantity 1 items.
+    const lists = rawLists.map((list: any) => ({
+      ...list,
+      items: Array.isArray(list.items) && list.items.length
+        ? list.items
+        : (list.productIds || []).map((productId: string) => ({ productId, quantity: 1 })),
+    }));
 
     return NextResponse.json({ success: true, lists });
   } catch (error) {
@@ -47,18 +54,26 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const name = typeof body?.name === "string" ? body.name.trim() : "";
-    const productIds = Array.isArray(body?.productIds)
-      ? [...new Set(body.productIds.filter((id: unknown) => typeof id === "string" && mongoose.isValidObjectId(id)))]
-      : [];
+    const rawItems = Array.isArray(body?.items)
+      ? body.items
+      : (Array.isArray(body?.productIds) ? body.productIds.map((productId: string) => ({ productId, quantity: 1 })) : []);
+    const items = rawItems.map((item: any) => ({
+      productId: typeof item?.productId === "string" ? item.productId : "",
+      quantity: Number(item?.quantity ?? 1),
+    }));
+    const validItems = items.length > 0 && items.every((item: any) =>
+      mongoose.isValidObjectId(item.productId) && Number.isInteger(item.quantity) && item.quantity >= 1
+    );
 
     if (!name) {
       return NextResponse.json({ success: false, error: "Shopping list name is required." }, { status: 400 });
     }
-    if (!Array.isArray(body?.productIds) || productIds.length === 0 || productIds.length !== body.productIds.length) {
-      return NextResponse.json({ success: false, error: "Select at least one valid product." }, { status: 400 });
+    if (!validItems) {
+      return NextResponse.json({ success: false, error: "Each item must have a valid product and quantity of at least 1." }, { status: 400 });
     }
 
-    const list = await SavedShoppingList.create({ name, productIds });
+    const productIds = items.map((item: any) => item.productId);
+    const list = await SavedShoppingList.create({ name, items, productIds });
     return NextResponse.json({ success: true, list }, { status: 201 });
   } catch (error) {
     console.error("Saved shopping list POST error:", error);
@@ -85,11 +100,21 @@ export async function PUT(req: NextRequest) {
       if (!name) return NextResponse.json({ success: false, error: "Shopping list name is required." }, { status: 400 });
       update.name = name;
     }
-    if (body?.productIds !== undefined) {
-      if (!Array.isArray(body.productIds)) return NextResponse.json({ success: false, error: "Product IDs must be an array." }, { status: 400 });
-      const ids = [...new Set(body.productIds.filter((id: unknown) => typeof id === "string" && mongoose.isValidObjectId(id)))];
-      if (ids.length === 0 || ids.length !== body.productIds.length) return NextResponse.json({ success: false, error: "Select at least one valid product." }, { status: 400 });
-      update.productIds = ids;
+    if (body?.items !== undefined || body?.productIds !== undefined) {
+      const rawItems = Array.isArray(body?.items)
+        ? body.items
+        : (Array.isArray(body?.productIds) ? body.productIds.map((productId: string) => ({ productId, quantity: 1 })) : null);
+      if (!rawItems) return NextResponse.json({ success: false, error: "Items must be an array." }, { status: 400 });
+      const items = rawItems.map((item: any) => ({
+        productId: typeof item?.productId === "string" ? item.productId : "",
+        quantity: Number(item?.quantity ?? 1),
+      }));
+      const validItems = items.length > 0 && items.every((item: any) =>
+        mongoose.isValidObjectId(item.productId) && Number.isInteger(item.quantity) && item.quantity >= 1
+      );
+      if (!validItems) return NextResponse.json({ success: false, error: "Each item must have a valid product and quantity of at least 1." }, { status: 400 });
+      update.items = items;
+      update.productIds = items.map((item: any) => item.productId);
     }
     if (Object.keys(update).length === 0) return NextResponse.json({ success: false, error: "Nothing to update." }, { status: 400 });
 

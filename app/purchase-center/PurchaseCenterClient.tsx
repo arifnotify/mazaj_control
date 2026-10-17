@@ -72,10 +72,13 @@ type PurchaseOrder = {
 
 type FilterType = "all" | "stock" | "marketplace" | "catalog";
 
+type SavedShoppingListItem = { productId: string; quantity: number };
+
 type SavedShoppingList = {
   _id: string;
   name: string;
   productIds: string[];
+  items?: SavedShoppingListItem[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -139,6 +142,9 @@ export default function PurchaseCenterPage() {
   const [savedShoppingLists, setSavedShoppingLists] = useState<SavedShoppingList[]>([]);
   const [shoppingListName, setShoppingListName] = useState("");
   const [savingShoppingList, setSavingShoppingList] = useState(false);
+  const [activeSavedListId, setActiveSavedListId] = useState<string | null>(null);
+  const [activeSavedListItems, setActiveSavedListItems] = useState<SavedShoppingListItem[]>([]);
+  const [savingActiveSavedList, setSavingActiveSavedList] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -224,7 +230,7 @@ export default function PurchaseCenterPage() {
     try {
       const response = await fetch("/api/saved-shopping-lists", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, productIds: printSelected }),
+        body: JSON.stringify({ name, items: printSelected.map((productId) => ({ productId, quantity: Math.max(1, Number(purchaseItems[productId]?.quantity || 1)) })), productIds: printSelected }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || data?.message || "Could not save shopping list.");
@@ -237,9 +243,51 @@ export default function PurchaseCenterPage() {
   }
 
   function openShoppingList(list: SavedShoppingList) {
-    setPrintSelected(list.productIds || []);
-    setSuccess(`Loaded shopping list: ${list.name}`);
+    const items = Array.isArray(list.items) && list.items.length
+      ? list.items.map((item) => ({ productId: item.productId, quantity: Math.max(1, Number(item.quantity || 1)) }))
+      : (list.productIds || []).map((productId) => ({ productId, quantity: 1 }));
+    setActiveSavedListId(list._id);
+    setActiveSavedListItems(items);
+    setPrintSelected(items.map((item) => item.productId));
+    setSuccess(`Opened shopping list: ${list.name}. Edit quantities below and save changes.`);
     setError("");
+  }
+
+  function updateSavedListQuantity(productId: string, quantity: number) {
+    setActiveSavedListItems((previous) => previous.map((item) => item.productId === productId
+      ? { ...item, quantity: Math.max(1, Number.isFinite(quantity) ? quantity : 1) }
+      : item));
+  }
+
+  function removeSavedListProduct(productId: string) {
+    setActiveSavedListItems((previous) => previous.filter((item) => item.productId !== productId));
+  }
+
+  function addSelectedProductsToSavedList() {
+    setActiveSavedListItems((previous) => {
+      const existing = new Set(previous.map((item) => item.productId));
+      return [...previous, ...printSelected.filter((id) => !existing.has(id)).map((productId) => ({ productId, quantity: 1 }))];
+    });
+    setSuccess("Selected products added to the open list. Save changes to keep them in the database.");
+    setError("");
+  }
+
+  async function saveActiveShoppingList() {
+    if (!activeSavedListId) return;
+    if (activeSavedListItems.length === 0) { setError("A saved shopping list must contain at least one product."); return; }
+    setSavingActiveSavedList(true); setError(""); setSuccess("");
+    try {
+      const response = await fetch("/api/saved-shopping-lists", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listId: activeSavedListId, items: activeSavedListItems }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || data?.message || "Could not save shopping list changes.");
+      setSuccess("Shopping list products and quantities saved to the database.");
+      await loadSavedShoppingLists();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save shopping list changes.");
+    } finally { setSavingActiveSavedList(false); }
   }
 
   async function editShoppingList(list: SavedShoppingList) {
@@ -890,7 +938,7 @@ export default function PurchaseCenterPage() {
           ) : (
             <div className="orders-list saved-shopping-list-items">
               {savedShoppingLists.map((list) => {
-                const count = (list.productIds || []).length;
+                const count = list.items ? list.items.length : (list.productIds || []).length;
                 const updated = list.updatedAt ? new Date(list.updatedAt).toLocaleString() : list.createdAt ? new Date(list.createdAt).toLocaleString() : "Saved list";
                 return (
                   <article className="order-card saved-shopping-list-card" key={list._id}>
@@ -905,6 +953,39 @@ export default function PurchaseCenterPage() {
               })}
             </div>
           )}
+          {activeSavedListId && (() => {
+            const activeList = savedShoppingLists.find((list) => list._id === activeSavedListId);
+            if (!activeList) return null;
+            return (
+              <div className="saved-shopping-list-editor">
+                <div className="panel-heading">
+                  <div><h3>Edit products: {activeList.name}</h3><p>Change the quantity for each product, remove items, then save. Each saved list keeps its own quantities.</p></div>
+                  <button type="button" className="button button-light" onClick={() => { setActiveSavedListId(null); setActiveSavedListItems([]); }}>Close</button>
+                </div>
+                {activeSavedListItems.length === 0 ? <div className="empty-state">No products in this list.</div> : (
+                  <div className="product-list">
+                    {activeSavedListItems.map((item) => {
+                      const product = products.find((entry) => entry._id === item.productId);
+                      return (
+                        <article className="product-row saved-list-product-row" key={item.productId}>
+                          <div className="product-image">{product && productImage(product) ? <img src={productImage(product)} alt={productName(product)} /> : <div className="no-image">No image</div>}</div>
+                          <div className="product-details"><strong>{product ? productName(product) : "Product no longer available"}</strong>{product?.sku ? <span>SKU: {product.sku}</span> : null}</div>
+                          <label className="saved-list-quantity">Quantity
+                            <input className="text-input" type="number" min="1" step="1" value={item.quantity} onChange={(event) => updateSavedListQuantity(item.productId, Number(event.target.value))} />
+                          </label>
+                          <button type="button" className="button button-light" onClick={() => removeSavedListProduct(item.productId)}>Remove</button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="action-buttons">
+                  <button type="button" className="button button-secondary" onClick={addSelectedProductsToSavedList}>Add Selected Products from Find Products</button>
+                  <button type="button" className="button button-primary" onClick={() => void saveActiveShoppingList()} disabled={savingActiveSavedList || activeSavedListItems.length === 0}>{savingActiveSavedList ? "Saving..." : "Save Product & Quantity Changes"}</button>
+                </div>
+              </div>
+            );
+          })()}
         </section>
 
         <details className="panel collapsible-panel">
