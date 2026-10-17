@@ -140,6 +140,31 @@ export async function POST(req: NextRequest) {
     const body: unknown = await req.json();
     if (!body || typeof body !== "object") return NextResponse.json({ success: false, message: "Invalid request" }, { status: 400 });
     const data = body as Record<string, unknown>;
+
+    // Create a supplier from the Purchase Center form.
+    if (data.action === "createSupplier") {
+      const name = typeof data.name === "string" ? data.name.trim() : "";
+      const type = data.type === "market" ? "market" : "regular";
+      const email = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
+      if (!name) return NextResponse.json({ success: false, message: "Supplier name is required" }, { status: 400 });
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return NextResponse.json({ success: false, message: "Enter a valid email address" }, { status: 400 });
+      }
+      const supplier = await Supplier.create({
+        name, type,
+        contactPerson: typeof data.contactPerson === "string" ? data.contactPerson.trim() : "",
+        phone: typeof data.phone === "string" ? data.phone.trim() : "",
+        whatsapp: typeof data.whatsapp === "string" ? data.whatsapp.trim() : "",
+        email,
+        marketName: typeof data.marketName === "string" ? data.marketName.trim() : "",
+        address: typeof data.address === "string" ? data.address.trim() : "",
+        notes: typeof data.notes === "string" ? data.notes.trim() : "",
+        active: true,
+        supplierProducts: [],
+      });
+      return NextResponse.json({ success: true, message: "Supplier created", supplier }, { status: 201 });
+    }
+
     const supplierType = data.supplierType === "market" ? "market" : "regular";
     const supplierId = typeof data.supplierId === "string" ? data.supplierId : "";
     const newSupplierName = typeof data.newSupplierName === "string" ? data.newSupplierName.trim() : "";

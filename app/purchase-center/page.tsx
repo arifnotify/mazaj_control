@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -150,6 +149,12 @@ export default function PurchaseCenterPage() {
   const [catalogPrices, setCatalogPrices] = useState<Record<string, number>>({});
   const [savingCatalog, setSavingCatalog] = useState(false);
   const [supplierPrintMode, setSupplierPrintMode] = useState(false);
+  const [showCreateSupplier, setShowCreateSupplier] = useState(false);
+  const [savingSupplier, setSavingSupplier] = useState(false);
+  const [supplierForm, setSupplierForm] = useState({
+    name: "", type: "regular" as "regular" | "market", contactPerson: "",
+    phone: "", whatsapp: "", email: "", marketName: "", address: "", notes: "",
+  });
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -461,6 +466,35 @@ export default function PurchaseCenterPage() {
     window.onafterprint = () => setSupplierPrintMode(false);
   }
 
+  async function createSupplier() {
+    setError("");
+    setSuccess("");
+    if (!supplierForm.name.trim()) {
+      setError("Please enter the supplier name.");
+      return;
+    }
+    setSavingSupplier(true);
+    try {
+      const response = await fetch("/api/purchase-center", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "createSupplier", ...supplierForm }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || data?.error || "Could not create supplier.");
+      const newId = String(data?.supplier?._id || "");
+      setSuccess("Supplier created successfully. You can now add its products and prices.");
+      setSupplierForm({ name: "", type: "regular", contactPerson: "", phone: "", whatsapp: "", email: "", marketName: "", address: "", notes: "" });
+      setShowCreateSupplier(false);
+      await loadData();
+      if (newId) setSelectedSupplier(newId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create supplier.");
+    } finally {
+      setSavingSupplier(false);
+    }
+  }
+
   async function createPurchaseOrder() {
     setError("");
     setSuccess("");
@@ -652,15 +686,39 @@ export default function PurchaseCenterPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => void loadData()}
-            disabled={loading}
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
+          <div className="action-buttons">
+            <button type="button" className="button button-primary" onClick={() => setShowCreateSupplier((value) => !value)}>
+              {showCreateSupplier ? "Close Supplier Form" : "+ Create Supplier"}
+            </button>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={() => void loadData()}
+              disabled={loading}
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
         </div>
+
+        {showCreateSupplier && <section className="panel">
+          <div className="panel-heading"><div><h2>Create New Supplier</h2><p>Enter supplier details. The new supplier will be available in the supplier selector.</p></div></div>
+          <div className="order-form">
+            <label>Supplier name *<input className="text-input" value={supplierForm.name} onChange={(e) => setSupplierForm((p) => ({ ...p, name: e.target.value }))} placeholder="Supplier or company name" /></label>
+            <label>Supplier type<select className="text-input" value={supplierForm.type} onChange={(e) => setSupplierForm((p) => ({ ...p, type: e.target.value as "regular" | "market" }))}><option value="regular">Regular supplier</option><option value="market">Market</option></select></label>
+            <label>Contact person<input className="text-input" value={supplierForm.contactPerson} onChange={(e) => setSupplierForm((p) => ({ ...p, contactPerson: e.target.value }))} placeholder="Contact person" /></label>
+            <label>Phone<input className="text-input" value={supplierForm.phone} onChange={(e) => setSupplierForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone number" /></label>
+            <label>WhatsApp<input className="text-input" value={supplierForm.whatsapp} onChange={(e) => setSupplierForm((p) => ({ ...p, whatsapp: e.target.value }))} placeholder="WhatsApp number" /></label>
+            <label>Email<input className="text-input" type="email" value={supplierForm.email} onChange={(e) => setSupplierForm((p) => ({ ...p, email: e.target.value }))} placeholder="supplier@example.com" /></label>
+            {supplierForm.type === "market" && <label>Market name<input className="text-input" value={supplierForm.marketName} onChange={(e) => setSupplierForm((p) => ({ ...p, marketName: e.target.value }))} placeholder="Market name" /></label>}
+            <label>Address<input className="text-input" value={supplierForm.address} onChange={(e) => setSupplierForm((p) => ({ ...p, address: e.target.value }))} placeholder="Address / location" /></label>
+            <label>Notes<textarea className="text-input notes-input" rows={2} value={supplierForm.notes} onChange={(e) => setSupplierForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" /></label>
+          </div>
+          <div className="action-buttons" style={{ marginTop: 16 }}>
+            <button type="button" className="button button-primary" onClick={() => void createSupplier()} disabled={savingSupplier}>{savingSupplier ? "Saving Supplier..." : "Save Supplier"}</button>
+            <button type="button" className="button button-light" onClick={() => setShowCreateSupplier(false)} disabled={savingSupplier}>Cancel</button>
+          </div>
+        </section>}
 
         {error && <div className="notice notice-error">{error}</div>}
         {success && <div className="notice notice-success">{success}</div>}
