@@ -537,6 +537,15 @@ export default function PurchaseCenterPage() {
     );
   }
 
+  // When a saved shopping list is open, print its own saved quantities.
+  // Otherwise fall back to the regular purchase quantity field.
+  function getPrintQuantity(productId: string): number | undefined {
+    if (activeSavedListId) {
+      return activeSavedListItems.find((item) => item.productId === productId)?.quantity;
+    }
+    return purchaseItems[productId]?.quantity;
+  }
+
   function printSelectedProducts() {
     if (selectedPrintProducts.length === 0) {
       setError("Please select at least one product to print.");
@@ -799,8 +808,8 @@ export default function PurchaseCenterPage() {
                         <strong className="print-name-ar" dir="rtl" lang="ar">{productNameArabic(product)}</strong>
                         <p>SKU: {product.sku || "—"}</p>
                         <p className="print-bilingual-line"><span>Quantity to buy:</span><span lang="ar" dir="rtl">الكمية المطلوبة:</span></p>
-                        <div className="quantity-blank">{purchaseItems[product._id]?.quantity != null ? `${purchaseItems[product._id].quantity} ${purchaseItems[product._id].quantity === 1 ? "unit" : "units"}` : "__________________"}</div>
-                        <div className="quantity-blank quantity-blank-ar" lang="ar" dir="rtl">{purchaseItems[product._id]?.quantity != null ? `${purchaseItems[product._id].quantity} وحدة` : "__________________"}</div>
+                        <div className="quantity-blank">{getPrintQuantity(product._id) != null ? `${getPrintQuantity(product._id)} ${getPrintQuantity(product._id) === 1 ? "unit" : "units"}` : "__________________"}</div>
+                        <div className="quantity-blank quantity-blank-ar" lang="ar" dir="rtl">{getPrintQuantity(product._id) != null ? `${getPrintQuantity(product._id)} وحدة` : "__________________"}</div>
                         <p className="print-bilingual-line"><span>Purchased:</span><span lang="ar" dir="rtl">تم الشراء:</span></p>
                         <p className="print-checkbox-line">□ Yes / نعم　 □ No / لا</p>
                       </div>
