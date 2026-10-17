@@ -3,6 +3,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+type CategoryValue =
+  | string
+  | {
+      _id?: string;
+      name?: string;
+      nameEn?: string;
+      nameAr?: string;
+    }
+  | null;
+
 type Product = {
   _id: string;
   sku?: string;
@@ -17,7 +27,10 @@ type Product = {
   price?: number;
   outOfStock?: boolean;
   marketplaceInactive?: boolean;
-  [key: string]: unknown;
+  category?: CategoryValue;
+  categoryName?: string;
+  categoryEn?: string;
+  categoryAr?: string;
 };
 
 type Supplier = {
@@ -53,8 +66,9 @@ type PurchaseOrder = {
 
 type FilterType = "all" | "stock" | "marketplace" | "catalog";
 
-const money = (amount: number) =>
-  `${Number(amount || 0).toFixed(2)} QAR`;
+function money(amount: number) {
+  return `${Number(amount || 0).toFixed(2)} QAR`;
+}
 
 function productName(product: Product) {
   return (
@@ -68,6 +82,42 @@ function productName(product: Product) {
 
 function productImage(product: Product) {
   return product.image || product.imageUrl || "";
+}
+
+function getCategoryNames(product: Product) {
+  const category = product.category;
+
+  if (category && typeof category === "object") {
+    const english =
+      category.nameEn ||
+      category.name ||
+      product.categoryEn ||
+      product.categoryName ||
+      "Uncategorized";
+
+    return {
+      key: category._id || english,
+      en: english,
+      ar:
+        category.nameAr ||
+        product.categoryAr ||
+        category.nameEn ||
+        category.name ||
+        "غير مصنف",
+    };
+  }
+
+  const english =
+    (typeof category === "string" ? category : "") ||
+    product.categoryEn ||
+    product.categoryName ||
+    "Uncategorized";
+
+  return {
+    key: english,
+    en: english,
+    ar: product.categoryAr || english,
+  };
 }
 
 export default function PurchaseCenterPage() {
@@ -85,12 +135,10 @@ export default function PurchaseCenterPage() {
   const [selectedSupplier, setSelectedSupplier] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Products to include in a purchase order.
   const [purchaseItems, setPurchaseItems] = useState<
     Record<string, { quantity: number; unitCost: number }>
   >({});
 
-  // Products to include in the printable market shopping list.
   const [printSelected, setPrintSelected] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
@@ -123,7 +171,7 @@ export default function PurchaseCenterPage() {
   }, []);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
   const disabledProducts = useMemo(
@@ -135,7 +183,7 @@ export default function PurchaseCenterPage() {
     let list = products;
 
     if (filter === "catalog") {
-      // This filter must show ONLY products disabled in the dashboard.
+      // Show ONLY products disabled in the dashboard.
       list = list.filter((product) => product.active === false);
     } else if (filter === "stock") {
       list = list.filter(
@@ -195,6 +243,38 @@ export default function PurchaseCenterPage() {
     [disabledProducts, printSelected]
   );
 
+  const printGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        categoryEn: string;
+        categoryAr: string;
+        products: Product[];
+      }
+    >();
+
+    selectedPrintProducts.forEach((product) => {
+      const category = getCategoryNames(product);
+      const key = String(category.key || category.en)
+        .trim()
+        .toLowerCase();
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          categoryEn: category.en,
+          categoryAr: category.ar,
+          products: [],
+        });
+      }
+
+      groups.get(key)!.products.push(product);
+    });
+
+    return Array.from(groups.values()).sort((a, b) =>
+      a.categoryEn.localeCompare(b.categoryEn)
+    );
+  }, [selectedPrintProducts]);
+
   function togglePurchaseProduct(product: Product, checked: boolean) {
     setPurchaseItems((previous) => {
       const next = { ...previous };
@@ -240,13 +320,23 @@ export default function PurchaseCenterPage() {
   }
 
   function selectAllDisabledProducts() {
-    setPrintSelected((previous) => {
-      const ids = filteredProducts
-        .filter((product) => product.active === false)
-        .map((product) => product._id);
+    const visibleDisabledIds = filteredProducts
+      .filter((product) => product.active === false)
+      .map((product) => product._id);
 
-      return Array.from(new Set([...previous, ...ids]));
-    });
+    setPrintSelected((previous) =>
+      Array.from(new Set([...previous, ...visibleDisabledIds]))
+    );
+  }
+
+  function printSelectedProducts() {
+    if (selectedPrintProducts.length === 0) {
+      setError("Please select disabled products to print.");
+      return;
+    }
+
+    setError("");
+    window.print();
   }
 
   async function createPurchaseOrder() {
@@ -327,51 +417,106 @@ export default function PurchaseCenterPage() {
     }
   }
 
-  function printSelectedProducts() {
-    if (selectedPrintProducts.length === 0) {
-      setError("Please select at least one disabled product to print.");
-      return;
-    }
-
-    setError("");
-    window.print();
-  }
-
   return (
     <div className="purchase-page">
-      {/* PRINT-ONLY SHOPPING LIST */}
-      <section className="print-only">
-        <h1>MAZAJ — Disabled Products Purchase List</h1>
-        <p>
-          Date: {new Date().toLocaleDateString()}　
-          Products: {selectedPrintProducts.length}
-        </p>
+      {/* PRINT-ONLY BILINGUAL SHOPPING LIST */}
+      <section className="print-only" dir="ltr">
+        <header className="print-header">
+          <h1>MAZAJ — Purchase Shopping List</h1>
+          <h2 lang="ar" dir="rtl">
+            مجاز — قائمة المشتريات
+          </h2>
 
-        <div className="print-product-grid">
-          {selectedPrintProducts.map((product) => (
-            <article className="print-product" key={product._id}>
-              {productImage(product) ? (
-                <img
-                  src={productImage(product)}
-                  alt={productName(product)}
-                />
-              ) : (
-                <div className="print-no-image">No image</div>
-              )}
+          <div className="print-meta">
+            <span>
+              Date: {new Date().toLocaleDateString("en-GB")}
+            </span>
+            <span lang="ar" dir="rtl">
+              التاريخ: {new Date().toLocaleDateString("ar-QA")}
+            </span>
+          </div>
 
-              <div className="print-product-info">
-                <strong>{productName(product)}</strong>
-                <p>SKU: {product.sku || "—"}</p>
-                <p>Quantity to buy: __________________</p>
-                <p>Purchased: □ Yes　□ No</p>
+          <div className="print-meta">
+            <span>Products: {selectedPrintProducts.length}</span>
+            <span lang="ar" dir="rtl">
+              عدد المنتجات: {selectedPrintProducts.length}
+            </span>
+          </div>
+        </header>
+
+        {printGroups.map((group) => (
+          <section
+            className="print-category"
+            key={group.categoryEn}
+          >
+            <div className="print-category-heading">
+              <div>
+                <h2>{group.categoryEn}</h2>
+                <p>Category</p>
               </div>
-            </article>
-          ))}
-        </div>
 
-        <p className="print-footer">
-          Checked and purchased by: ______________________________
-        </p>
+              <div className="print-category-ar" lang="ar" dir="rtl">
+                <h2>{group.categoryAr}</h2>
+                <p>الفئة</p>
+              </div>
+            </div>
+
+            <div className="print-product-grid">
+              {group.products.map((product) => (
+                <article className="print-product" key={product._id}>
+                  {productImage(product) ? (
+                    <img
+                      src={productImage(product)}
+                      alt={productName(product)}
+                    />
+                  ) : (
+                    <div className="print-no-image">
+                      <span>No image</span>
+                      <span lang="ar" dir="rtl">
+                        لا توجد صورة
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="print-product-info">
+                    <strong>{productName(product)}</strong>
+
+                    <p>SKU: {product.sku || "—"}</p>
+
+                    <p className="print-bilingual-line">
+                      <span>Quantity to buy:</span>
+                      <span lang="ar" dir="rtl">
+                        الكمية المطلوبة:
+                      </span>
+                    </p>
+
+                    <div className="quantity-blank">
+                      __________________
+                    </div>
+
+                    <p className="print-bilingual-line">
+                      <span>Purchased:</span>
+                      <span lang="ar" dir="rtl">
+                        تم الشراء:
+                      </span>
+                    </p>
+
+                    <p className="print-checkbox-line">
+                      □ Yes / نعم　 □ No / لا
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
+
+        <footer className="print-footer">
+          <p>Checked by: ______________________________</p>
+          <p lang="ar" dir="rtl">
+            تم التحقق بواسطة: ______________________________
+          </p>
+        </footer>
       </section>
 
       {/* NORMAL SCREEN CONTENT */}
@@ -380,7 +525,7 @@ export default function PurchaseCenterPage() {
           <div>
             <h1>Purchase Center</h1>
             <p>
-              Find products to purchase from your regular supplier or a new
+              Find products to purchase from your regular supplier or a
               market.
             </p>
           </div>
@@ -388,7 +533,7 @@ export default function PurchaseCenterPage() {
           <button
             type="button"
             className="button button-secondary"
-            onClick={loadData}
+            onClick={() => void loadData()}
             disabled={loading}
           >
             {loading ? "Loading..." : "Refresh"}
@@ -425,8 +570,7 @@ export default function PurchaseCenterPage() {
             <div>
               <h2>Find Products</h2>
               <p>
-                Select products for a purchase order or print a list to take
-                to the market.
+                Select products for an order or print a shopping list.
               </p>
             </div>
           </div>
@@ -442,12 +586,18 @@ export default function PurchaseCenterPage() {
             <select
               className="text-input filter-select"
               value={filter}
-              onChange={(event) => setFilter(event.target.value as FilterType)}
+              onChange={(event) =>
+                setFilter(event.target.value as FilterType)
+              }
             >
               <option value="all">All products</option>
               <option value="stock">Out of stock</option>
-              <option value="marketplace">Unavailable on marketplace</option>
-              <option value="catalog">Product disabled in dashboard</option>
+              <option value="marketplace">
+                Unavailable on marketplace
+              </option>
+              <option value="catalog">
+                Product disabled in dashboard
+              </option>
             </select>
           </div>
 
@@ -535,13 +685,11 @@ export default function PurchaseCenterPage() {
                       <p>SKU: {product.sku || "—"}</p>
                       <p>Stock: {Number(product.stock ?? 0)}</p>
 
-                      {product.active === false && (
+                      {product.active === false ? (
                         <span className="status-tag status-disabled">
                           Disabled in dashboard
                         </span>
-                      )}
-
-                      {product.active !== false && (
+                      ) : (
                         <span className="status-tag status-active">
                           Dashboard active
                         </span>
@@ -550,7 +698,9 @@ export default function PurchaseCenterPage() {
 
                     <div className="product-price">
                       <span>Current price</span>
-                      <strong>{money(Number(product.price || 0))}</strong>
+                      <strong>
+                        {money(Number(product.price || 0))}
+                      </strong>
                     </div>
 
                     <div className="purchase-controls">
@@ -575,7 +725,9 @@ export default function PurchaseCenterPage() {
                             <input
                               type="number"
                               min="1"
-                              value={purchaseItems[product._id]?.quantity ?? 1}
+                              value={
+                                purchaseItems[product._id]?.quantity ?? 1
+                              }
                               onChange={(event) =>
                                 updatePurchaseField(
                                   product._id,
@@ -592,7 +744,9 @@ export default function PurchaseCenterPage() {
                               type="number"
                               min="0"
                               step="0.01"
-                              value={purchaseItems[product._id]?.unitCost ?? 0}
+                              value={
+                                purchaseItems[product._id]?.unitCost ?? 0
+                              }
                               onChange={(event) =>
                                 updatePurchaseField(
                                   product._id,
@@ -617,8 +771,7 @@ export default function PurchaseCenterPage() {
             <div>
               <h2>Create Purchase Order</h2>
               <p>
-                Choose where you will buy the selected products and save the
-                order in the dashboard.
+                Save the selected products as a purchase order.
               </p>
             </div>
           </div>
@@ -629,7 +782,9 @@ export default function PurchaseCenterPage() {
               <select
                 className="text-input"
                 value={selectedSupplier}
-                onChange={(event) => setSelectedSupplier(event.target.value)}
+                onChange={(event) =>
+                  setSelectedSupplier(event.target.value)
+                }
               >
                 <option value="">Select supplier or market</option>
                 {suppliers
@@ -651,7 +806,7 @@ export default function PurchaseCenterPage() {
                 className="text-input notes-input"
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
-                placeholder="Optional notes for this purchase order..."
+                placeholder="Optional purchase notes..."
                 rows={3}
               />
             </label>
@@ -662,6 +817,7 @@ export default function PurchaseCenterPage() {
               <span>Selected products</span>
               <strong>{selectedPurchaseItems.length}</strong>
             </div>
+
             <div>
               <span>Total quantity</span>
               <strong>
@@ -671,6 +827,7 @@ export default function PurchaseCenterPage() {
                 )}
               </strong>
             </div>
+
             <div>
               <span>Estimated subtotal</span>
               <strong>{money(purchaseTotal)}</strong>
@@ -686,6 +843,7 @@ export default function PurchaseCenterPage() {
                   ) : (
                     <div className="selected-no-image">—</div>
                   )}
+
                   <div>
                     <strong>{item.name}</strong>
                     <span>SKU: {item.sku || "—"}</span>
@@ -693,6 +851,7 @@ export default function PurchaseCenterPage() {
                       Qty: {item.quantity} × {money(item.unitCost)}
                     </span>
                   </div>
+
                   <strong>{money(item.lineTotal)}</strong>
                 </div>
               ))}
@@ -713,7 +872,7 @@ export default function PurchaseCenterPage() {
           <div className="panel-heading">
             <div>
               <h2>Purchase Order History</h2>
-              <p>Orders previously saved in the dashboard.</p>
+              <p>Previously saved purchase orders.</p>
             </div>
           </div>
 
@@ -750,16 +909,18 @@ export default function PurchaseCenterPage() {
                         ) : (
                           <div className="selected-no-image">—</div>
                         )}
+
                         <div>
                           <strong>{item.name}</strong>
                           <span>SKU: {item.sku || "—"}</span>
                           <span>Quantity: {item.quantity}</span>
                         </div>
+
                         <strong>
                           {money(
                             Number(
-                              item.lineTotal ||
-                                item.quantity * item.unitCost ||
+                              item.lineTotal ??
+                                item.quantity * item.unitCost ??
                                 0
                             )
                           )}
@@ -781,7 +942,7 @@ export default function PurchaseCenterPage() {
                             type="button"
                             className="button button-secondary"
                             onClick={() =>
-                              updateOrderStatus(order._id, "ordered")
+                              void updateOrderStatus(order._id, "ordered")
                             }
                           >
                             Mark Ordered
@@ -794,7 +955,7 @@ export default function PurchaseCenterPage() {
                             type="button"
                             className="button button-primary"
                             onClick={() =>
-                              updateOrderStatus(order._id, "received")
+                              void updateOrderStatus(order._id, "received")
                             }
                           >
                             Mark Received
@@ -807,7 +968,7 @@ export default function PurchaseCenterPage() {
                             type="button"
                             className="button button-light"
                             onClick={() =>
-                              updateOrderStatus(order._id, "cancelled")
+                              void updateOrderStatus(order._id, "cancelled")
                             }
                           >
                             Cancel
