@@ -276,23 +276,55 @@ export default function PurchaseCenterPage() {
   );
 
   const printPages = useMemo(() => {
-    // 12 product cards per printed page (3 columns x 4 rows) to save paper.
-    const pages: Array<{ groups: Array<{ categoryEn: string; categoryAr: string; products: Product[] }> }> = [];
-    for (let start = 0; start < selectedPrintProducts.length; start += 12) {
-      const pageProducts = selectedPrintProducts.slice(start, start + 12);
-      const groups = new Map<string, { categoryEn: string; categoryAr: string; products: Product[] }>();
-      pageProducts.forEach((product) => {
-        const category = getCategoryNames(product);
-        const key = String(category.key || category.en).trim().toLowerCase();
-        if (!groups.has(key)) {
-          groups.set(key, { categoryEn: category.en, categoryAr: category.ar, products: [] });
+    // Group all selected products by category FIRST, then flow the groups
+    // sequentially over A4 pages. This prevents category products being
+    // scattered between unrelated categories. Each page holds at most 12 cards.
+    type PrintGroup = { key: string; categoryEn: string; categoryAr: string; products: Product[] };
+    type PrintPage = { groups: PrintGroup[]; productCount: number };
+
+    const grouped = new Map<string, PrintGroup>();
+    selectedPrintProducts.forEach((product) => {
+      const category = getCategoryNames(product);
+      const key = String(category.key || category.en).trim().toLowerCase();
+      if (!grouped.has(key)) {
+        grouped.set(key, { key, categoryEn: category.en, categoryAr: category.ar, products: [] });
+      }
+      grouped.get(key)!.products.push(product);
+    });
+
+    const categoryGroups = Array.from(grouped.values()).sort((a, b) =>
+      a.categoryEn.localeCompare(b.categoryEn)
+    );
+    const pages: PrintPage[] = [];
+    let currentPage: PrintPage = { groups: [], productCount: 0 };
+
+    categoryGroups.forEach((categoryGroup) => {
+      // Keep the category contiguous. If it spans pages, continue it on the
+      // next page before starting another category.
+      let remaining = [...categoryGroup.products];
+      while (remaining.length > 0) {
+        if (currentPage.productCount === 12) {
+          pages.push(currentPage);
+          currentPage = { groups: [], productCount: 0 };
         }
-        groups.get(key)!.products.push(product);
-      });
-      pages.push({
-        groups: Array.from(groups.values()).sort((a, b) => a.categoryEn.localeCompare(b.categoryEn)),
-      });
-    }
+
+        const room = 12 - currentPage.productCount;
+        const chunk = remaining.slice(0, room);
+        currentPage.groups.push({
+          ...categoryGroup,
+          products: chunk,
+        });
+        currentPage.productCount += chunk.length;
+        remaining = remaining.slice(chunk.length);
+
+        if (remaining.length > 0) {
+          pages.push(currentPage);
+          currentPage = { groups: [], productCount: 0 };
+        }
+      }
+    });
+
+    if (currentPage.productCount > 0) pages.push(currentPage);
     return pages;
   }, [selectedPrintProducts]);
 
@@ -452,7 +484,7 @@ export default function PurchaseCenterPage() {
             .print-header h1 { font-size: 16pt !important; margin: 0 0 2mm !important; }
             .print-header h2 { font-size: 13pt !important; margin: 0 0 2mm !important; }
             .print-meta { font-size: 8pt !important; margin: 1mm 0 !important; }
-            .print-category { margin: 0 0 2mm !important; break-inside: avoid; }
+            .print-category { margin: 0 0 2mm !important; break-inside: auto; page-break-inside: auto; }
             .print-category-heading { margin: 1mm 0 !important; padding: 1mm 2mm !important; }
             .print-category-heading h2 { font-size: 9pt !important; margin: 0 !important; }
             .print-category-heading p { font-size: 7pt !important; margin: 0 !important; }
