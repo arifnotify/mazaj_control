@@ -26,6 +26,13 @@ const menuItems = [
     href: "/stock-arrivals",
     icon: "📦",
   },
+  
+{
+  key: "purchaseCenter",
+  href: "/purchase-center",
+  icon: "🛒",
+},
+
   {
     key: "issues",
     href: "/issues",
