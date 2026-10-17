@@ -501,7 +501,14 @@ export default function PurchaseCenterPage() {
                     </p>
 
                     <div className="quantity-blank">
-                      __________________
+                      {purchaseItems[product._id]?.quantity != null
+                        ? `${purchaseItems[product._id].quantity} ${purchaseItems[product._id].quantity === 1 ? "unit" : "units"}`
+                        : "__________________"}
+                    </div>
+                    <div className="quantity-blank quantity-blank-ar" lang="ar" dir="rtl">
+                      {purchaseItems[product._id]?.quantity != null
+                        ? `${purchaseItems[product._id].quantity} وحدة`
+                        : "__________________"}
                     </div>
 
                     <p className="print-bilingual-line">
@@ -994,4 +1001,3 @@ export default function PurchaseCenterPage() {
     </div>
   );
 }
-
