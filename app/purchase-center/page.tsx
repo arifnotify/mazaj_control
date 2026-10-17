@@ -920,8 +920,7 @@ export default function PurchaseCenterPage() {
                           {money(
                             Number(
                               item.lineTotal ??
-                                item.quantity * item.unitCost ??
-                                0
+                                item.quantity * item.unitCost
                             )
                           )}
                         </strong>
