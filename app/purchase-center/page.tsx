@@ -243,12 +243,10 @@ export default function PurchaseCenterPage() {
     0
   );
 
+  // Print selection can include ANY product, even if it is active or in stock.
   const selectedPrintProducts = useMemo(
-    () =>
-      disabledProducts.filter((product) =>
-        printSelected.includes(product._id)
-      ),
-    [disabledProducts, printSelected]
+    () => products.filter((product) => printSelected.includes(product._id)),
+    [products, printSelected]
   );
 
   const printGroups = useMemo(() => {
@@ -327,19 +325,18 @@ export default function PurchaseCenterPage() {
     });
   }
 
-  function selectAllDisabledProducts() {
-    const visibleDisabledIds = filteredProducts
-      .filter((product) => product.active === false)
-      .map((product) => product._id);
+  function selectAllVisibleProducts() {
+    // Select all products currently shown by the chosen filter/search.
+    const visibleProductIds = filteredProducts.map((product) => product._id);
 
     setPrintSelected((previous) =>
-      Array.from(new Set([...previous, ...visibleDisabledIds]))
+      Array.from(new Set([...previous, ...visibleProductIds]))
     );
   }
 
   function printSelectedProducts() {
     if (selectedPrintProducts.length === 0) {
-      setError("Please select disabled products to print.");
+      setError("Please select at least one product to print.");
       return;
     }
 
@@ -614,19 +611,18 @@ export default function PurchaseCenterPage() {
             </select>
           </div>
 
-          {filter === "catalog" && (
-            <div className="print-actions">
+          <div className="print-actions">
               <span>
-                {filteredProducts.length} disabled product(s) found
+                {filteredProducts.length} product(s) shown · {selectedPrintProducts.length} selected for print
               </span>
 
               <div className="action-buttons">
                 <button
                   type="button"
                   className="button button-secondary"
-                  onClick={selectAllDisabledProducts}
+                  onClick={selectAllVisibleProducts}
                 >
-                  Select All Disabled Products
+                  Select All Visible Products
                 </button>
 
                 <button
@@ -634,7 +630,7 @@ export default function PurchaseCenterPage() {
                   className="button button-primary"
                   onClick={printSelectedProducts}
                 >
-                  Print Selected ({selectedPrintProducts.length})
+                  Print Shopping List ({selectedPrintProducts.length})
                 </button>
 
                 <button
@@ -646,7 +642,6 @@ export default function PurchaseCenterPage() {
                 </button>
               </div>
             </div>
-          )}
 
           {loading ? (
             <div className="empty-state">Loading products...</div>
@@ -664,23 +659,18 @@ export default function PurchaseCenterPage() {
 
                 return (
                   <article className="product-row" key={product._id}>
-                    {filter === "catalog" && (
-                      <label
-                        className="selection-checkbox"
-                        title="Select for printed shopping list"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={printChecked}
-                          onChange={(event) =>
-                            togglePrintProduct(
-                              product._id,
-                              event.target.checked
-                            )
-                          }
-                        />
-                      </label>
-                    )}
+                    <label
+                      className="selection-checkbox"
+                      title="Select this product for the printed shopping list"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={printChecked}
+                        onChange={(event) =>
+                          togglePrintProduct(product._id, event.target.checked)
+                        }
+                      />
+                    </label>
 
                     <div className="product-image">
                       {productImage(product) ? (
@@ -1004,3 +994,4 @@ export default function PurchaseCenterPage() {
     </div>
   );
 }
+
