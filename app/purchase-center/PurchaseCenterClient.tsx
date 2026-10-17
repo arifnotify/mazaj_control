@@ -72,6 +72,14 @@ type PurchaseOrder = {
 
 type FilterType = "all" | "stock" | "marketplace" | "catalog";
 
+type SavedShoppingList = {
+  _id: string;
+  name: string;
+  productIds: string[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 function money(amount: number) {
   return `${Number(amount || 0).toFixed(2)} QAR`;
 }
@@ -124,10 +132,13 @@ function getCategoryNames(product: Product) {
   };
 }
 
-export default function PurchaseCenterClient() {
+export default function PurchaseCenterPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [savedShoppingLists, setSavedShoppingLists] = useState<SavedShoppingList[]>([]);
+  const [shoppingListName, setShoppingListName] = useState("");
+  const [savingShoppingList, setSavingShoppingList] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -188,6 +199,80 @@ export default function PurchaseCenterClient() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  const loadSavedShoppingLists = useCallback(async () => {
+    try {
+      const response = await fetch("/api/saved-shopping-lists", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "Could not load saved shopping lists.");
+      setSavedShoppingLists(Array.isArray(data.lists) ? data.lists : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load saved shopping lists.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSavedShoppingLists();
+  }, [loadSavedShoppingLists]);
+
+  async function saveShoppingList() {
+    setError(""); setSuccess("");
+    const name = shoppingListName.trim();
+    if (!name) { setError("Please enter a name for this shopping list."); return; }
+    if (printSelected.length === 0) { setError("Select at least one product before saving a shopping list."); return; }
+    setSavingShoppingList(true);
+    try {
+      const response = await fetch("/api/saved-shopping-lists", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, productIds: printSelected }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || data?.message || "Could not save shopping list.");
+      setShoppingListName("");
+      setSuccess("Shopping list saved to the database.");
+      await loadSavedShoppingLists();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save shopping list.");
+    } finally { setSavingShoppingList(false); }
+  }
+
+  function openShoppingList(list: SavedShoppingList) {
+    setPrintSelected(list.productIds || []);
+    setSuccess(`Loaded shopping list: ${list.name}`);
+    setError("");
+  }
+
+  async function editShoppingList(list: SavedShoppingList) {
+    const nextName = window.prompt("Edit shopping list name:", list.name);
+    if (nextName === null) return;
+    if (!nextName.trim()) { setError("Shopping list name cannot be empty."); return; }
+    setError(""); setSuccess("");
+    try {
+      const response = await fetch("/api/saved-shopping-lists", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listId: list._id, name: nextName.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || data?.message || "Could not update shopping list.");
+      setSuccess("Shopping list updated.");
+      await loadSavedShoppingLists();
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not update shopping list."); }
+  }
+
+  async function deleteShoppingList(list: SavedShoppingList) {
+    if (!window.confirm(`Delete saved shopping list "${list.name}"?`)) return;
+    setError(""); setSuccess("");
+    try {
+      const response = await fetch("/api/saved-shopping-lists", {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listId: list._id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || data?.message || "Could not delete shopping list.");
+      setSuccess("Shopping list deleted.");
+      await loadSavedShoppingLists();
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not delete shopping list."); }
+  }
 
   useEffect(() => {
     const supplier = suppliers.find((item) => item._id === selectedSupplier);
@@ -783,6 +868,44 @@ export default function PurchaseCenterClient() {
             <strong>{money(purchaseTotal)}</strong>
           </div>
         </div>
+
+
+        <section className="panel saved-shopping-lists-panel">
+          <div className="panel-heading">
+            <div><h2>Saved Shopping Lists</h2><p>Save product selections in the database and reuse them whenever you need.</p></div>
+          </div>
+          <div className="order-form">
+            <label>Shopping list name
+              <input className="text-input" value={shoppingListName} onChange={(event) => setShoppingListName(event.target.value)} placeholder="e.g. Weekly Grocery Purchase" />
+            </label>
+            <div className="action-buttons">
+              <button type="button" className="button button-primary" onClick={() => void saveShoppingList()} disabled={savingShoppingList}>
+                {savingShoppingList ? "Saving..." : `Save Selected Products (${printSelected.length})`}
+              </button>
+              <button type="button" className="button button-secondary" onClick={() => void loadSavedShoppingLists()}>Refresh Lists</button>
+            </div>
+          </div>
+          {savedShoppingLists.length === 0 ? (
+            <div className="empty-state">No saved shopping lists yet. Select products below and save your first list.</div>
+          ) : (
+            <div className="orders-list saved-shopping-list-items">
+              {savedShoppingLists.map((list) => {
+                const count = (list.productIds || []).length;
+                const updated = list.updatedAt ? new Date(list.updatedAt).toLocaleString() : list.createdAt ? new Date(list.createdAt).toLocaleString() : "Saved list";
+                return (
+                  <article className="order-card saved-shopping-list-card" key={list._id}>
+                    <div className="order-card-top"><div><h3>{list.name}</h3><p>{count} product{count === 1 ? "" : "s"} · Updated {updated}</p></div></div>
+                    <div className="action-buttons">
+                      <button type="button" className="button button-primary" onClick={() => openShoppingList(list)}>Open</button>
+                      <button type="button" className="button button-secondary" onClick={() => void editShoppingList(list)}>Edit</button>
+                      <button type="button" className="button button-light" onClick={() => void deleteShoppingList(list)}>Delete</button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         <details className="panel collapsible-panel">
           <summary className="panel-heading collapsible-heading">
