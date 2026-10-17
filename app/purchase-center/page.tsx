@@ -39,6 +39,11 @@ type Supplier = {
   type?: "regular" | "market";
   marketName?: string;
   phone?: string;
+  email?: string;
+  whatsapp?: string;
+  address?: string;
+  contactPerson?: string;
+  supplierProducts?: { productId: string; sku?: string; nameEn?: string; nameAr?: string; image?: string; unitCost: number; notes?: string }[];
   active?: boolean;
 };
 
@@ -141,6 +146,10 @@ export default function PurchaseCenterPage() {
   >({});
 
   const [printSelected, setPrintSelected] = useState<string[]>([]);
+  const [catalogSelected, setCatalogSelected] = useState<string[]>([]);
+  const [catalogPrices, setCatalogPrices] = useState<Record<string, number>>({});
+  const [savingCatalog, setSavingCatalog] = useState(false);
+  const [supplierPrintMode, setSupplierPrintMode] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -174,6 +183,13 @@ export default function PurchaseCenterPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const supplier = suppliers.find((item) => item._id === selectedSupplier);
+    const saved = supplier?.supplierProducts || [];
+    setCatalogSelected(saved.map((item) => item.productId));
+    setCatalogPrices(Object.fromEntries(saved.map((item) => [item.productId, Number(item.unitCost || 0)])));
+  }, [selectedSupplier, suppliers]);
 
   const disabledProducts = useMemo(
     () => products.filter((product) => product.active === false),
@@ -333,9 +349,11 @@ export default function PurchaseCenterPage() {
       const next = { ...previous };
 
       if (checked) {
+        const selectedSupplierRecord = suppliers.find((item) => item._id === selectedSupplier);
+        const savedSupplierProduct = selectedSupplierRecord?.supplierProducts?.find((item) => item.productId === product._id);
         next[product._id] = next[product._id] || {
           quantity: 1,
-          unitCost: Number(product.price || 0),
+          unitCost: savedSupplierProduct ? Number(savedSupplierProduct.unitCost || 0) : Number(product.price || 0),
         };
       } else {
         delete next[product._id];
@@ -389,6 +407,58 @@ export default function PurchaseCenterPage() {
 
     setError("");
     window.print();
+  }
+
+  function toggleCatalogProduct(productId: string, checked: boolean) {
+    setCatalogSelected((previous) => checked
+      ? (previous.includes(productId) ? previous : [...previous, productId])
+      : previous.filter((id) => id !== productId));
+    if (checked && catalogPrices[productId] == null) {
+      const product = products.find((item) => item._id === productId);
+      setCatalogPrices((previous) => ({ ...previous, [productId]: Number(product?.price || 0) }));
+    }
+  }
+
+  async function saveSupplierCatalog() {
+    setError("");
+    setSuccess("");
+    if (!selectedSupplier) {
+      setError("Please select a supplier before saving its product list.");
+      return;
+    }
+    setSavingCatalog(true);
+    try {
+      const response = await fetch("/api/purchase-center", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          supplierId: selectedSupplier,
+          supplierProducts: catalogSelected.map((productId) => ({
+            productId,
+            unitCost: Number(catalogPrices[productId] || 0),
+          })),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || data?.error || "Could not save supplier products.");
+      setSuccess("Supplier product list and prices saved successfully.");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save supplier product list.");
+    } finally {
+      setSavingCatalog(false);
+    }
+  }
+
+  function printSupplierCatalog() {
+    if (!selectedSupplier || catalogSelected.length === 0) {
+      setError("Select a supplier and at least one product in its supplier list to print.");
+      return;
+    }
+    setError("");
+    setSupplierPrintMode(true);
+    window.setTimeout(() => window.print(), 100);
+    window.onafterprint = () => setSupplierPrintMode(false);
   }
 
   async function createPurchaseOrder() {
@@ -472,7 +542,7 @@ export default function PurchaseCenterPage() {
   return (
     <div className="purchase-page">
       {/* PRINT-ONLY BILINGUAL SHOPPING LIST */}
-      <section className="print-only" dir="ltr">
+      {!supplierPrintMode && <section className="print-only" dir="ltr">
         <style jsx global>{`
           @media print {
             @page { size: A4 portrait; margin: 7mm; }
@@ -549,7 +619,27 @@ export default function PurchaseCenterPage() {
             </footer>
           </div>
         ))}
-      </section>
+      </section>}
+
+      {supplierPrintMode && (() => {
+        const supplier = suppliers.find((item) => item._id === selectedSupplier);
+        const catalogProducts = products.filter((product) => catalogSelected.includes(product._id));
+        return <section className="print-only supplier-catalog-print" dir="ltr">
+          <style jsx global>{`@media print { .supplier-catalog-print { display:block !important; } .supplier-catalog-print table { width:100%; border-collapse:collapse; } .supplier-catalog-print th,.supplier-catalog-print td { border:1px solid #777; padding:6px; text-align:left; font-size:9pt; } .supplier-catalog-print img { width:48px;height:48px;object-fit:contain; } }`}</style>
+          <header className="print-header">
+            <h1>MAZAJ — Supplier Product Price List</h1>
+            <h2 lang="ar" dir="rtl">مجاز — قائمة المنتجات وأسعار المورد</h2>
+            <div className="print-meta">Supplier: {supplier?.name || "—"} · Date: {new Date().toLocaleDateString("en-GB")}</div>
+            {supplier?.phone && <div className="print-meta">Phone: {supplier.phone}</div>}
+            {supplier?.email && <div className="print-meta">Email: {supplier.email}</div>}
+            {supplier?.address && <div className="print-meta">Address: {supplier.address}</div>}
+          </header>
+          <table><thead><tr><th>#</th><th>Image</th><th>SKU</th><th>Product (English)</th><th>اسم المنتج (العربية)</th><th>Supplier Price (QAR)</th></tr></thead>
+            <tbody>{catalogProducts.map((product, index) => <tr key={product._id}><td>{index + 1}</td><td>{productImage(product) ? <img src={productImage(product)} alt={productName(product)} /> : "—"}</td><td>{product.sku || "—"}</td><td>{productName(product)}</td><td dir="rtl">{productNameArabic(product)}</td><td>{money(Number(catalogPrices[product._id] || 0))}</td></tr>)}</tbody>
+          </table>
+          <p className="print-footer">Total products: {catalogProducts.length}</p>
+        </section>;
+      })()}
 
       {/* NORMAL SCREEN CONTENT */}
       <div className="screen-only">
@@ -813,6 +903,37 @@ export default function PurchaseCenterPage() {
         </section>
 
         <section className="panel">
+          <div className="panel-heading"><div>
+            <h2>Supplier Product List & Prices</h2>
+            <p>Choose a supplier, save the products it sells, and keep its own QAR prices.</p>
+          </div></div>
+          <div className="order-form">
+            <label>Supplier
+              <select className="text-input" value={selectedSupplier} onChange={(event) => setSelectedSupplier(event.target.value)}>
+                <option value="">Select supplier</option>
+                {suppliers.filter((supplier) => supplier.active !== false).map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.marketName ? ` — ${supplier.marketName}` : ""}</option>)}
+              </select>
+            </label>
+            <div className="action-buttons">
+              <button type="button" className="button button-primary" onClick={saveSupplierCatalog} disabled={savingCatalog || !selectedSupplier}>{savingCatalog ? "Saving..." : "Save Supplier Products & Prices"}</button>
+              <button type="button" className="button button-secondary" onClick={printSupplierCatalog} disabled={!selectedSupplier || catalogSelected.length === 0}>Print Supplier Price List</button>
+            </div>
+          </div>
+          {!selectedSupplier ? <div className="empty-state">Select a supplier to manage its product list.</div> : <div className="product-list">
+            {products.filter((product) => catalogSelected.includes(product._id) || search.trim() === "" || `${productName(product)} ${productNameArabic(product)} ${product.sku || ""}`.toLowerCase().includes(search.trim().toLowerCase())).map((product) => {
+              const checked = catalogSelected.includes(product._id);
+              return <article className="product-row" key={`supplier-catalog-${product._id}`}>
+                <label className="selection-checkbox"><input type="checkbox" checked={checked} onChange={(event) => toggleCatalogProduct(product._id, event.target.checked)} /></label>
+                <div className="product-image">{productImage(product) ? <img src={productImage(product)} alt={productName(product)} /> : <div className="no-image">No image</div>}</div>
+                <div className="product-details"><h3>{productName(product)}</h3><p className="product-name-ar" dir="rtl" lang="ar">{productNameArabic(product)}</p><p>SKU: {product.sku || "—"}</p></div>
+                <div className="purchase-controls"><label>Supplier price (QAR)<input type="number" min="0" step="0.01" disabled={!checked} value={catalogPrices[product._id] ?? Number(product.price || 0)} onChange={(event) => setCatalogPrices((previous) => ({ ...previous, [product._id]: Math.max(0, Number(event.target.value)) }))} /></label></div>
+              </article>;
+            })}
+          </div>}
+          <p>Products in this supplier list: <strong>{catalogSelected.length}</strong></p>
+        </section>
+
+        <section className="panel">
           <div className="panel-heading">
             <div>
               <h2>Create Purchase Order</h2>
@@ -828,9 +949,19 @@ export default function PurchaseCenterPage() {
               <select
                 className="text-input"
                 value={selectedSupplier}
-                onChange={(event) =>
-                  setSelectedSupplier(event.target.value)
-                }
+                onChange={(event) => {
+                  const nextSupplierId = event.target.value;
+                  setSelectedSupplier(nextSupplierId);
+                  const nextSupplier = suppliers.find((item) => item._id === nextSupplierId);
+                  const savedPrices = new Map((nextSupplier?.supplierProducts || []).map((item) => [item.productId, Number(item.unitCost || 0)]));
+                  setPurchaseItems((previous) => {
+                    const next = { ...previous };
+                    Object.keys(next).forEach((productId) => {
+                      if (savedPrices.has(productId)) next[productId] = { ...next[productId], unitCost: savedPrices.get(productId)! };
+                    });
+                    return next;
+                  });
+                }}
               >
                 <option value="">Select supplier or market</option>
                 {suppliers
