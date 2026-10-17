@@ -70,6 +70,22 @@ type PurchaseOrder = {
   createdAt?: string;
 };
 
+type SavedShoppingList = {
+  _id: string;
+  name: string;
+  items: {
+    productId: string;
+    sku?: string;
+    name: string;
+    nameEn?: string;
+    nameAr?: string;
+    image?: string;
+    category?: string;
+  }[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 type FilterType = "all" | "stock" | "marketplace" | "catalog";
 
 function money(amount: number) {
@@ -145,6 +161,12 @@ export default function PurchaseCenterClient() {
   >({});
 
   const [printSelected, setPrintSelected] = useState<string[]>([]);
+  const [savedLists, setSavedLists] = useState<SavedShoppingList[]>([]);
+  const [savedListName, setSavedListName] = useState("");
+  const [editingSavedListId, setEditingSavedListId] = useState("");
+  const [savedListsLoading, setSavedListsLoading] = useState(false);
+  const [savedListError, setSavedListError] = useState("");
+  const [savedListSuccess, setSavedListSuccess] = useState("");
   const [catalogSelected, setCatalogSelected] = useState<string[]>([]);
   const [catalogPrices, setCatalogPrices] = useState<Record<string, number>>({});
   const [savingCatalog, setSavingCatalog] = useState(false);
@@ -185,9 +207,30 @@ export default function PurchaseCenterClient() {
     }
   }, []);
 
+  const loadSavedLists = useCallback(async () => {
+    setSavedListsLoading(true);
+    setSavedListError("");
+    try {
+      const response = await fetch("/api/saved-product-lists", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Could not load saved shopping lists.");
+      }
+      setSavedLists(Array.isArray(data.lists) ? data.lists : []);
+    } catch (err) {
+      setSavedListError(err instanceof Error ? err.message : "Failed to load saved lists.");
+    } finally {
+      setSavedListsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    void loadSavedLists();
+  }, [loadSavedLists]);
 
   useEffect(() => {
     const supplier = suppliers.find((item) => item._id === selectedSupplier);
@@ -412,6 +455,106 @@ export default function PurchaseCenterClient() {
 
     setError("");
     window.print();
+  }
+
+  async function saveShoppingList() {
+    setSavedListError("");
+    setSavedListSuccess("");
+    const name = savedListName.trim();
+    if (!name) {
+      setSavedListError("Enter a name for this shopping list.");
+      return;
+    }
+    if (selectedPrintProducts.length === 0) {
+      setSavedListError("Select at least one product for the shopping list.");
+      return;
+    }
+
+    const items = selectedPrintProducts.map((product) => ({
+      productId: product._id,
+      sku: product.sku || "",
+      name: productName(product),
+      nameEn: product.nameEn || product.name || "",
+      nameAr: productNameArabic(product),
+      image: productImage(product),
+      category: getCategoryNames(product).en,
+    }));
+    const editing = Boolean(editingSavedListId);
+
+    try {
+      const response = await fetch("/api/saved-product-lists", {
+        method: editing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...(editing ? { id: editingSavedListId } : {}), name, items }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Could not save shopping list.");
+      }
+      setSavedListSuccess(editing ? "Shopping list updated in MongoDB." : "Shopping list saved to MongoDB.");
+      setSavedListName("");
+      setEditingSavedListId("");
+      await loadSavedLists();
+    } catch (err) {
+      setSavedListError(err instanceof Error ? err.message : "Failed to save shopping list.");
+    }
+  }
+
+  function loadShoppingList(list: SavedShoppingList) {
+    const existingProductIds = new Set(products.map((product) => product._id));
+    const validIds = list.items.map((item) => item.productId).filter((id) => existingProductIds.has(id));
+    setPrintSelected(validIds);
+    setSavedListName(list.name);
+    setEditingSavedListId(list._id);
+    setSavedListError("");
+    setSavedListSuccess(validIds.length === list.items.length
+      ? `Loaded "${list.name}". You can change the selection and update it.`
+      : `Loaded ${validIds.length} available products. Some saved products are no longer in the product catalog.`);
+  }
+
+  function startNewShoppingList() {
+    setSavedListName("");
+    setEditingSavedListId("");
+    setSavedListError("");
+    setSavedListSuccess("");
+    setPrintSelected([]);
+  }
+
+  async function deleteShoppingList(id: string) {
+    const list = savedLists.find((item) => item._id === id);
+    if (!window.confirm(`Permanently delete shopping list "${list?.name || "this list"}"?`)) return;
+    setSavedListError("");
+    setSavedListSuccess("");
+    try {
+      const response = await fetch(`/api/saved-product-lists?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Could not delete shopping list.");
+      }
+      if (editingSavedListId === id) {
+        setEditingSavedListId("");
+        setSavedListName("");
+      }
+      setSavedListSuccess("Shopping list deleted.");
+      await loadSavedLists();
+    } catch (err) {
+      setSavedListError(err instanceof Error ? err.message : "Failed to delete shopping list.");
+    }
+  }
+
+  function loadAndPrintShoppingList(list: SavedShoppingList) {
+    const existingProductIds = new Set(products.map((product) => product._id));
+    const validIds = list.items.map((item) => item.productId).filter((id) => existingProductIds.has(id));
+    if (validIds.length === 0) {
+      setSavedListError("None of the products in this list are currently available in the product catalog.");
+      return;
+    }
+    setPrintSelected(validIds);
+    setSavedListName(list.name);
+    setEditingSavedListId(list._id);
+    setSavedListError("");
+    setSavedListSuccess(`Loaded "${list.name}". Opening print dialog...`);
+    window.setTimeout(() => window.print(), 150);
   }
 
   function toggleCatalogProduct(productId: string, checked: boolean) {
@@ -994,6 +1137,85 @@ export default function PurchaseCenterClient() {
             </div>
           )}
         </details>
+
+        <section className="panel saved-shopping-lists-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Saved Shopping Lists</h2>
+              <p>Save selected products to MongoDB and load, edit, print, or delete them later.</p>
+            </div>
+          </div>
+
+          <div className="filter-row saved-list-form">
+            <input
+              className="text-input search-input"
+              value={savedListName}
+              onChange={(event) => setSavedListName(event.target.value)}
+              placeholder="List name, e.g. Weekly Grocery Purchase"
+              maxLength={100}
+              aria-label="Shopping list name"
+            />
+            <button type="button" className="button button-primary" onClick={() => void saveShoppingList()}>
+              {editingSavedListId ? "Update Saved List" : "Save Selected Products"}
+            </button>
+            <button type="button" className="button button-light" onClick={startNewShoppingList}>
+              New List
+            </button>
+          </div>
+
+          <p className="saved-list-selection-count">Currently selected for print: <strong>{selectedPrintProducts.length}</strong> product(s)</p>
+          {savedListError && <div className="notice notice-error" role="alert">{savedListError}</div>}
+          {savedListSuccess && <div className="notice notice-success" role="status">{savedListSuccess}</div>}
+
+          <div className="saved-lists-heading">
+            <h3>Your Saved Lists ({savedLists.length})</h3>
+            <button type="button" className="button button-light" onClick={() => void loadSavedLists()} disabled={savedListsLoading}>
+              {savedListsLoading ? "Loading..." : "Refresh Lists"}
+            </button>
+          </div>
+
+          {savedListsLoading ? (
+            <div className="empty-state">Loading saved shopping lists...</div>
+          ) : savedLists.length === 0 ? (
+            <div className="empty-state">No saved shopping lists yet. Select products above and save your first list.</div>
+          ) : (
+            <div className="saved-lists-list">
+              {savedLists.map((list) => (
+                <article className="saved-list-card" key={list._id}>
+                  <div className="saved-list-info">
+                    <h3>{list.name}</h3>
+                    <p>{list.items?.length || 0} product(s) · Updated {list.updatedAt ? new Date(list.updatedAt).toLocaleString() : "date unavailable"}</p>
+                    <div className="saved-list-preview">
+                      {(list.items || []).slice(0, 5).map((item) => <span key={item.productId}>{item.name}</span>)}
+                      {(list.items || []).length > 5 && <span>+{list.items.length - 5} more</span>}
+                    </div>
+                  </div>
+                  <div className="action-buttons saved-list-actions">
+                    <button type="button" className="button button-secondary" onClick={() => loadShoppingList(list)}>Load / Edit</button>
+                    <button type="button" className="button button-primary" onClick={() => loadAndPrintShoppingList(list)}>Load & Print</button>
+                    <button type="button" className="button button-danger" onClick={() => void deleteShoppingList(list._id)}>Delete</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          <style jsx>{`
+            .saved-list-form { align-items: center; }
+            .saved-list-selection-count { margin: 8px 0 14px; color: #64748b; font-size: 13px; }
+            .saved-lists-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:20px 0 12px; }
+            .saved-lists-heading h3 { margin:0; font-size:16px; }
+            .saved-lists-list { display:grid; gap:12px; }
+            .saved-list-card { display:flex; align-items:center; justify-content:space-between; gap:16px; border:1px solid #e5e7eb; border-radius:12px; padding:14px; }
+            .saved-list-info { min-width:0; }
+            .saved-list-info h3 { margin:0; overflow-wrap:anywhere; font-size:15px; }
+            .saved-list-info p { margin:5px 0; color:#64748b; font-size:12px; }
+            .saved-list-preview { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+            .saved-list-preview span { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border-radius:5px; background:#f1f5f9; padding:3px 7px; color:#475569; font-size:11px; }
+            .saved-list-actions { flex-shrink:0; }
+            .button-danger { background:#fff1f2; color:#be123c; border:1px solid #fecdd3; }
+            @media (max-width:760px) { .saved-list-card { align-items:stretch; flex-direction:column; } .saved-list-actions { flex-wrap:wrap; } .saved-list-form { align-items:stretch; } }
+          `}</style>
+        </section>
 
         <details className="panel collapsible-panel">
           <summary className="panel-heading collapsible-heading"><div>
