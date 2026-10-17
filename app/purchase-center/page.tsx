@@ -46,6 +46,8 @@ type PurchaseItem = {
   productId: string;
   sku: string;
   name: string;
+  nameEn?: string;
+  nameAr?: string;
   image: string;
   quantity: number;
   unitCost: number;
@@ -80,6 +82,10 @@ function productName(product: Product) {
   );
 }
 
+function productNameArabic(product: Product) {
+  return product.nameAr || product.nameEn || "اسم المنتج غير متوفر";
+}
+
 function productImage(product: Product) {
   return product.image || product.imageUrl || "";
 }
@@ -87,36 +93,30 @@ function productImage(product: Product) {
 function getCategoryNames(product: Product) {
   const category = product.category;
 
-  if (category && typeof category === "object") {
-    const english =
-      category.nameEn ||
-      category.name ||
-      product.categoryEn ||
-      product.categoryName ||
-      "Uncategorized";
-
-    return {
-      key: category._id || english,
-      en: english,
-      ar:
-        category.nameAr ||
-        product.categoryAr ||
-        category.nameEn ||
-        category.name ||
-        "غير مصنف",
-    };
-  }
+  const objectCategory =
+    category && typeof category === "object" ? category : null;
 
   const english =
-    (typeof category === "string" ? category : "") ||
-    product.categoryEn ||
+    product.categoryEn?.trim() ||
+    (typeof category === "string" ? category.trim() : "") ||
+    objectCategory?.nameEn ||
+    objectCategory?.name ||
     product.categoryName ||
     "Uncategorized";
 
+  const arabic =
+    product.categoryAr?.trim() ||
+    objectCategory?.nameAr ||
+    objectCategory?.nameEn ||
+    objectCategory?.name ||
+    (typeof category === "string" ? category.trim() : "") ||
+    "غير مصنف";
+
   return {
-    key: english,
+    // Group by normalized English category so the same category stays together.
+    key: english.trim().toLocaleLowerCase(),
     en: english,
-    ar: product.categoryAr || english,
+    ar: arabic,
   };
 }
 
@@ -199,10 +199,18 @@ export default function PurchaseCenterPage() {
 
     if (keyword) {
       list = list.filter((product) => {
-        const name = productName(product).toLowerCase();
+        const searchableNames = [
+          product.nameEn,
+          product.name,
+          product.nameAr,
+          product.nameBn,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
         const sku = String(product.sku || "").toLowerCase();
 
-        return name.includes(keyword) || sku.includes(keyword);
+        return searchableNames.includes(keyword) || sku.includes(keyword);
       });
     }
 
@@ -479,7 +487,12 @@ export default function PurchaseCenterPage() {
                   )}
 
                   <div className="print-product-info">
-                    <strong>{productName(product)}</strong>
+                    <strong className="print-name-en" dir="ltr">
+                      {productName(product)}
+                    </strong>
+                    <strong className="print-name-ar" dir="rtl" lang="ar">
+                      {productNameArabic(product)}
+                    </strong>
 
                     <p>SKU: {product.sku || "—"}</p>
 
@@ -682,6 +695,13 @@ export default function PurchaseCenterPage() {
 
                     <div className="product-details">
                       <h3>{productName(product)}</h3>
+                      <p className="product-name-ar" dir="rtl" lang="ar">
+                        {productNameArabic(product)}
+                      </p>
+                      <p className="product-category" dir="ltr">
+                        {getCategoryNames(product).en}
+                        {getCategoryNames(product).ar ? ` / ${getCategoryNames(product).ar}` : ""}
+                      </p>
                       <p>SKU: {product.sku || "—"}</p>
                       <p>Stock: {Number(product.stock ?? 0)}</p>
 

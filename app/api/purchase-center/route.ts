@@ -12,20 +12,36 @@ export const dynamic = "force-dynamic";
 
 const marketplaceNames = ["Talabat", "Snoonu", "Rafeeq", "Keeta"];
 
-function productName(product: any) {
+function productName(product: any): string {
   return (
     product.nameEn ||
     product.name ||
     product.nameAr ||
-    product.nameBn ||
     ""
   );
 }
 
-function productImage(product: any) {
+function productNameArabic(product: any): string {
+  return (
+    product.nameAr ||
+    product.nameEn ||
+    "اسم المنتج غير متوفر"
+  );
+}
+
+function productImage(product: any): string {
   return product.image || product.imageUrl || "";
 }
 
+function productCategoryEn(product: any): string {
+  return product.categoryEn?.trim() || "Uncategorized";
+}
+
+function productCategoryAr(product: any): string {
+  return product.categoryAr?.trim() || "غير مصنف";
+}
+
+// GET: Products, marketplace status, suppliers and purchase orders
 export async function GET() {
   try {
     await connectDB();
@@ -33,8 +49,10 @@ export async function GET() {
     const [products, marketplaceRecords, suppliers, orders] =
       await Promise.all([
         Product.find({})
-          .select("_id sku name nameEn nameAr nameBn image imageUrl price stock active")
-          .sort({ name: 1 })
+          .select(
+            "_id sku name nameEn nameAr descriptionEn descriptionAr image imageUrl categoryEn categoryAr price stock active"
+          )
+          .sort({ nameEn: 1 })
           .lean(),
 
         ProductMarketplace.find({}).lean(),
@@ -71,7 +89,8 @@ export async function GET() {
       const marketplaces = marketplaceNames.map((name) => {
         const record = records.find(
           (item) =>
-            String(item.marketplace).toLowerCase() === name.toLowerCase()
+            String(item.marketplace).toLowerCase() ===
+            name.toLowerCase()
         );
 
         return {
@@ -87,12 +106,31 @@ export async function GET() {
       return {
         _id: String(product._id),
         sku: String(product.sku ?? ""),
+
+        // Product names
         name: productName(product),
+        nameEn: product.nameEn || "",
+        nameAr: productNameArabic(product),
+
+        // Product descriptions
+        descriptionEn: product.descriptionEn || "",
+        descriptionAr: product.descriptionAr || "",
+
+        // Product image
         image: productImage(product),
+        imageUrl: productImage(product),
+
+        // Categories
+        categoryEn: productCategoryEn(product),
+        categoryAr: productCategoryAr(product),
+
+        price: Number(product.price ?? 0),
         stock,
         active: product.active !== false,
         outOfStock: stock <= 0,
+
         marketplaces,
+
         marketplaceInactive: marketplaces.some(
           (marketplace) =>
             marketplace.connected && !marketplace.available
@@ -110,12 +148,16 @@ export async function GET() {
     console.error("Purchase center GET error:", error);
 
     return NextResponse.json(
-      { success: false, message: "Failed to load purchase center" },
+      {
+        success: false,
+        message: "Failed to load purchase center",
+      },
       { status: 500 }
     );
   }
 }
 
+// POST: Create a purchase order
 export async function POST(req: NextRequest) {
   try {
     await connectDB();
@@ -147,7 +189,10 @@ export async function POST(req: NextRequest) {
     if (supplierType === "regular") {
       if (!mongoose.isValidObjectId(supplierId)) {
         return NextResponse.json(
-          { success: false, message: "Select a valid supplier" },
+          {
+            success: false,
+            message: "Select a valid supplier",
+          },
           { status: 400 }
         );
       }
@@ -165,14 +210,20 @@ export async function POST(req: NextRequest) {
       }
     } else if (!newSupplierName) {
       return NextResponse.json(
-        { success: false, message: "Enter the new market or supplier name" },
+        {
+          success: false,
+          message: "Enter the new market or supplier name",
+        },
         { status: 400 }
       );
     }
 
     if (!Array.isArray(data.items) || data.items.length === 0) {
       return NextResponse.json(
-        { success: false, message: "Add at least one product" },
+        {
+          success: false,
+          message: "Add at least one product",
+        },
         { status: 400 }
       );
     }
@@ -186,7 +237,10 @@ export async function POST(req: NextRequest) {
     for (const rawItem of data.items) {
       if (!rawItem || typeof rawItem !== "object") {
         return NextResponse.json(
-          { success: false, message: "Invalid purchase item" },
+          {
+            success: false,
+            message: "Invalid purchase item",
+          },
           { status: 400 }
         );
       }
@@ -194,7 +248,9 @@ export async function POST(req: NextRequest) {
       const item = rawItem as Record<string, unknown>;
 
       const productId =
-        typeof item.productId === "string" ? item.productId : "";
+        typeof item.productId === "string"
+          ? item.productId
+          : "";
 
       const quantity = Number(item.quantity);
       const unitCost = Number(item.unitCost);
@@ -209,13 +265,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: "Check the selected products, quantities and prices",
+            message:
+              "Check the selected products, quantities and prices",
           },
           { status: 400 }
         );
       }
 
-      requestedItems.push({ productId, quantity, unitCost });
+      requestedItems.push({
+        productId,
+        quantity,
+        unitCost,
+      });
     }
 
     const uniqueProductIds = [
@@ -235,12 +296,17 @@ export async function POST(req: NextRequest) {
     const products = await Product.find({
       _id: { $in: uniqueProductIds },
     })
-      .select("_id sku name nameEn nameAr nameBn image imageUrl")
+      .select(
+        "_id sku name nameEn nameAr image imageUrl categoryEn categoryAr"
+      )
       .lean();
 
     if (products.length !== uniqueProductIds.length) {
       return NextResponse.json(
-        { success: false, message: "One or more products were not found" },
+        {
+          success: false,
+          message: "One or more products were not found",
+        },
         { status: 404 }
       );
     }
@@ -258,11 +324,19 @@ export async function POST(req: NextRequest) {
       return {
         productId: product._id,
         sku: String(product.sku ?? ""),
+
+        // Keep the main order name in English for compatibility.
         name: productName(product),
+        nameEn: product.nameEn || "",
+        nameAr: productNameArabic(product),
+
         image: productImage(product),
+
         quantity: item.quantity,
         unitCost: item.unitCost,
-        lineTotal: Math.round(item.quantity * item.unitCost * 100) / 100,
+
+        lineTotal:
+          Math.round(item.quantity * item.unitCost * 100) / 100,
       };
     });
 
@@ -273,46 +347,69 @@ export async function POST(req: NextRequest) {
 
     const orderNumber =
       `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-` +
-      new mongoose.Types.ObjectId().toString().slice(-6).toUpperCase();
+      new mongoose.Types.ObjectId()
+        .toString()
+        .slice(-6)
+        .toUpperCase();
 
     const order = await PurchaseOrder.create({
       orderNumber,
+
       supplierId: supplier?._id ?? null,
       supplierName: supplier?.name || newSupplierName,
       supplierType,
+
       supplierPhone:
         supplier?.phone ||
         (typeof data.newSupplierPhone === "string"
           ? data.newSupplierPhone.trim()
           : ""),
+
       supplierEmail:
         supplier?.email ||
         (typeof data.newSupplierEmail === "string"
           ? data.newSupplierEmail.trim()
           : ""),
+
       marketName:
         supplier?.marketName ||
-        (typeof data.marketName === "string" ? data.marketName.trim() : ""),
+        (typeof data.marketName === "string"
+          ? data.marketName.trim()
+          : ""),
+
       items,
       subtotal,
-      notes: typeof data.notes === "string" ? data.notes.trim() : "",
+
+      notes:
+        typeof data.notes === "string"
+          ? data.notes.trim()
+          : "",
+
       status: "draft",
     });
 
     return NextResponse.json(
-      { success: true, message: "Purchase order created", order },
+      {
+        success: true,
+        message: "Purchase order created",
+        order,
+      },
       { status: 201 }
     );
   } catch (error) {
     console.error("Purchase order creation error:", error);
 
     return NextResponse.json(
-      { success: false, message: "Failed to create purchase order" },
+      {
+        success: false,
+        message: "Failed to create purchase order",
+      },
       { status: 500 }
     );
   }
 }
 
+// PATCH: Update purchase order status
 export async function PATCH(req: NextRequest) {
   try {
     await connectDB();
@@ -327,8 +424,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     const data = body as Record<string, unknown>;
+
     const orderId =
       typeof data.orderId === "string" ? data.orderId : "";
+
     const status = data.status;
 
     const allowedStatuses = [
@@ -344,18 +443,18 @@ export async function PATCH(req: NextRequest) {
       !allowedStatuses.includes(status)
     ) {
       return NextResponse.json(
-        { success: false, message: "Invalid order or status" },
+        {
+          success: false,
+          message: "Invalid order or status",
+        },
         { status: 400 }
       );
     }
 
     const update: Record<string, unknown> = { status };
 
-    if (status === "received") {
-      update.receivedAt = new Date();
-    } else {
-      update.receivedAt = null;
-    }
+    update.receivedAt =
+      status === "received" ? new Date() : null;
 
     const order = await PurchaseOrder.findByIdAndUpdate(
       orderId,
@@ -365,17 +464,26 @@ export async function PATCH(req: NextRequest) {
 
     if (!order) {
       return NextResponse.json(
-        { success: false, message: "Purchase order not found" },
+        {
+          success: false,
+          message: "Purchase order not found",
+        },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ success: true, order });
+    return NextResponse.json({
+      success: true,
+      order,
+    });
   } catch (error) {
     console.error("Purchase order update error:", error);
 
     return NextResponse.json(
-      { success: false, message: "Failed to update purchase order" },
+      {
+        success: false,
+        message: "Failed to update purchase order",
+      },
       { status: 500 }
     );
   }
