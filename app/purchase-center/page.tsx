@@ -132,6 +132,7 @@ export default function PurchaseCenterPage() {
 
   const [filter, setFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedSupplier, setSelectedSupplier] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -179,6 +180,23 @@ export default function PurchaseCenterPage() {
     [products]
   );
 
+  const categoryOptions = useMemo(() => {
+    const categories = new Map<string, { value: string; label: string }>();
+    products.forEach((product) => {
+      const category = getCategoryNames(product);
+      const value = category.key || category.en.toLocaleLowerCase();
+      if (!categories.has(value)) {
+        categories.set(value, {
+          value,
+          label: `${category.en}${category.ar ? ` / ${category.ar}` : ""}`,
+        });
+      }
+    });
+    return Array.from(categories.values()).sort((a, b) =>
+      a.label.localeCompare(b.label)
+    );
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
     let list = products;
 
@@ -195,6 +213,12 @@ export default function PurchaseCenterPage() {
       );
     }
 
+    if (selectedCategory !== "all") {
+      list = list.filter(
+        (product) => getCategoryNames(product).key === selectedCategory
+      );
+    }
+
     const keyword = search.trim().toLowerCase();
 
     if (keyword) {
@@ -204,6 +228,8 @@ export default function PurchaseCenterPage() {
           product.name,
           product.nameAr,
           product.nameBn,
+          getCategoryNames(product).en,
+          getCategoryNames(product).ar,
         ]
           .filter(Boolean)
           .join(" ")
@@ -215,7 +241,7 @@ export default function PurchaseCenterPage() {
     }
 
     return list;
-  }, [products, filter, search]);
+  }, [products, filter, search, selectedCategory]);
 
   const selectedPurchaseItems = useMemo(() => {
     return Object.entries(purchaseItems)
@@ -249,36 +275,25 @@ export default function PurchaseCenterPage() {
     [products, printSelected]
   );
 
-  const printGroups = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        categoryEn: string;
-        categoryAr: string;
-        products: Product[];
-      }
-    >();
-
-    selectedPrintProducts.forEach((product) => {
-      const category = getCategoryNames(product);
-      const key = String(category.key || category.en)
-        .trim()
-        .toLowerCase();
-
-      if (!groups.has(key)) {
-        groups.set(key, {
-          categoryEn: category.en,
-          categoryAr: category.ar,
-          products: [],
-        });
-      }
-
-      groups.get(key)!.products.push(product);
-    });
-
-    return Array.from(groups.values()).sort((a, b) =>
-      a.categoryEn.localeCompare(b.categoryEn)
-    );
+  const printPages = useMemo(() => {
+    // 12 product cards per printed page (3 columns x 4 rows) to save paper.
+    const pages: Array<{ groups: Array<{ categoryEn: string; categoryAr: string; products: Product[] }> }> = [];
+    for (let start = 0; start < selectedPrintProducts.length; start += 12) {
+      const pageProducts = selectedPrintProducts.slice(start, start + 12);
+      const groups = new Map<string, { categoryEn: string; categoryAr: string; products: Product[] }>();
+      pageProducts.forEach((product) => {
+        const category = getCategoryNames(product);
+        const key = String(category.key || category.en).trim().toLowerCase();
+        if (!groups.has(key)) {
+          groups.set(key, { categoryEn: category.en, categoryAr: category.ar, products: [] });
+        }
+        groups.get(key)!.products.push(product);
+      });
+      pages.push({
+        groups: Array.from(groups.values()).sort((a, b) => a.categoryEn.localeCompare(b.categoryEn)),
+      });
+    }
+    return pages;
   }, [selectedPrintProducts]);
 
   function togglePurchaseProduct(product: Product, checked: boolean) {
@@ -426,114 +441,82 @@ export default function PurchaseCenterPage() {
     <div className="purchase-page">
       {/* PRINT-ONLY BILINGUAL SHOPPING LIST */}
       <section className="print-only" dir="ltr">
-        <header className="print-header">
-          <h1>MAZAJ — Purchase Shopping List</h1>
-          <h2 lang="ar" dir="rtl">
-            مجاز — قائمة المشتريات
-          </h2>
-
-          <div className="print-meta">
-            <span>
-              Date: {new Date().toLocaleDateString("en-GB")}
-            </span>
-            <span lang="ar" dir="rtl">
-              التاريخ: {new Date().toLocaleDateString("ar-QA")}
-            </span>
-          </div>
-
-          <div className="print-meta">
-            <span>Products: {selectedPrintProducts.length}</span>
-            <span lang="ar" dir="rtl">
-              عدد المنتجات: {selectedPrintProducts.length}
-            </span>
-          </div>
-        </header>
-
-        {printGroups.map((group) => (
-          <section
-            className="print-category"
-            key={group.categoryEn}
-          >
-            <div className="print-category-heading">
-              <div>
-                <h2>{group.categoryEn}</h2>
-                <p>Category</p>
+        <style jsx global>{`
+          @media print {
+            @page { size: A4 portrait; margin: 7mm; }
+            .print-only { display: block !important; color: #111 !important; }
+            .screen-only { display: none !important; }
+            .print-page { break-after: page; page-break-after: always; width: 100%; }
+            .print-page:last-child { break-after: auto; page-break-after: auto; }
+            .print-header { margin: 0 0 5mm !important; padding: 0 0 3mm !important; }
+            .print-header h1 { font-size: 16pt !important; margin: 0 0 2mm !important; }
+            .print-header h2 { font-size: 13pt !important; margin: 0 0 2mm !important; }
+            .print-meta { font-size: 8pt !important; margin: 1mm 0 !important; }
+            .print-category { margin: 0 0 2mm !important; break-inside: avoid; }
+            .print-category-heading { margin: 1mm 0 !important; padding: 1mm 2mm !important; }
+            .print-category-heading h2 { font-size: 9pt !important; margin: 0 !important; }
+            .print-category-heading p { font-size: 7pt !important; margin: 0 !important; }
+            .print-product-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 2mm !important; }
+            .print-product { display: flex !important; flex-direction: row !important; gap: 2mm !important; padding: 2mm !important; min-width: 0; break-inside: avoid; page-break-inside: avoid; }
+            .print-product img, .print-no-image { width: 18mm !important; height: 18mm !important; min-width: 18mm !important; object-fit: contain !important; }
+            .print-product-info { min-width: 0; font-size: 7pt !important; line-height: 1.2 !important; }
+            .print-product-info strong { font-size: 7.5pt !important; overflow-wrap: anywhere; }
+            .print-product-info p { margin: 1mm 0 !important; font-size: 6.5pt !important; }
+            .quantity-blank { font-size: 7pt !important; margin: 1mm 0 !important; }
+            .print-checkbox-line { font-size: 7pt !important; }
+            .print-footer { margin-top: 3mm !important; font-size: 8pt !important; }
+          }
+        `}</style>
+        {printPages.map((page, pageIndex) => (
+          <div className="print-page" key={`print-page-${pageIndex}`}>
+            <header className="print-header">
+              <h1>MAZAJ — Purchase Shopping List</h1>
+              <h2 lang="ar" dir="rtl">مجاز — قائمة المشتريات</h2>
+              <div className="print-meta">
+                <span>Date: {new Date().toLocaleDateString("en-GB")}</span>
+                <span lang="ar" dir="rtl">التاريخ: {new Date().toLocaleDateString("ar-QA")}</span>
               </div>
-
-              <div className="print-category-ar" lang="ar" dir="rtl">
-                <h2>{group.categoryAr}</h2>
-                <p>الفئة</p>
+              <div className="print-meta">
+                <span>Products: {selectedPrintProducts.length} · Page {pageIndex + 1} of {printPages.length}</span>
+                <span lang="ar" dir="rtl">عدد المنتجات: {selectedPrintProducts.length} · الصفحة {pageIndex + 1} من {printPages.length}</span>
               </div>
-            </div>
+            </header>
 
-            <div className="print-product-grid">
-              {group.products.map((product) => (
-                <article className="print-product" key={product._id}>
-                  {productImage(product) ? (
-                    <img
-                      src={productImage(product)}
-                      alt={productName(product)}
-                    />
-                  ) : (
-                    <div className="print-no-image">
-                      <span>No image</span>
-                      <span lang="ar" dir="rtl">
-                        لا توجد صورة
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="print-product-info">
-                    <strong className="print-name-en" dir="ltr">
-                      {productName(product)}
-                    </strong>
-                    <strong className="print-name-ar" dir="rtl" lang="ar">
-                      {productNameArabic(product)}
-                    </strong>
-
-                    <p>SKU: {product.sku || "—"}</p>
-
-                    <p className="print-bilingual-line">
-                      <span>Quantity to buy:</span>
-                      <span lang="ar" dir="rtl">
-                        الكمية المطلوبة:
-                      </span>
-                    </p>
-
-                    <div className="quantity-blank">
-                      {purchaseItems[product._id]?.quantity != null
-                        ? `${purchaseItems[product._id].quantity} ${purchaseItems[product._id].quantity === 1 ? "unit" : "units"}`
-                        : "__________________"}
-                    </div>
-                    <div className="quantity-blank quantity-blank-ar" lang="ar" dir="rtl">
-                      {purchaseItems[product._id]?.quantity != null
-                        ? `${purchaseItems[product._id].quantity} وحدة`
-                        : "__________________"}
-                    </div>
-
-                    <p className="print-bilingual-line">
-                      <span>Purchased:</span>
-                      <span lang="ar" dir="rtl">
-                        تم الشراء:
-                      </span>
-                    </p>
-
-                    <p className="print-checkbox-line">
-                      □ Yes / نعم　 □ No / لا
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
+            {page.groups.map((group) => (
+              <section className="print-category" key={`${pageIndex}-${group.categoryEn}`}>
+                <div className="print-category-heading">
+                  <div><h2>{group.categoryEn}</h2><p>Category</p></div>
+                  <div className="print-category-ar" lang="ar" dir="rtl"><h2>{group.categoryAr}</h2><p>الفئة</p></div>
+                </div>
+                <div className="print-product-grid">
+                  {group.products.map((product) => (
+                    <article className="print-product" key={product._id}>
+                      {productImage(product) ? (
+                        <img src={productImage(product)} alt={productName(product)} />
+                      ) : (
+                        <div className="print-no-image"><span>No image</span><span lang="ar" dir="rtl">لا توجد صورة</span></div>
+                      )}
+                      <div className="print-product-info">
+                        <strong className="print-name-en" dir="ltr">{productName(product)}</strong>
+                        <strong className="print-name-ar" dir="rtl" lang="ar">{productNameArabic(product)}</strong>
+                        <p>SKU: {product.sku || "—"}</p>
+                        <p className="print-bilingual-line"><span>Quantity to buy:</span><span lang="ar" dir="rtl">الكمية المطلوبة:</span></p>
+                        <div className="quantity-blank">{purchaseItems[product._id]?.quantity != null ? `${purchaseItems[product._id].quantity} ${purchaseItems[product._id].quantity === 1 ? "unit" : "units"}` : "__________________"}</div>
+                        <div className="quantity-blank quantity-blank-ar" lang="ar" dir="rtl">{purchaseItems[product._id]?.quantity != null ? `${purchaseItems[product._id].quantity} وحدة` : "__________________"}</div>
+                        <p className="print-bilingual-line"><span>Purchased:</span><span lang="ar" dir="rtl">تم الشراء:</span></p>
+                        <p className="print-checkbox-line">□ Yes / نعم　 □ No / لا</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+            <footer className="print-footer">
+              <p>Checked by: ______________________________</p>
+              <p lang="ar" dir="rtl">تم التحقق بواسطة: ______________________________</p>
+            </footer>
+          </div>
         ))}
-
-        <footer className="print-footer">
-          <p>Checked by: ______________________________</p>
-          <p lang="ar" dir="rtl">
-            تم التحقق بواسطة: ______________________________
-          </p>
-        </footer>
       </section>
 
       {/* NORMAL SCREEN CONTENT */}
@@ -615,6 +598,20 @@ export default function PurchaseCenterPage() {
               <option value="catalog">
                 Product disabled in dashboard
               </option>
+            </select>
+
+            <select
+              className="text-input filter-select"
+              value={selectedCategory}
+              onChange={(event) => setSelectedCategory(event.target.value)}
+              aria-label="Filter products by category"
+            >
+              <option value="all">All categories</option>
+              {categoryOptions.map((category) => (
+                <option key={category.value} value={category.value}>
+                  {category.label}
+                </option>
+              ))}
             </select>
           </div>
 
