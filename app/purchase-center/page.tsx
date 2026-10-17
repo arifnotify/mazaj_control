@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -495,6 +496,35 @@ export default function PurchaseCenterPage() {
     }
   }
 
+  async function deleteSupplier() {
+    const supplier = suppliers.find((item) => item._id === selectedSupplier);
+    if (!supplier) {
+      setError("Please select a supplier to delete.");
+      return;
+    }
+    const confirmed = window.confirm(`Delete supplier "${supplier.name}"? It will be removed from active supplier lists, but past purchase orders will remain.`);
+    if (!confirmed) return;
+    setError("");
+    setSuccess("");
+    try {
+      const response = await fetch("/api/purchase-center", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierId: selectedSupplier }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || data?.error || "Could not delete supplier.");
+      setSelectedSupplier("");
+      setCatalogSelected([]);
+      setCatalogPrices({});
+      setPurchaseItems({});
+      setSuccess("Supplier deleted from active supplier list.");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete supplier.");
+    }
+  }
+
   async function createPurchaseOrder() {
     setError("");
     setSuccess("");
@@ -677,6 +707,16 @@ export default function PurchaseCenterPage() {
 
       {/* NORMAL SCREEN CONTENT */}
       <div className="screen-only">
+        <style jsx global>{`
+          .collapsible-panel { padding: 0 !important; overflow: hidden; }
+          .collapsible-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; cursor:pointer; list-style:none; padding:18px 20px; }
+          .collapsible-heading::-webkit-details-marker { display:none; }
+          .collapse-hint { white-space:nowrap; font-size:12px; opacity:.7; }
+          .collapsible-panel[open] > .collapsible-heading { border-bottom:1px solid #e5e7eb; margin-bottom:16px; }
+          .collapsible-panel:not([open]) > .collapsible-heading { margin-bottom:0; }
+          @media print { .collapsible-heading { display:none !important; } }
+        `}</style>
+
         <div className="page-heading">
           <div>
             <h1>Purchase Center</h1>
@@ -745,15 +785,11 @@ export default function PurchaseCenterPage() {
           </div>
         </div>
 
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Find Products</h2>
-              <p>
-                Select products for an order or print a shopping list.
-              </p>
-            </div>
-          </div>
+        <details className="panel collapsible-panel">
+          <summary className="panel-heading collapsible-heading">
+            <div><h2>Find Products</h2><p>Select products for an order or print a shopping list.</p></div>
+            <span className="collapse-hint">Open / Minimize</span>
+          </summary>
 
           <div className="filter-row">
             <input
@@ -958,13 +994,13 @@ export default function PurchaseCenterPage() {
               })}
             </div>
           )}
-        </section>
+        </details>
 
-        <section className="panel">
-          <div className="panel-heading"><div>
+        <details className="panel collapsible-panel">
+          <summary className="panel-heading collapsible-heading"><div>
             <h2>Supplier Product List & Prices</h2>
             <p>Choose a supplier, save the products it sells, and keep its own QAR prices.</p>
-          </div></div>
+          </div><span className="collapse-hint">Open / Minimize</span></summary>
           <div className="order-form">
             <label>Supplier
               <select className="text-input" value={selectedSupplier} onChange={(event) => setSelectedSupplier(event.target.value)}>
@@ -975,6 +1011,7 @@ export default function PurchaseCenterPage() {
             <div className="action-buttons">
               <button type="button" className="button button-primary" onClick={saveSupplierCatalog} disabled={savingCatalog || !selectedSupplier}>{savingCatalog ? "Saving..." : "Save Supplier Products & Prices"}</button>
               <button type="button" className="button button-secondary" onClick={printSupplierCatalog} disabled={!selectedSupplier || catalogSelected.length === 0}>Print Supplier Price List</button>
+              <button type="button" className="button button-light" onClick={() => void deleteSupplier()} disabled={!selectedSupplier}>Delete Supplier</button>
             </div>
           </div>
           {!selectedSupplier ? <div className="empty-state">Select a supplier to manage its product list.</div> : <div className="product-list">
@@ -989,17 +1026,13 @@ export default function PurchaseCenterPage() {
             })}
           </div>}
           <p>Products in this supplier list: <strong>{catalogSelected.length}</strong></p>
-        </section>
+        </details>
 
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Create Purchase Order</h2>
-              <p>
-                Save the selected products as a purchase order.
-              </p>
-            </div>
-          </div>
+        <details className="panel collapsible-panel">
+          <summary className="panel-heading collapsible-heading">
+            <div><h2>Create Purchase Order</h2><p>Save the selected products as a purchase order.</p></div>
+            <span className="collapse-hint">Open / Minimize</span>
+          </summary>
 
           <div className="order-form">
             <label>
@@ -1101,15 +1134,13 @@ export default function PurchaseCenterPage() {
           >
             {saving ? "Creating order..." : "Create Purchase Order"}
           </button>
-        </section>
+        </details>
 
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Purchase Order History</h2>
-              <p>Previously saved purchase orders.</p>
-            </div>
-          </div>
+        <details className="panel collapsible-panel">
+          <summary className="panel-heading collapsible-heading">
+            <div><h2>Purchase Order History</h2><p>Previously saved purchase orders.</p></div>
+            <span className="collapse-hint">Open / Minimize</span>
+          </summary>
 
           {orders.length === 0 ? (
             <div className="empty-state">No purchase orders yet.</div>
@@ -1214,7 +1245,7 @@ export default function PurchaseCenterPage() {
               ))}
             </div>
           )}
-        </section>
+        </details>
       </div>
     </div>
   );

@@ -249,3 +249,21 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: false, message: "Failed to update purchase order" }, { status: 500 });
   }
 }
+
+
+// DELETE: soft-delete a supplier so historical purchase orders remain intact.
+export async function DELETE(req: NextRequest) {
+  try {
+    await connectDB();
+    const body: unknown = await req.json();
+    if (!body || typeof body !== "object") return NextResponse.json({ success: false, message: "Invalid request" }, { status: 400 });
+    const supplierId = typeof (body as Record<string, unknown>).supplierId === "string" ? String((body as Record<string, unknown>).supplierId) : "";
+    if (!mongoose.isValidObjectId(supplierId)) return NextResponse.json({ success: false, message: "Select a valid supplier" }, { status: 400 });
+    const supplier = await Supplier.findByIdAndUpdate(supplierId, { $set: { active: false } }, { new: true, runValidators: true });
+    if (!supplier) return NextResponse.json({ success: false, message: "Supplier not found" }, { status: 404 });
+    return NextResponse.json({ success: true, message: "Supplier deleted from active list" });
+  } catch (error) {
+    console.error("Supplier deletion error:", error);
+    return NextResponse.json({ success: false, message: "Failed to delete supplier" }, { status: 500 });
+  }
+}
