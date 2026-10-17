@@ -537,13 +537,13 @@ export default function PurchaseCenterPage() {
     );
   }
 
-  // When a saved shopping list is open, print its own saved quantities.
-  // Otherwise fall back to the regular purchase quantity field.
-  function getPrintQuantity(productId: string): number | undefined {
-    if (activeSavedListId) {
-      return activeSavedListItems.find((item) => item.productId === productId)?.quantity;
-    }
-    return purchaseItems[productId]?.quantity;
+  // Prefer the quantity from the open saved list when this product belongs to it.
+  // For Find Products printing, use the order quantity when set, or default to 1
+  // so the print page always displays a quantity for every selected product.
+  function getPrintQuantity(productId: string): number {
+    const savedListItem = activeSavedListItems.find((item) => item.productId === productId);
+    if (activeSavedListId && savedListItem) return savedListItem.quantity;
+    return purchaseItems[productId]?.quantity ?? 1;
   }
 
   function printSelectedProducts() {
