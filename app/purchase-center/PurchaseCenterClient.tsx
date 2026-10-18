@@ -755,26 +755,26 @@ export default function PurchaseCenterPage() {
       {!supplierPrintMode && <section className="print-only hidden print:block" dir="ltr">
         <style jsx global>{`
           @media print {
-            @page { size: A4 portrait; margin: 5mm; }
+            @page { size: A4 portrait; margin: 4mm; }
             .print-only { display: block !important; color: #111 !important; }
             .screen-only { display: none !important; }
             .print-page { 
               break-after: page; 
               page-break-after: always; 
               width: 100%; 
-              height: 287mm; 
+              height: 289mm; 
               display: flex; 
               flex-direction: column; 
               justify-content: space-between; 
             }
             .print-page:last-child { break-after: auto; page-break-after: auto; }
-            .print-header { margin: 0 0 3mm !important; padding: 0 0 2mm !important; border-bottom: 2px solid #222 !important; }
-            .print-header h1 { font-size: 15pt !important; margin: 0 0 1mm !important; font-weight: bold; }
-            .print-header h2 { font-size: 12pt !important; margin: 0 0 1mm !important; font-weight: bold; }
-            .print-meta { font-size: 8pt !important; margin: 1mm 0 !important; display: flex; justify-content: space-between; }
+            .print-header { margin: 0 0 2mm !important; padding: 0 0 2mm !important; border-bottom: 2px solid #111 !important; }
+            .print-header h1 { font-size: 14pt !important; margin: 0 0 1mm !important; font-weight: bold; }
+            .print-header h2 { font-size: 11pt !important; margin: 0 0 1mm !important; font-weight: bold; }
+            .print-meta { font-size: 8pt !important; margin: 0.5mm 0 !important; display: flex; justify-content: space-between; }
             .print-category { margin: 0 0 2mm !important; flex: 1; display: flex; flex-direction: column; }
-            .print-category-heading { margin: 1mm 0 !important; padding: 1.5mm 3mm !important; background: #e2e8f0 !important; display: flex; justify-content: space-between; font-weight: bold; }
-            .print-category-heading h2 { font-size: 9.5pt !important; margin: 0 !important; }
+            .print-category-heading { margin: 1mm 0 !important; padding: 1.5mm 3mm !important; background: #cbd5e1 !important; display: flex; justify-content: space-between; font-weight: bold; }
+            .print-category-heading h2 { font-size: 10pt !important; margin: 0 !important; }
             .print-product-grid { 
               display: grid !important; 
               grid-template-columns: repeat(3, minmax(0, 1fr)) !important; 
@@ -785,20 +785,20 @@ export default function PurchaseCenterPage() {
             .print-product { 
               display: flex !important; 
               flex-direction: row !important; 
-              gap: 2mm !important; 
-              padding: 2mm !important; 
-              border: 1px solid #94a3b8 !important; 
-              border-radius: 4px !important; 
+              gap: 2.5mm !important; 
+              padding: 2.5mm !important; 
+              border: 1.5px solid #64748b !important; 
+              border-radius: 6px !important; 
               align-items: center;
               background: #fff !important; 
               height: 100%;
             }
-            .print-product img, .print-no-image { width: 15mm !important; height: 15mm !important; min-width: 15mm !important; object-fit: contain !important; border: 1px solid #eee; }
-            .print-product-info { min-width: 0; font-size: 6.5pt !important; line-height: 1.15 !important; width: 100%; }
-            .print-product-info strong { font-size: 7.5pt !important; overflow-wrap: anywhere; display: block; }
-            .print-product-info p { margin: 0.5mm 0 !important; font-size: 6pt !important; }
-            .quantity-blank { font-size: 7pt !important; margin: 0.5mm 0 !important; font-weight: bold; color: #0f172a; }
-            .print-footer { margin-top: 2mm !important; font-size: 7.5pt !important; border-top: 1px solid #cbd5e1; padding-top: 1.5mm; display: flex; justify-content: space-between; }
+            .print-product img, .print-no-image { width: 19mm !important; height: 19mm !important; min-width: 19mm !important; object-fit: contain !important; border: 1px solid #ddd; border-radius: 4px; }
+            .print-product-info { min-width: 0; font-size: 7.5pt !important; line-height: 1.25 !important; width: 100%; }
+            .print-product-info strong { font-size: 8.5pt !important; overflow-wrap: anywhere; display: block; font-weight: 700; color: #020617; }
+            .print-product-info p { margin: 0.8mm 0 !important; font-size: 7pt !important; color: #334155; }
+            .quantity-blank { font-size: 8pt !important; margin: 1mm 0 !important; font-weight: bold; color: #0f172a; background: #f8fafc; padding: 0.5mm 1mm; border-radius: 3px; border: 1px dashed #cbd5e1; }
+            .print-footer { margin-top: 2mm !important; font-size: 8pt !important; border-top: 1px solid #94a3b8; padding-top: 1.5mm; display: flex; justify-content: space-between; font-weight: 600; }
           }
         `}</style>
         {printPages.map((page, pageIndex) => (
@@ -834,7 +834,7 @@ export default function PurchaseCenterPage() {
                         <strong className="print-name-en truncate" dir="ltr">{productName(product)}</strong>
                         <strong className="print-name-ar truncate" dir="rtl" lang="ar">{productNameArabic(product)}</strong>
                         <p>SKU: {product.sku || "—"}</p>
-                        <p className="print-bilingual-line flex justify-between"><span>Qty:</span><span lang="ar" dir="rtl">الكمية:</span></p>
+                        <p className="print-bilingual-line flex justify-between font-semibold"><span>Qty:</span><span lang="ar" dir="rtl">الكمية:</span></p>
                         <div className="quantity-blank">{getPrintQuantity(product._id) != null ? `${getPrintQuantity(product._id)} ${getPrintQuantity(product._id) === 1 ? "unit" : "units"}` : "__________________"}</div>
                         <p className="print-checkbox-line">□ Checked / تم</p>
                       </div>
