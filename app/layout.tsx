@@ -19,10 +19,10 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-50 font-sans antialiased">
         <LanguageProvider>
           <div className="flex min-h-screen">
-            {/* Sidebar Component */}
+            {/* Sidebar */}
             <Sidebar />
 
-            {/* Main Content Area - lg স্ক্রিন থেকে স্বয়ংক্রিয়ভাবে সাইডবারের জায়গা নিয়ে নেবে */}
+            {/* Main Content Area - সাইডবারের চওড়া (64) অনুযায়ী প্যাディング বা মার্জিন সেট করা */}
             <div className="flex-1 min-w-0 lg:ps-64">
               <main className="min-h-screen">
                 {children}

@@ -56,7 +56,7 @@ export default function Sidebar() {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 z-50 flex h-full w-64 flex-col border-slate-200 bg-white transition-transform duration-300 ease-in-out shadow-xl lg:shadow-none ${
+        className={`fixed top-0 bottom-0 z-50 flex h-screen w-64 flex-col border-slate-200 bg-white transition-transform duration-300 ease-in-out shadow-xl lg:shadow-none lg:translate-x-0 shrink-0 ${
           isArabic
             ? `right-0 border-l ${isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"}`
             : `left-0 border-r ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`
