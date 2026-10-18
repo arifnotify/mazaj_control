@@ -22,7 +22,6 @@ export default function Sidebar() {
   const { language, isArabic, t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
 
-  // রুট পরিবর্তন হলে মোবাইলে সাইডবার অটো বন্ধ হয়ে যাবে
   useEffect(() => {
     setIsOpen(false);
   }, [pathname]);
@@ -37,29 +36,27 @@ export default function Sidebar() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsOpen(!isOpen)}
-            aria-label="Toggle Menu"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition shadow-2xs"
-          >
-            <span className="text-lg font-bold">{isOpen ? "✕" : "☰"}</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          aria-label="Toggle Menu"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition shadow-xs"
+        >
+          <span className="text-lg font-bold">{isOpen ? "✕" : "☰"}</span>
+        </button>
       </div>
 
       {/* Backdrop for Mobile Sidebar */}
       {isOpen && (
         <div
           onClick={() => setIsOpen(false)}
-          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-2xs lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs lg:hidden"
         />
       )}
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 z-50 flex h-full w-72 flex-col border-slate-200 bg-white transition-transform duration-300 ease-in-out shadow-xl lg:shadow-none lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 z-50 flex h-full w-64 flex-col border-slate-200 bg-white transition-transform duration-300 ease-in-out shadow-xl lg:shadow-none ${
           isArabic
             ? `right-0 border-l ${isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"}`
             : `left-0 border-r ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`
@@ -100,9 +97,9 @@ export default function Sidebar() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all shadow-2xs ${
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
                   active
-                    ? "bg-slate-900 text-white shadow-sm"
+                    ? "bg-slate-900 text-white shadow-xs"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >

@@ -89,11 +89,11 @@ export default function DashboardPage() {
   return (
     <main
       className={`min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans text-slate-950 transition-all ${
-        isArabic ? "lg:mr-72" : "lg:ml-72"
+        isArabic ? "lg:mr-64" : "lg:ml-64"
       }`}
       dir={isArabic ? "rtl" : "ltr"}
     >
-      <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
+      <div className="w-full space-y-6">
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl bg-white p-5 sm:p-6 shadow-xs border border-slate-200">
@@ -111,7 +111,7 @@ export default function DashboardPage() {
 
           <button
             onClick={loadDashboard}
-            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs self-start sm:self-auto"
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition shadow-xs self-start sm:self-auto"
           >
             ↻ {t("refresh")}
           </button>
@@ -119,7 +119,7 @@ export default function DashboardPage() {
 
         {/* Error */}
         {error && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs sm:text-sm font-medium text-rose-700 shadow-2xs">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs sm:text-sm font-medium text-rose-700 shadow-xs">
             {error}
           </div>
         )}
@@ -264,7 +264,7 @@ export default function DashboardPage() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
 
                 {/* Open */}
-                <div className="rounded-xl bg-rose-50/70 border border-rose-200/60 p-4 sm:p-5 shadow-2xs">
+                <div className="rounded-xl bg-rose-50/70 border border-rose-200/60 p-4 sm:p-5 shadow-xs">
                   <p className="text-xs font-bold uppercase tracking-wider text-rose-600">
                     {isArabic ? "مفتوحة" : "Open"}
                   </p>
@@ -275,7 +275,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* In Progress */}
-                <div className="rounded-xl bg-amber-50/70 border border-amber-200/60 p-4 sm:p-5 shadow-2xs">
+                <div className="rounded-xl bg-amber-50/70 border border-amber-200/60 p-4 sm:p-5 shadow-xs">
                   <p className="text-xs font-bold uppercase tracking-wider text-amber-600">
                     {isArabic ? "قيد التنفيذ" : "In Progress"}
                   </p>
@@ -286,7 +286,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Fixed */}
-                <div className="rounded-xl bg-blue-50/70 border border-blue-200/60 p-4 sm:p-5 shadow-2xs">
+                <div className="rounded-xl bg-blue-50/70 border border-blue-200/60 p-4 sm:p-5 shadow-xs">
                   <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
                     {isArabic ? "تم الإصلاح" : "Fixed"}
                   </p>
@@ -297,7 +297,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Verified */}
-                <div className="rounded-xl bg-purple-50/70 border border-purple-200/60 p-4 sm:p-5 shadow-2xs">
+                <div className="rounded-xl bg-purple-50/70 border border-purple-200/60 p-4 sm:p-5 shadow-xs">
                   <p className="text-xs font-bold uppercase tracking-wider text-purple-600">
                     {isArabic ? "تم التحقق" : "Verified"}
                   </p>
@@ -308,7 +308,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Closed */}
-                <div className="rounded-xl bg-emerald-50/70 border border-emerald-200/60 p-4 sm:p-5 shadow-2xs">
+                <div className="rounded-xl bg-emerald-50/70 border border-emerald-200/60 p-4 sm:p-5 shadow-xs">
                   <p className="text-xs font-bold uppercase tracking-wider text-emerald-600">
                     {isArabic ? "مغلقة" : "Closed"}
                   </p>
@@ -346,7 +346,7 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={marketplace}
-                      className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5 shadow-2xs"
+                      className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5 shadow-xs"
                     >
                       <div className="flex items-center justify-between">
                         <h3 className="font-bold text-slate-900 text-sm sm:text-base">
@@ -402,14 +402,14 @@ export default function DashboardPage() {
 
                 <a
                   href="/products/new"
-                  className="rounded-xl bg-slate-900 px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-white hover:bg-slate-800 transition shadow-sm"
+                  className="rounded-xl bg-slate-900 px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-white hover:bg-slate-800 transition shadow-xs"
                 >
                   + {t("addProduct")}
                 </a>
 
                 <a
                   href="/categories"
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs"
                 >
                   {isArabic
                     ? "إدارة الفئات"
@@ -418,7 +418,7 @@ export default function DashboardPage() {
 
                 <a
                   href="/employees"
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs"
                 >
                   {isArabic
                     ? "إدارة الموظفين"
@@ -427,7 +427,7 @@ export default function DashboardPage() {
 
                 <a
                   href="/issues"
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs"
                 >
                   {isArabic
                     ? "إدارة المشاكل"
@@ -436,7 +436,7 @@ export default function DashboardPage() {
 
                 <a
                   href="/products"
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs"
                 >
                   {isArabic
                     ? "পণ্য দেখুন"
