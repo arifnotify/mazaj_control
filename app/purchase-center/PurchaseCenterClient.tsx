@@ -146,7 +146,6 @@ export default function PurchaseCenterPage() {
   const [activeSavedListItems, setActiveSavedListItems] = useState<SavedShoppingListItem[]>([]);
   const [savingActiveSavedList, setSavingActiveSavedList] = useState(false);
 
-  // New state for searching products inside the active list modal
   const [modalProductSearch, setModalProductSearch] = useState("");
 
   const [loading, setLoading] = useState(true);
@@ -1128,7 +1127,7 @@ export default function PurchaseCenterPage() {
                             const nameText = `${productName(p)} ${productNameArabic(p)} ${p.sku || ""}`.toLowerCase();
                             return nameText.includes(modalProductSearch.trim().toLowerCase());
                           })
-                          .slice(0, 10) // Limit display to 10 for performance
+                          .slice(0, 10)
                           .map((prod) => {
                             const isAlreadyInList = activeSavedListItems.some((item) => item.productId === prod._id);
                             return (
@@ -1535,7 +1534,7 @@ export default function PurchaseCenterPage() {
 
             {selectedPurchaseItems.length > 0 && (
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {selectedPurchaseItems.link?.length ?? selectedPurchaseItems.map((item) => (
+                {selectedPurchaseItems.map((item) => (
                   <div className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs" key={item.productId}>
                     <div className="w-10 h-10 bg-white rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
                       {item.image ? (
@@ -1665,7 +1664,7 @@ export default function PurchaseCenterPage() {
                           order.status !== "cancelled" && (
                             <button
                               type="button"
-                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all"
                               onClick={() =>
                                 void updateOrderStatus(order._id, "cancelled")
                               }
