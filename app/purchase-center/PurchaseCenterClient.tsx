@@ -146,6 +146,9 @@ export default function PurchaseCenterPage() {
   const [activeSavedListItems, setActiveSavedListItems] = useState<SavedShoppingListItem[]>([]);
   const [savingActiveSavedList, setSavingActiveSavedList] = useState(false);
 
+  // New state for searching products inside the active list modal
+  const [modalProductSearch, setModalProductSearch] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -257,6 +260,7 @@ export default function PurchaseCenterPage() {
     setActiveSavedListId(list._id);
     setActiveSavedListItems(items);
     setPrintSelected(items.map((item) => item.productId));
+    setModalProductSearch("");
     setSuccess(`Opened shopping list: ${list.name}. Edit quantities below and save changes.`);
     setError("");
   }
@@ -1101,45 +1105,69 @@ export default function PurchaseCenterPage() {
                   <div className="flex justify-between items-center">
                     <div>
                       <h3 className="font-bold text-indigo-900 text-base">Edit products: {activeList.name}</h3>
-                      <p className="text-xs text-indigo-700">Change the quantity & unit for each product, remove items, or add new products.</p>
+                      <p className="text-xs text-indigo-700">Change the quantity & unit for each product, remove items, or add new products with photo search.</p>
                     </div>
                     <button type="button" className="bg-white hover:bg-slate-100 text-slate-700 px-3 py-1 rounded-xl text-xs font-semibold border border-slate-200" onClick={() => { setActiveSavedListId(null); setActiveSavedListItems([]); }}>Close</button>
                   </div>
 
-                  {/* DIRECT NEW PRODUCT ADD SECTION */}
-                  <div className="p-3 bg-white rounded-xl border border-indigo-100 flex flex-col sm:flex-row gap-2 items-center">
-                    <select 
-                      id="new-product-select" 
-                      className="w-full sm:flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500"
-                      defaultValue=""
-                    >
-                      <option value="" disabled>-- Select a product to add to this list --</option>
-                      {products.map((p) => (
-                        <option key={p._id} value={p._id}>{productName(p)} {p.sku ? `(SKU: ${p.sku})` : ""}</option>
-                      ))}
-                    </select>
-                    <button 
-                      type="button" 
-                      className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm shrink-0"
-                      onClick={() => {
-                        const selectElement = document.getElementById("new-product-select") as HTMLSelectElement;
-                        const selectedProductId = selectElement?.value;
-                        if (!selectedProductId) {
-                          setError("Please select a product from the dropdown first.");
-                          return;
-                        }
-                        setActiveSavedListItems((previous) => {
-                          if (previous.some((item) => item.productId === selectedProductId)) {
-                            setError("This product is already in the list.");
-                            return previous;
-                          }
-                          setError("");
-                          return [...previous, { productId: selectedProductId, quantity: "", unit: "kg" }];
-                        });
-                      }}
-                    >
-                      + Add Product
-                    </button>
+                  {/* SEARCH PRODUCT WITH PHOTO & ADD SECTION */}
+                  <div className="p-3 bg-white rounded-xl border border-indigo-100 space-y-3">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">🔍 Search & Add New Product (with photo)</label>
+                    <input 
+                      type="text"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Type product name or SKU to search..."
+                      value={modalProductSearch}
+                      onChange={(e) => setModalProductSearch(e.target.value)}
+                    />
+
+                    {modalProductSearch.trim().length > 0 && (
+                      <div className="max-h-56 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2 bg-slate-50">
+                        {products
+                          .filter((p) => {
+                            const nameText = `${productName(p)} ${productNameArabic(p)} ${p.sku || ""}`.toLowerCase();
+                            return nameText.includes(modalProductSearch.trim().toLowerCase());
+                          })
+                          .slice(0, 10) // Limit display to 10 for performance
+                          .map((prod) => {
+                            const isAlreadyInList = activeSavedListItems.some((item) => item.productId === prod._id);
+                            return (
+                              <div key={prod._id} className="flex items-center justify-between gap-2 p-2 bg-white rounded-lg border border-slate-200 text-xs">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-9 h-9 bg-slate-100 rounded-lg overflow-hidden shrink-0 flex items-center justify-center border">
+                                    {productImage(prod) ? (
+                                      <img src={productImage(prod)} alt={productName(prod)} className="w-full h-full object-contain" />
+                                    ) : (
+                                      <span className="text-[8px] text-slate-400">No img</span>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <strong className="block truncate text-slate-900">{productName(prod)}</strong>
+                                    <span className="text-[10px] text-slate-400">SKU: {prod.sku || "—"}</span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={isAlreadyInList}
+                                  className={`px-3 py-1.5 rounded-lg font-semibold text-xs transition-all shrink-0 ${isAlreadyInList ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm'}`}
+                                  onClick={() => {
+                                    if (!isAlreadyInList) {
+                                      setActiveSavedListItems((previous) => [
+                                        ...previous,
+                                        { productId: prod._id, quantity: "", unit: "kg" }
+                                      ]);
+                                      setError("");
+                                      setSuccess(`Added "${productName(prod)}" to the list.`);
+                                    }
+                                  }}
+                                >
+                                  {isAlreadyInList ? "Added" : "+ Add"}
+                                </button>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
                   </div>
 
                   {activeSavedListItems.length === 0 ? <div className="text-center py-6 text-slate-400 text-sm">No products in this list.</div> : (
@@ -1148,7 +1176,7 @@ export default function PurchaseCenterPage() {
                         const product = products.find((entry) => entry._id === item.productId);
                         return (
                           <div className="flex items-center gap-3 p-2.5 bg-white rounded-xl border border-slate-200 text-xs" key={item.productId}>
-                            <div className="w-10 h-10 shrink-0 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
+                            <div className="w-10 h-10 shrink-0 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border">
                               {product && productImage(product) ? <img src={productImage(product)} alt={productName(product)} className="w-full h-full object-contain" /> : <span className="text-[9px] text-slate-400">No img</span>}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -1507,7 +1535,7 @@ export default function PurchaseCenterPage() {
 
             {selectedPurchaseItems.length > 0 && (
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {selectedPurchaseItems.map((item) => (
+                {selectedPurchaseItems.link?.length ?? selectedPurchaseItems.map((item) => (
                   <div className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs" key={item.productId}>
                     <div className="w-10 h-10 bg-white rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
                       {item.image ? (
@@ -1624,7 +1652,7 @@ export default function PurchaseCenterPage() {
                           order.status !== "cancelled" && (
                             <button
                               type="button"
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm"
                               onClick={() =>
                                 void updateOrderStatus(order._id, "received")
                               }
