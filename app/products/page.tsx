@@ -624,7 +624,6 @@ export default function ProductsPage() {
               ))}
             </div>
           ) : filteredProducts.length === 0 ? (
-            {/* Empty State */}
             <div className="px-6 py-20 text-center">
               <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-100 text-4xl">
                 {search || categoryFilter !== "all" ? "🔍" : "📦"}
