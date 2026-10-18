@@ -8,7 +8,8 @@ const SavedShoppingListSchema = new Schema(
     items: {
       type: [{
         productId: { type: String, required: true },
-        quantity: { type: Number, required: true, min: 1, default: 1 },
+        quantity: { type: mongoose.Schema.Types.Mixed, default: "" }, // ব্ল্যাংক বা যেকোনো সংখ্যা সেভ করার জন্য
+        unit: { type: String, default: "kg" }, // kg, gm, pcs ইউনিট সেভ করার জন্য
       }],
       default: [],
     },

@@ -27,12 +27,12 @@ export async function GET() {
     const rawLists = await SavedShoppingList.find({})
       .sort({ updatedAt: -1, createdAt: -1 })
       .lean();
-    // Older lists only have productIds; expose them as quantity 1 items.
+      
     const lists = rawLists.map((list: any) => ({
       ...list,
       items: Array.isArray(list.items) && list.items.length
         ? list.items
-        : (list.productIds || []).map((productId: string) => ({ productId, quantity: 1 })),
+        : (list.productIds || []).map((productId: string) => ({ productId, quantity: "", unit: "kg" })),
     }));
 
     return NextResponse.json({ success: true, lists });
@@ -56,20 +56,23 @@ export async function POST(req: NextRequest) {
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     const rawItems = Array.isArray(body?.items)
       ? body.items
-      : (Array.isArray(body?.productIds) ? body.productIds.map((productId: string) => ({ productId, quantity: 1 })) : []);
+      : (Array.isArray(body?.productIds) ? body.productIds.map((productId: string) => ({ productId, quantity: "", unit: "kg" })) : []);
+      
     const items = rawItems.map((item: any) => ({
       productId: typeof item?.productId === "string" ? item.productId : "",
-      quantity: Number(item?.quantity ?? 1),
+      quantity: item?.quantity !== undefined ? item.quantity : "",
+      unit: typeof item?.unit === "string" ? item.unit : "kg",
     }));
+    
     const validItems = items.length > 0 && items.every((item: any) =>
-      mongoose.isValidObjectId(item.productId) && Number.isInteger(item.quantity) && item.quantity >= 1
+      mongoose.isValidObjectId(item.productId)
     );
 
     if (!name) {
       return NextResponse.json({ success: false, error: "Shopping list name is required." }, { status: 400 });
     }
     if (!validItems) {
-      return NextResponse.json({ success: false, error: "Each item must have a valid product and quantity of at least 1." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Each item must have a valid product ID." }, { status: 400 });
     }
 
     const productIds = items.map((item: any) => item.productId);
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PUT: rename a saved shopping list or update its selected products.
+// PUT: update a saved shopping list.
 export async function PUT(req: NextRequest) {
   try {
     const unauthorized = await requireAdmin();
@@ -103,16 +106,19 @@ export async function PUT(req: NextRequest) {
     if (body?.items !== undefined || body?.productIds !== undefined) {
       const rawItems = Array.isArray(body?.items)
         ? body.items
-        : (Array.isArray(body?.productIds) ? body.productIds.map((productId: string) => ({ productId, quantity: 1 })) : null);
+        : (Array.isArray(body?.productIds) ? body.productIds.map((productId: string) => ({ productId, quantity: "", unit: "kg" })) : null);
       if (!rawItems) return NextResponse.json({ success: false, error: "Items must be an array." }, { status: 400 });
+      
       const items = rawItems.map((item: any) => ({
         productId: typeof item?.productId === "string" ? item.productId : "",
-        quantity: Number(item?.quantity ?? 1),
+        quantity: item?.quantity !== undefined ? item.quantity : "",
+        unit: typeof item?.unit === "string" ? item.unit : "kg",
       }));
+      
       const validItems = items.length > 0 && items.every((item: any) =>
-        mongoose.isValidObjectId(item.productId) && Number.isInteger(item.quantity) && item.quantity >= 1
+        mongoose.isValidObjectId(item.productId)
       );
-      if (!validItems) return NextResponse.json({ success: false, error: "Each item must have a valid product and quantity of at least 1." }, { status: 400 });
+      if (!validItems) return NextResponse.json({ success: false, error: "Each item must have a valid product ID." }, { status: 400 });
       update.items = items;
       update.productIds = items.map((item: any) => item.productId);
     }
