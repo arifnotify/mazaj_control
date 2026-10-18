@@ -54,6 +54,7 @@ type PurchaseItem = {
   nameAr?: string;
   image: string;
   quantity: number;
+  unit: string;
   unitCost: number;
   lineTotal: number;
 };
@@ -72,7 +73,7 @@ type PurchaseOrder = {
 
 type FilterType = "all" | "stock" | "marketplace" | "catalog";
 
-type SavedShoppingListItem = { productId: string; quantity: number };
+type SavedShoppingListItem = { productId: string; quantity: number | string; unit?: string };
 
 type SavedShoppingList = {
   _id: string;
@@ -157,7 +158,7 @@ export default function PurchaseCenterPage() {
   const [notes, setNotes] = useState("");
 
   const [purchaseItems, setPurchaseItems] = useState<
-    Record<string, { quantity: number; unitCost: number }>
+    Record<string, { quantity: string | number; unit: string; unitCost: number }>
   >({});
 
   const [printSelected, setPrintSelected] = useState<string[]>([]);
@@ -229,7 +230,15 @@ export default function PurchaseCenterPage() {
     try {
       const response = await fetch("/api/saved-shopping-lists", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, items: printSelected.map((productId) => ({ productId, quantity: Math.max(1, Number(purchaseItems[productId]?.quantity || 1)) })), productIds: printSelected }),
+        body: JSON.stringify({ 
+          name, 
+          items: printSelected.map((productId) => ({ 
+            productId, 
+            quantity: purchaseItems[productId]?.quantity ?? "", 
+            unit: purchaseItems[productId]?.unit ?? "kg" 
+          })), 
+          productIds: printSelected 
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || data?.message || "Could not save shopping list.");
@@ -243,8 +252,8 @@ export default function PurchaseCenterPage() {
 
   function openShoppingList(list: SavedShoppingList) {
     const items = Array.isArray(list.items) && list.items.length
-      ? list.items.map((item) => ({ productId: item.productId, quantity: Math.max(1, Number(item.quantity || 1)) }))
-      : (list.productIds || []).map((productId) => ({ productId, quantity: 1 }));
+      ? list.items.map((item) => ({ productId: item.productId, quantity: item.quantity ?? "", unit: item.unit || "kg" }))
+      : (list.productIds || []).map((productId) => ({ productId, quantity: "", unit: "kg" }));
     setActiveSavedListId(list._id);
     setActiveSavedListItems(items);
     setPrintSelected(items.map((item) => item.productId));
@@ -254,8 +263,8 @@ export default function PurchaseCenterPage() {
 
   function printSavedShoppingList(list: SavedShoppingList) {
     const items = Array.isArray(list.items) && list.items.length
-      ? list.items.map((item) => ({ productId: item.productId, quantity: Math.max(1, Number(item.quantity || 1)) }))
-      : (list.productIds || []).map((productId) => ({ productId, quantity: 1 }));
+      ? list.items.map((item) => ({ productId: item.productId, quantity: item.quantity ?? "", unit: item.unit || "kg" }))
+      : (list.productIds || []).map((productId) => ({ productId, quantity: "", unit: "kg" }));
     if (items.length === 0) {
       setError("This saved shopping list has no products to print.");
       return;
@@ -269,9 +278,15 @@ export default function PurchaseCenterPage() {
     window.setTimeout(() => window.print(), 150);
   }
 
-  function updateSavedListQuantity(productId: string, quantity: number) {
+  function updateSavedListQuantity(productId: string, quantity: string | number) {
     setActiveSavedListItems((previous) => previous.map((item) => item.productId === productId
-      ? { ...item, quantity: Math.max(1, Number.isFinite(quantity) ? quantity : 1) }
+      ? { ...item, quantity }
+      : item));
+  }
+
+  function updateSavedListUnit(productId: string, unit: string) {
+    setActiveSavedListItems((previous) => previous.map((item) => item.productId === productId
+      ? { ...item, unit }
       : item));
   }
 
@@ -282,7 +297,7 @@ export default function PurchaseCenterPage() {
   function addSelectedProductsToSavedList() {
     setActiveSavedListItems((previous) => {
       const existing = new Set(previous.map((item) => item.productId));
-      return [...previous, ...printSelected.filter((id) => !existing.has(id)).map((productId) => ({ productId, quantity: 1 }))];
+      return [...previous, ...printSelected.filter((id) => !existing.has(id)).map((productId) => ({ productId, quantity: "", unit: "kg" }))];
     });
     setSuccess("Selected products added to the open list. Save changes to keep them in the database.");
     setError("");
@@ -414,20 +429,23 @@ export default function PurchaseCenterPage() {
 
   const selectedPurchaseItems = useMemo(() => {
     return Object.entries(purchaseItems)
-      .filter(([, value]) => value.quantity > 0)
+      .filter(([, value]) => value.quantity !== "" && value.quantity != null)
       .map(([productId, value]) => {
         const product = products.find((item) => item._id === productId);
 
         if (!product) return null;
+
+        const qtyNum = Number(value.quantity) || 0;
 
         return {
           productId,
           sku: String(product.sku || ""),
           name: productName(product),
           image: productImage(product),
-          quantity: value.quantity,
+          quantity: qtyNum,
+          unit: value.unit,
           unitCost: value.unitCost,
-          lineTotal: value.quantity * value.unitCost,
+          lineTotal: qtyNum * value.unitCost,
         };
       })
       .filter((item): item is PurchaseItem => item !== null);
@@ -499,7 +517,8 @@ export default function PurchaseCenterPage() {
         const selectedSupplierRecord = suppliers.find((item) => item._id === selectedSupplier);
         const savedSupplierProduct = selectedSupplierRecord?.supplierProducts?.find((item) => item.productId === product._id);
         next[product._id] = next[product._id] || {
-          quantity: 1,
+          quantity: "",
+          unit: "kg",
           unitCost: savedSupplierProduct ? Number(savedSupplierProduct.unitCost || 0) : Number(product.price || 0),
         };
       } else {
@@ -512,15 +531,16 @@ export default function PurchaseCenterPage() {
 
   function updatePurchaseField(
     productId: string,
-    field: "quantity" | "unitCost",
-    value: number
+    field: "quantity" | "unit" | "unitCost",
+    value: string | number
   ) {
     setPurchaseItems((previous) => ({
       ...previous,
       [productId]: {
-        quantity: previous[productId]?.quantity ?? 1,
+        quantity: previous[productId]?.quantity ?? "",
+        unit: previous[productId]?.unit ?? "kg",
         unitCost: previous[productId]?.unitCost ?? 0,
-        [field]: Math.max(0, value),
+        [field]: value,
       },
     }));
   }
@@ -528,6 +548,12 @@ export default function PurchaseCenterPage() {
   function togglePrintProduct(productId: string, checked: boolean) {
     setPrintSelected((previous) => {
       if (checked) {
+        if (!printSelected.includes(productId) && !purchaseItems[productId]) {
+          setPurchaseItems((p) => ({
+            ...p,
+            [productId]: { quantity: "", unit: "kg", unitCost: Number(products.find(x => x._id === productId)?.price || 0) }
+          }));
+        }
         return previous.includes(productId)
           ? previous
           : [...previous, productId];
@@ -539,16 +565,40 @@ export default function PurchaseCenterPage() {
 
   function selectAllVisibleProducts() {
     const visibleProductIds = filteredProducts.map((product) => product._id);
+    visibleProductIds.forEach((id) => {
+      if (!purchaseItems[id]) {
+        setPurchaseItems((p) => ({
+          ...p,
+          [id]: { quantity: "", unit: "kg", unitCost: Number(products.find(x => x._id === id)?.price || 0) }
+        }));
+      }
+    });
 
     setPrintSelected((previous) =>
       Array.from(new Set([...previous, ...visibleProductIds]))
     );
   }
 
-  function getPrintQuantity(productId: string): number {
+  function getPrintQuantityDisplay(productId: string): string {
     const savedListItem = activeSavedListItems.find((item) => item.productId === productId);
-    if (activeSavedListId && savedListItem) return savedListItem.quantity;
-    return purchaseItems[productId]?.quantity ?? 1;
+    let qty = "";
+    let unit = "kg";
+
+    if (activeSavedListId && savedListItem) {
+      qty = savedListItem.quantity !== "" && savedListItem.quantity != null ? String(savedListItem.quantity) : "";
+      unit = savedListItem.unit || "kg";
+    } else {
+      const item = purchaseItems[productId];
+      if (item && item.quantity !== "" && item.quantity != null) {
+        qty = String(item.quantity);
+        unit = item.unit || "kg";
+      }
+    }
+
+    if (!qty || qty.trim() === "") {
+      return "__________________";
+    }
+    return `${qty} ${unit}`;
   }
 
   function printSelectedProducts() {
@@ -681,7 +731,7 @@ export default function PurchaseCenterPage() {
     }
 
     if (selectedPurchaseItems.length === 0) {
-      setError("Please select at least one product for the purchase order.");
+      setError("Please select at least one product with a valid quantity for the purchase order.");
       return;
     }
 
@@ -837,11 +887,9 @@ export default function PurchaseCenterPage() {
                         <strong className="print-name-en truncate" dir="ltr">{productName(product)}</strong>
                         <strong className="print-name-ar truncate" dir="rtl" lang="ar">{productNameArabic(product)}</strong>
                         <p>SKU: {product.sku || "—"}</p>
-                        <p className="print-bilingual-line flex justify-between font-semibold"><span>Qty (kg/gm/pcs):</span><span lang="ar" dir="rtl">الكمية (كجم/جم/قطعة):</span></p>
+                        <p className="print-bilingual-line flex justify-between font-semibold"><span>Qty:</span><span lang="ar" dir="rtl">الكمية:</span></p>
                         <div className="quantity-blank">
-                          {getPrintQuantity(product._id) != null 
-                            ? `${getPrintQuantity(product._id)} (kg / gm / pcs)` 
-                            : "_______ kg/gm/pcs"}
+                          {getPrintQuantityDisplay(product._id)}
                         </div>
                         <p className="print-checkbox-line">□ Checked / تم</p>
                       </div>
@@ -1053,7 +1101,7 @@ export default function PurchaseCenterPage() {
                   <div className="flex justify-between items-center">
                     <div>
                       <h3 className="font-bold text-indigo-900 text-base">Edit products: {activeList.name}</h3>
-                      <p className="text-xs text-indigo-700">Change the quantity for each product, remove items, then save.</p>
+                      <p className="text-xs text-indigo-700">Change the quantity & unit for each product, remove items, then save.</p>
                     </div>
                     <button type="button" className="bg-white hover:bg-slate-100 text-slate-700 px-3 py-1 rounded-xl text-xs font-semibold border border-slate-200" onClick={() => { setActiveSavedListId(null); setActiveSavedListItems([]); }}>Close</button>
                   </div>
@@ -1072,7 +1120,12 @@ export default function PurchaseCenterPage() {
                             </div>
                             <div className="flex items-center gap-2">
                               <label className="text-[10px] font-bold text-slate-500 uppercase">Qty</label>
-                              <input className="w-14 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-center font-bold text-xs" type="number" min="1" step="1" value={item.quantity} onChange={(event) => updateSavedListQuantity(item.productId, Number(event.target.value))} />
+                              <input className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-center font-bold text-xs" type="text" placeholder="Blank" value={item.quantity ?? ""} onChange={(event) => updateSavedListQuantity(item.productId, event.target.value)} />
+                              <select className="px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold" value={item.unit || "kg"} onChange={(event) => updateSavedListUnit(item.productId, event.target.value)}>
+                                <option value="kg">kg</option>
+                                <option value="gm">gm</option>
+                                <option value="pcs">pcs</option>
+                              </select>
                             </div>
                             <button type="button" className="text-rose-500 hover:text-rose-700 font-bold px-2 py-1" onClick={() => removeSavedListProduct(item.productId)}>✕</button>
                           </div>
@@ -1178,10 +1231,8 @@ export default function PurchaseCenterPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
                 {filteredProducts.map((product) => {
-                  const purchaseSelected = Boolean(
-                    purchaseItems[product._id]
-                  );
                   const printChecked = printSelected.includes(product._id);
+                  const itemData = purchaseItems[product._id];
 
                   return (
                     <article className={`border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all ${printChecked ? 'border-indigo-500 bg-indigo-50/10' : 'border-slate-200 bg-white hover:border-slate-300'}`} key={product._id}>
@@ -1241,64 +1292,38 @@ export default function PurchaseCenterPage() {
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-slate-600">Print Quantity & Unit:</span>
+                        <div className="flex items-center gap-1.5">
                           <input
-                            type="checkbox"
-                            checked={purchaseSelected}
+                            type="text"
+                            placeholder="Blank"
+                            value={itemData?.quantity ?? ""}
                             onChange={(event) =>
-                              togglePurchaseProduct(
-                                product,
-                                event.target.checked
+                              updatePurchaseField(
+                                product._id,
+                                "quantity",
+                                event.target.value
                               )
                             }
-                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                            className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded text-center text-xs font-bold"
                           />
-                          Add to order
-                        </label>
-
-                        {purchaseSelected && (
-                          <div className="flex items-center gap-2">
-                            <label className="text-[10px] text-slate-500">
-                              Qty
-                              <input
-                                type="number"
-                                min="1"
-                                value={
-                                  purchaseItems[product._id]?.quantity ?? 1
-                                }
-                                onChange={(event) =>
-                                  updatePurchaseField(
-                                    product._id,
-                                    "quantity",
-                                    Number(event.target.value)
-                                  )
-                                }
-                                className="w-12 ml-1 px-1.5 py-0.5 bg-slate-50 border border-slate-300 rounded text-center text-xs font-bold"
-                              />
-                            </label>
-
-                            <label className="text-[10px] text-slate-500">
-                              Cost
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={
-                                  purchaseItems[product._id]?.unitCost ?? 0
-                                }
-                                onChange={(event) =>
-                                  updatePurchaseField(
-                                    product._id,
-                                    "unitCost",
-                                    Number(event.target.value)
-                                  )
-                                }
-                                className="w-16 ml-1 px-1.5 py-0.5 bg-slate-50 border border-slate-300 rounded text-center text-xs font-bold"
-                              />
-                            </label>
-                          </div>
-                        )}
+                          <select
+                            value={itemData?.unit ?? "kg"}
+                            onChange={(event) =>
+                              updatePurchaseField(
+                                product._id,
+                                "unit",
+                                event.target.value
+                              )
+                            }
+                            className="px-2 py-1 bg-slate-50 border border-slate-300 rounded text-xs font-bold text-slate-700"
+                          >
+                            <option value="kg">kg</option>
+                            <option value="gm">gm</option>
+                            <option value="pcs">pcs</option>
+                          </select>
+                        </div>
                       </div>
                     </article>
                   );
@@ -1456,7 +1481,7 @@ export default function PurchaseCenterPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <strong className="block truncate text-slate-900">{item.name}</strong>
-                      <span className="text-[10px] text-slate-400">SKU: {item.sku || "—"} | Qty: {item.quantity} × {money(item.unitCost)}</span>
+                      <span className="text-[10px] text-slate-400">SKU: {item.sku || "—"} | Qty: {item.quantity} {item.unit} × {money(item.unitCost)}</span>
                     </div>
                     <strong className="text-slate-900">{money(item.lineTotal)}</strong>
                   </div>
@@ -1523,7 +1548,7 @@ export default function PurchaseCenterPage() {
 
                           <div className="min-w-0 flex-1">
                             <strong className="block truncate text-slate-900">{item.name}</strong>
-                            <span className="text-[10px] text-slate-400">SKU: {item.sku || "—"} · Qty: {item.quantity}</span>
+                            <span className="text-[10px] text-slate-400">SKU: {item.sku || "—"} · Qty: {item.quantity} {item.unit || "kg"}</span>
                           </div>
 
                           <strong className="text-slate-900">
