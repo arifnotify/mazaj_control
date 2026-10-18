@@ -88,9 +88,7 @@ export default function DashboardPage() {
 
   return (
     <main
-      className={`min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans text-slate-950 transition-all ${
-        isArabic ? "lg:mr-64" : "lg:ml-64"
-      }`}
+      className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans text-slate-950 transition-all"
       dir={isArabic ? "rtl" : "ltr"}
     >
       <div className="w-full space-y-6">
@@ -418,7 +416,7 @@ export default function DashboardPage() {
 
                 <a
                   href="/employees"
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-4 text-center text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs"
                 >
                   {isArabic
                     ? "إدارة الموظفين"
