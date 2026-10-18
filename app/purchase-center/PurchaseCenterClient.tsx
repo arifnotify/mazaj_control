@@ -945,10 +945,11 @@ export default function PurchaseCenterPage() {
         </div>
 
 
-        <section className="panel saved-shopping-lists-panel">
-          <div className="panel-heading">
+        <details className="panel saved-shopping-lists-panel collapsible-panel">
+          <summary className="panel-heading collapsible-heading">
             <div><h2>Saved Shopping Lists</h2><p>Save product selections in the database and reuse them whenever you need.</p></div>
-          </div>
+            <span className="collapse-hint">Open / Minimize</span>
+          </summary>
           <div className="order-form">
             <label>Shopping list name
               <input className="text-input" value={shoppingListName} onChange={(event) => setShoppingListName(event.target.value)} placeholder="e.g. Weekly Grocery Purchase" />
@@ -1014,7 +1015,7 @@ export default function PurchaseCenterPage() {
               </div>
             );
           })()}
-        </section>
+        </details>
 
         <details className="panel collapsible-panel">
           <summary className="panel-heading collapsible-heading">
