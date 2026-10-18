@@ -253,6 +253,24 @@ export default function PurchaseCenterPage() {
     setError("");
   }
 
+  function printSavedShoppingList(list: SavedShoppingList) {
+    const items = Array.isArray(list.items) && list.items.length
+      ? list.items.map((item) => ({ productId: item.productId, quantity: Math.max(1, Number(item.quantity || 1)) }))
+      : (list.productIds || []).map((productId) => ({ productId, quantity: 1 }));
+    if (items.length === 0) {
+      setError("This saved shopping list has no products to print.");
+      return;
+    }
+
+    setActiveSavedListId(list._id);
+    setActiveSavedListItems(items);
+    setPrintSelected(items.map((item) => item.productId));
+    setError("");
+    setSuccess("");
+    // Allow React to render this list's products and saved quantities before printing.
+    window.setTimeout(() => window.print(), 150);
+  }
+
   function updateSavedListQuantity(productId: string, quantity: number) {
     setActiveSavedListItems((previous) => previous.map((item) => item.productId === productId
       ? { ...item, quantity: Math.max(1, Number.isFinite(quantity) ? quantity : 1) }
@@ -954,6 +972,7 @@ export default function PurchaseCenterPage() {
                     <div className="order-card-top"><div><h3>{list.name}</h3><p>{count} product{count === 1 ? "" : "s"} · Updated {updated}</p></div></div>
                     <div className="action-buttons">
                       <button type="button" className="button button-primary" onClick={() => openShoppingList(list)}>Open</button>
+                      <button type="button" className="button button-secondary" onClick={() => printSavedShoppingList(list)}><span aria-hidden="true">🖨 </span>Print</button>
                       <button type="button" className="button button-secondary" onClick={() => void editShoppingList(list)}>Edit</button>
                       <button type="button" className="button button-light" onClick={() => void deleteShoppingList(list)}>Delete</button>
                     </div>
