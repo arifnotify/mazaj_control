@@ -755,57 +755,60 @@ export default function PurchaseCenterPage() {
       {!supplierPrintMode && <section className="print-only hidden print:block" dir="ltr">
         <style jsx global>{`
           @media print {
-            @page { size: A4 portrait; margin: 4mm; }
+            @page { size: A4 portrait; margin: 5mm; }
             .print-only { display: block !important; color: #111 !important; }
             .screen-only { display: none !important; }
             .print-page { 
               break-after: page; 
               page-break-after: always; 
               width: 100%; 
-              height: 289mm; 
+              height: 287mm; 
               display: flex; 
               flex-direction: column; 
               justify-content: space-between; 
             }
             .print-page:last-child { break-after: auto; page-break-after: auto; }
             .print-header { margin: 0 0 2mm !important; padding: 0 0 2mm !important; border-bottom: 2px solid #111 !important; }
-            .print-header h1 { font-size: 14pt !important; margin: 0 0 1mm !important; font-weight: bold; }
-            .print-header h2 { font-size: 11pt !important; margin: 0 0 1mm !important; font-weight: bold; }
-            .print-meta { font-size: 8pt !important; margin: 0.5mm 0 !important; display: flex; justify-content: space-between; }
+            .print-header-top { display: flex; justify-content: space-between; align-items: center; }
+            .print-header h1 { font-size: 14pt !important; margin: 0 !important; font-weight: bold; }
+            .print-header h2 { font-size: 11pt !important; margin: 0 !important; font-weight: bold; }
+            .print-meta { font-size: 8pt !important; margin: 1mm 0 0 0 !important; display: flex; justify-content: space-between; }
             .print-category { margin: 0 0 2mm !important; flex: 1; display: flex; flex-direction: column; }
-            .print-category-heading { margin: 1mm 0 !important; padding: 1.5mm 3mm !important; background: #cbd5e1 !important; display: flex; justify-content: space-between; font-weight: bold; }
+            .print-category-heading { margin: 1.5mm 0 !important; padding: 2mm 3mm !important; background: #e2e8f0 !important; display: flex; justify-content: space-between; font-weight: bold; border-radius: 3px; }
             .print-category-heading h2 { font-size: 10pt !important; margin: 0 !important; }
             .print-product-grid { 
               display: grid !important; 
               grid-template-columns: repeat(3, minmax(0, 1fr)) !important; 
               grid-auto-rows: 1fr; 
-              gap: 2mm !important; 
+              gap: 2.5mm !important; 
               flex: 1;
             }
             .print-product { 
               display: flex !important; 
               flex-direction: row !important; 
-              gap: 2.5mm !important; 
-              padding: 2.5mm !important; 
-              border: 1.5px solid #64748b !important; 
+              gap: 3mm !important; 
+              padding: 3mm !important; 
+              border: 1.5px solid #475569 !important; 
               border-radius: 6px !important; 
               align-items: center;
               background: #fff !important; 
               height: 100%;
             }
-            .print-product img, .print-no-image { width: 19mm !important; height: 19mm !important; min-width: 19mm !important; object-fit: contain !important; border: 1px solid #ddd; border-radius: 4px; }
-            .print-product-info { min-width: 0; font-size: 7.5pt !important; line-height: 1.25 !important; width: 100%; }
-            .print-product-info strong { font-size: 8.5pt !important; overflow-wrap: anywhere; display: block; font-weight: 700; color: #020617; }
-            .print-product-info p { margin: 0.8mm 0 !important; font-size: 7pt !important; color: #334155; }
-            .quantity-blank { font-size: 8pt !important; margin: 1mm 0 !important; font-weight: bold; color: #0f172a; background: #f8fafc; padding: 0.5mm 1mm; border-radius: 3px; border: 1px dashed #cbd5e1; }
-            .print-footer { margin-top: 2mm !important; font-size: 8pt !important; border-top: 1px solid #94a3b8; padding-top: 1.5mm; display: flex; justify-content: space-between; font-weight: 600; }
+            .print-product img, .print-no-image { width: 22mm !important; height: 22mm !important; min-width: 22mm !important; object-fit: contain !important; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; }
+            .print-product-info { min-width: 0; font-size: 8pt !important; line-height: 1.3 !important; width: 100%; }
+            .print-product-info strong { font-size: 9pt !important; overflow-wrap: anywhere; display: block; font-weight: 700; color: #020617; }
+            .print-product-info p { margin: 1mm 0 !important; font-size: 7.5pt !important; color: #334155; }
+            .quantity-blank { font-size: 8.5pt !important; margin: 1mm 0 !important; font-weight: bold; color: #0f172a; background: #f8fafc; padding: 1mm 1.5mm; border-radius: 4px; border: 1px dashed #94a3b8; text-align: center; }
+            .print-footer { margin-top: 2mm !important; font-size: 8pt !important; border-top: 1px solid #64748b; padding-top: 2mm; display: flex; justify-content: space-between; font-weight: 600; }
           }
         `}</style>
         {printPages.map((page, pageIndex) => (
           <div className="print-page" key={`print-page-${pageIndex}`}>
             <header className="print-header">
-              <h1>MAZAJ — Purchase Shopping List</h1>
-              <h2 lang="ar" dir="rtl">مجاز — قائمة المشتريات</h2>
+              <div className="print-header-top">
+                <h1>Mazaj Nuts Roastery</h1>
+                <h2 lang="ar" dir="rtl">محمص مزاج للمكسرات</h2>
+              </div>
               <div className="print-meta">
                 <span>Date: {new Date().toLocaleDateString("en-GB")}</span>
                 <span lang="ar" dir="rtl">التاريخ: {new Date().toLocaleDateString("ar-QA")}</span>
@@ -834,8 +837,12 @@ export default function PurchaseCenterPage() {
                         <strong className="print-name-en truncate" dir="ltr">{productName(product)}</strong>
                         <strong className="print-name-ar truncate" dir="rtl" lang="ar">{productNameArabic(product)}</strong>
                         <p>SKU: {product.sku || "—"}</p>
-                        <p className="print-bilingual-line flex justify-between font-semibold"><span>Qty:</span><span lang="ar" dir="rtl">الكمية:</span></p>
-                        <div className="quantity-blank">{getPrintQuantity(product._id) != null ? `${getPrintQuantity(product._id)} ${getPrintQuantity(product._id) === 1 ? "unit" : "units"}` : "__________________"}</div>
+                        <p className="print-bilingual-line flex justify-between font-semibold"><span>Qty (kg/gm/pcs):</span><span lang="ar" dir="rtl">الكمية (كجم/جم/قطعة):</span></p>
+                        <div className="quantity-blank">
+                          {getPrintQuantity(product._id) != null 
+                            ? `${getPrintQuantity(product._id)} (kg / gm / pcs)` 
+                            : "_______ kg/gm/pcs"}
+                        </div>
                         <p className="print-checkbox-line">□ Checked / تم</p>
                       </div>
                     </article>
@@ -857,8 +864,10 @@ export default function PurchaseCenterPage() {
         return <section className="print-only supplier-catalog-print hidden print:block" dir="ltr">
           <style jsx global>{`@media print { .supplier-catalog-print { display:block !important; } .supplier-catalog-print table { width:100%; border-collapse:collapse; margin-top: 15px; } .supplier-catalog-print th,.supplier-catalog-print td { border:1px solid #777; padding:6px; text-align:left; font-size:9pt; } .supplier-catalog-print img { width:40px;height:40px;object-fit:contain; } }`}</style>
           <header className="print-header">
-            <h1 className="text-lg font-bold">MAZAJ — Supplier Product Price List</h1>
-            <h2 className="text-md font-bold" lang="ar" dir="rtl">مجاز — قائمة المنتجات وأسعار المورد</h2>
+            <div className="print-header-top" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <h1 className="text-lg font-bold">Mazaj Nuts Roastery</h1>
+              <h2 className="text-md font-bold" lang="ar" dir="rtl">محمص مزاج للمكسرات</h2>
+            </div>
             <div className="print-meta flex justify-between text-xs mt-2"><span>Supplier: {supplier?.name || "—"}</span><span>Date: {new Date().toLocaleDateString("en-GB")}</span></div>
             {supplier?.phone && <div className="text-xs">Phone: {supplier.phone}</div>}
           </header>
