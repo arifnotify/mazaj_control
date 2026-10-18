@@ -16,13 +16,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" dir="ltr">
-      <body className="min-h-screen bg-gray-50">
+      <body className="min-h-screen bg-slate-50 font-sans antialiased">
         <LanguageProvider>
-          <Sidebar />
+          <div className="flex min-h-screen">
+            {/* Sidebar Component */}
+            <Sidebar />
 
-          <main className="min-h-screen ps-64">
-            {children}
-          </main>
+            {/* Main Content Area - lg স্ক্রিন থেকে স্বয়ংক্রিয়ভাবে সাইডবারের জায়গা নিয়ে নেবে */}
+            <div className="flex-1 min-w-0 lg:ps-64">
+              <main className="min-h-screen">
+                {children}
+              </main>
+            </div>
+          </div>
         </LanguageProvider>
       </body>
     </html>
