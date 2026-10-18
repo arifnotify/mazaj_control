@@ -1,6 +1,6 @@
 "use client";
 
-import { useLanguage } from "@/app/components/LanguageProvider";
+import { useLanguage } from "@/app/components/LanguageProvider"; // আপনার প্রজেক্টের ভাষা প্রোভাইডার পাথ চেক করে নিন
 import LanguageSwitcher from "@/app/components/LanguageSwitcher";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -28,7 +28,7 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile Top Header Bar with Hamburger Button */}
+      {/* Mobile Header Toggle Bar */}
       <div className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-4 lg:hidden">
         <Link href="/" className="flex items-center gap-2">
           <span className="text-base font-black tracking-wider text-slate-900">
@@ -46,7 +46,7 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Backdrop for Mobile Sidebar */}
+      {/* Mobile Backdrop */}
       {isOpen && (
         <div
           onClick={() => setIsOpen(false)}
