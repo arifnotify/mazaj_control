@@ -370,14 +370,14 @@ export default function ProductsPage() {
 
   return (
     <main
-      className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans text-slate-900"
+      className="min-h-screen bg-slate-50 p-3 sm:p-6 lg:p-8 font-sans text-slate-950 overflow-x-hidden"
       dir={isArabic ? "rtl" : "ltr"}
     >
-      <div className="mx-auto max-w-[1500px] space-y-6">
+      <div className="mx-auto max-w-[1500px] w-full space-y-6 box-border">
         
         {/* Header Section */}
-        <div className="flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-xs border border-slate-200 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 rounded-2xl bg-white p-5 sm:p-6 shadow-xs border border-slate-200 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 flex-1">
             <Link
               href="/"
               className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
@@ -386,11 +386,11 @@ export default function ProductsPage() {
               {t("dashboard")}
             </Link>
 
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+            <h1 className="text-xl sm:text-3xl font-black tracking-tight text-slate-900 truncate">
               {t("products")}
             </h1>
 
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-xs sm:text-sm text-slate-500">
               {message(
                 "Manage your products, inventory levels and live status.",
                 "إدارة المنتجات ومستويات المخزون وحالة التوفر المباشرة."
@@ -400,9 +400,9 @@ export default function ProductsPage() {
 
           <Link
             href="/products/new"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800 shadow-sm transition-all"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-white hover:bg-slate-800 shadow-sm transition-all shrink-0"
           >
-            <span className="text-lg leading-none">+</span>
+            <span className="text-base sm:text-lg leading-none">+</span>
             {t("addProduct")}
           </Link>
         </div>
@@ -448,19 +448,19 @@ export default function ProductsPage() {
           ].map((item) => (
             <div
               key={item.label}
-              className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs transition-hover hover:border-slate-300"
+              className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400">
+                  <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
                     {item.label}
                   </p>
-                  <p className={`mt-2 text-2xl sm:text-3xl font-black ${item.color}`}>
+                  <p className={`mt-1.5 text-2xl sm:text-3xl font-black ${item.color}`}>
                     {item.value}
                   </p>
                 </div>
                 <div
-                  className={`flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl text-lg sm:text-xl ${item.bg}`}
+                  className={`flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl text-base sm:text-xl ${item.bg}`}
                 >
                   {item.icon}
                 </div>
@@ -484,7 +484,7 @@ export default function ProductsPage() {
         )}
 
         {/* Main Content Card / Filter & Table Section */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs w-full">
           
           {/* Search & Filters Header */}
           <div className="border-b border-slate-200 p-4 sm:p-6 bg-slate-50/50">
@@ -546,7 +546,7 @@ export default function ProductsPage() {
                     key={value}
                     type="button"
                     onClick={() => setStatusFilter(value)}
-                    className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition shadow-2xs ${
+                    className={`rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition shadow-2xs ${
                       statusFilter === value
                         ? value === "active"
                           ? "bg-emerald-600 text-white"
@@ -563,7 +563,7 @@ export default function ProductsPage() {
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
                   {message("Clear Filters", "مسح الفلاتر")}
                 </button>
@@ -572,7 +572,7 @@ export default function ProductsPage() {
                   type="button"
                   onClick={() => void loadProducts()}
                   disabled={loading}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition ml-auto"
+                  className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition ml-auto"
                 >
                   ↻ {t("refresh")}
                 </button>
@@ -663,7 +663,7 @@ export default function ProductsPage() {
           ) : (
             <>
               {/* DESKTOP TABLE VIEW (Visible on large screens) */}
-              <div className="hidden lg:block overflow-x-auto">
+              <div className="hidden lg:block overflow-x-auto w-full">
                 <table className="w-full min-w-[1150px] text-left">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/80">
@@ -843,7 +843,7 @@ export default function ProductsPage() {
                             )}
                           </td>
 
-                          {/* Active / Inactive Switch */}
+                          {/* Active / Inactive Switch & Date Info */}
                           <td className="px-5 py-4">
                             <button
                               type="button"
@@ -886,13 +886,28 @@ export default function ProductsPage() {
                               </span>
                             </button>
 
-                            {product.lastStatusChangedByName && (
-                              <div className="mt-1 max-w-36 text-[11px] leading-4 text-slate-400">
-                                <div>
-                                  {product.active ? "ON" : "OFF"}{" "}
-                                  {message("by", "بواسطة")}{" "}
-                                  <span className="font-semibold text-slate-600">{product.lastStatusChangedByName}</span>
-                                </div>
+                            {/* Status Changer Name & Formatted Date */}
+                            {(product.lastStatusChangedByName || product.lastStatusChangedAt) && (
+                              <div className="mt-1.5 text-[11px] leading-relaxed text-slate-500 max-w-[180px]">
+                                {product.lastStatusChangedByName && (
+                                  <div className="font-semibold text-slate-700 truncate">
+                                    {product.active ? "ON" : "OFF"} by {product.lastStatusChangedByName}
+                                  </div>
+                                )}
+                                {product.lastStatusChangedAt && (
+                                  <div className="text-[10px] text-slate-400">
+                                    {new Date(product.lastStatusChangedAt).toLocaleString(
+                                      language === "ar" ? "ar-QA" : "en-GB",
+                                      {
+                                        day: "numeric",
+                                        month: "short",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      }
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </td>
@@ -932,7 +947,7 @@ export default function ProductsPage() {
               </div>
 
               {/* MOBILE & TABLET CARD VIEW (Visible on smaller screens) */}
-              <div className="block lg:hidden divide-y divide-slate-100 p-4 space-y-3">
+              <div className="block lg:hidden divide-y divide-slate-100 p-3 sm:p-4 space-y-3 w-full">
                 {filteredProducts.map((product) => {
                   const isActionLoading = actionLoading === product._id;
                   const variantPrices =
@@ -952,7 +967,7 @@ export default function ProductsPage() {
                   return (
                     <div
                       key={`mobile-${product._id}`}
-                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3.5"
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3.5 w-full box-border"
                     >
                       <div className="flex items-start gap-3">
                         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
@@ -998,8 +1013,33 @@ export default function ProductsPage() {
                         </div>
                       </div>
 
+                      {/* Status Info for Mobile */}
+                      {(product.lastStatusChangedByName || product.lastStatusChangedAt) && (
+                        <div className="bg-slate-50 px-3 py-2 rounded-xl text-xs text-slate-600 space-y-0.5">
+                          {product.lastStatusChangedByName && (
+                            <div className="font-semibold">
+                              {product.active ? "ON" : "OFF"} by {product.lastStatusChangedByName}
+                            </div>
+                          )}
+                          {product.lastStatusChangedAt && (
+                            <div className="text-[10px] text-slate-400">
+                              {new Date(product.lastStatusChangedAt).toLocaleString(
+                                language === "ar" ? "ar-QA" : "en-GB",
+                                {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Card Footer: Toggle Switch & Action Buttons */}
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-100 gap-2">
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100 gap-2 flex-wrap">
                         {/* ON/OFF Switch */}
                         <div className="flex items-center gap-2">
                           <button
@@ -1092,7 +1132,7 @@ export default function ProductsPage() {
       {/* Employee PIN Confirmation Modal */}
       {statusTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 box-border overflow-y-auto"
           role="dialog"
           aria-modal="true"
           aria-label="Confirm product status change"
@@ -1101,7 +1141,7 @@ export default function ProductsPage() {
           }}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150"
+            className="w-full max-w-md rounded-2xl bg-white p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150 my-auto"
             dir={isArabic ? "rtl" : "ltr"}
           >
             <div>
@@ -1111,7 +1151,7 @@ export default function ProductsPage() {
                   : message("Turn Product ON", "تشغيل المنتج")}
               </h2>
 
-              <p className="mt-1 text-sm font-bold text-indigo-600">
+              <p className="mt-1 text-sm font-bold text-indigo-600 truncate">
                 {getProductName(statusTarget)}
               </p>
 
