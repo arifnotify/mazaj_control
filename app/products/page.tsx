@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -61,7 +60,7 @@ export default function ProductsPage() {
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const message = (en: string, ar: string) => isArabic ? ar : en;
+  const message = (en: string, ar: string) => (isArabic ? ar : en);
 
   useEffect(() => {
     void loadProducts();
@@ -247,7 +246,6 @@ export default function ProductsPage() {
       return;
     }
 
-    // PIN must remain a string so that 007 is accepted.
     if (!/^\d{3}$/.test(employeePin)) {
       setError(
         message(
@@ -290,8 +288,6 @@ export default function ProductsPage() {
         );
       }
 
-      // IMPORTANT: the API returns { success, message, product }.
-      // Do not merge the outer response into the product.
       const updatedProduct: Product | undefined = data.product;
 
       if (
@@ -374,72 +370,73 @@ export default function ProductsPage() {
 
   return (
     <main
-      className="min-h-screen bg-[#f8fafc] p-4 sm:p-6 lg:p-8"
+      className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans text-slate-900"
       dir={isArabic ? "rtl" : "ltr"}
     >
-      <div className="mx-auto max-w-[1500px]">
-        {/* Header */}
-        <div className="mb-7 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mx-auto max-w-[1500px] space-y-6">
+        
+        {/* Header Section */}
+        <div className="flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-xs border border-slate-200 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <Link
               href="/"
-              className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-900"
+              className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
             >
               <span>{isArabic ? "→" : "←"}</span>
               {t("dashboard")}
             </Link>
 
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
               {t("products")}
             </h1>
 
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-slate-500">
               {message(
-                "Manage your products, inventory and availability.",
-                "إدارة المنتجات والمخزون والتوفر."
+                "Manage your products, inventory levels and live status.",
+                "إدارة المنتجات ومستويات المخزون وحالة التوفر المباشرة."
               )}
             </p>
           </div>
 
           <Link
             href="/products/new"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800 shadow-sm transition-all"
           >
             <span className="text-lg leading-none">+</span>
             {t("addProduct")}
           </Link>
         </div>
 
-        {/* Statistics */}
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {/* Statistics Grid */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
           {[
             {
               label: t("total"),
               value: totalProducts,
               icon: "📦",
-              color: "text-gray-900",
-              bg: "bg-gray-100",
+              color: "text-slate-900",
+              bg: "bg-slate-100",
             },
             {
               label: t("active"),
               value: activeProducts,
               icon: "✓",
-              color: "text-green-600",
-              bg: "bg-green-50",
+              color: "text-emerald-600",
+              bg: "bg-emerald-50",
             },
             {
               label: t("inactive"),
               value: inactiveProducts,
               icon: "⏸",
-              color: "text-red-600",
-              bg: "bg-red-50",
+              color: "text-rose-600",
+              bg: "bg-rose-50",
             },
             {
               label: t("lowStock"),
               value: lowStockProducts,
               icon: "⚠",
-              color: "text-orange-600",
-              bg: "bg-orange-50",
+              color: "text-amber-600",
+              bg: "bg-amber-50",
             },
             {
               label: t("outOfStock"),
@@ -451,19 +448,19 @@ export default function ProductsPage() {
           ].map((item) => (
             <div
               key={item.label}
-              className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+              className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs transition-hover hover:border-slate-300"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">
+                  <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-400">
                     {item.label}
                   </p>
-                  <p className={`mt-2 text-3xl font-bold ${item.color}`}>
+                  <p className={`mt-2 text-2xl sm:text-3xl font-black ${item.color}`}>
                     {item.value}
                   </p>
                 </div>
                 <div
-                  className={`flex h-11 w-11 items-center justify-center rounded-xl text-xl ${item.bg}`}
+                  className={`flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl text-lg sm:text-xl ${item.bg}`}
                 >
                   {item.icon}
                 </div>
@@ -472,29 +469,31 @@ export default function ProductsPage() {
           ))}
         </div>
 
-        {/* General error */}
+        {/* General Error Banner */}
         {error && !statusTarget && (
-          <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-xs">
             <span>{error}</span>
             <button
               type="button"
               onClick={() => void loadProducts()}
-              className="shrink-0 font-semibold underline"
+              className="shrink-0 font-bold underline"
             >
               {message("Retry", "إعادة المحاولة")}
             </button>
           </div>
         )}
 
-        {/* Products */}
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          {/* Search and filters */}
-          <div className="border-b border-gray-200 p-4 sm:p-5">
+        {/* Main Content Card / Filter & Table Section */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+          
+          {/* Search & Filters Header */}
+          <div className="border-b border-slate-200 p-4 sm:p-6 bg-slate-50/50">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-3 lg:flex-row">
+                {/* Search Input */}
                 <div className="relative w-full lg:max-w-md">
                   <span
-                    className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-gray-400 ${
+                    className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-slate-400 ${
                       isArabic ? "right-4" : "left-4"
                     }`}
                   >
@@ -509,17 +508,18 @@ export default function ProductsPage() {
                       "Search SKU, product or category...",
                       "البحث برمز المنتج أو الاسم أو الفئة..."
                     )}
-                    className={`w-full rounded-xl border border-gray-300 bg-gray-50 py-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-100 ${
+                    className={`w-full rounded-xl border border-slate-300 bg-white py-3 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-100 shadow-2xs ${
                       isArabic ? "pr-11 pl-4" : "pl-11 pr-4"
                     }`}
                   />
                 </div>
 
+                {/* Category Dropdown */}
                 <div className="w-full lg:max-w-xs">
                   <select
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 outline-none focus:border-gray-900 focus:bg-white"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-slate-900 shadow-2xs"
                   >
                     <option value="all">
                       {message("All Categories", "كل الفئات")}
@@ -533,7 +533,8 @@ export default function ProductsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              {/* Status Filters & Buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 {(
                   [
                     ["all", message("All", "الكل")],
@@ -545,14 +546,14 @@ export default function ProductsPage() {
                     key={value}
                     type="button"
                     onClick={() => setStatusFilter(value)}
-                    className={`rounded-lg px-4 py-2.5 text-sm font-medium transition ${
+                    className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition shadow-2xs ${
                       statusFilter === value
                         ? value === "active"
-                          ? "bg-green-600 text-white"
+                          ? "bg-emerald-600 text-white"
                           : value === "inactive"
-                            ? "bg-red-600 text-white"
-                            : "bg-gray-900 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            ? "bg-rose-600 text-white"
+                            : "bg-slate-900 text-white"
+                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
                     {label}
@@ -562,7 +563,7 @@ export default function ProductsPage() {
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
                   {message("Clear Filters", "مسح الفلاتر")}
                 </button>
@@ -571,29 +572,30 @@ export default function ProductsPage() {
                   type="button"
                   onClick={() => void loadProducts()}
                   disabled={loading}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition ml-auto"
                 >
                   ↻ {t("refresh")}
                 </button>
               </div>
             </div>
 
+            {/* Results Counter info */}
             {!loading && (
-              <div className="mt-4 flex flex-col gap-1 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-4 flex flex-col gap-1 text-xs sm:text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between border-t border-slate-200/60 pt-3">
                 <div>
                   {message("Showing ", "عرض ")}
-                  <span className="font-semibold text-gray-900">
+                  <span className="font-bold text-slate-900">
                     {filteredProducts.length}
                   </span>
                   {message(" of ", " من ")}
-                  <span className="font-semibold text-gray-900">
+                  <span className="font-bold text-slate-900">
                     {products.length}
                   </span>
                   {message(" products", " منتج")}
                 </div>
 
                 {selectedCategory && (
-                  <div className="font-medium text-gray-700">
+                  <div className="font-semibold text-slate-700">
                     {message("Category: ", "الفئة: ")}
                     {language === "ar"
                       ? selectedCategory.ar
@@ -604,36 +606,37 @@ export default function ProductsPage() {
             )}
           </div>
 
-          {/* Loading state */}
+          {/* Loading Skeleton */}
           {loading ? (
-            <div className="space-y-4 p-12">
+            <div className="space-y-4 p-8 sm:p-12">
               {[1, 2, 3, 4, 5].map((item) => (
                 <div
                   key={item}
                   className="flex animate-pulse items-center gap-4"
                 >
-                  <div className="h-12 w-12 rounded-xl bg-gray-200" />
+                  <div className="h-12 w-12 rounded-xl bg-slate-200" />
                   <div className="flex-1 space-y-2">
-                    <div className="h-4 w-1/3 rounded bg-gray-200" />
-                    <div className="h-3 w-1/4 rounded bg-gray-100" />
+                    <div className="h-4 w-1/3 rounded bg-slate-200" />
+                    <div className="h-3 w-1/4 rounded bg-slate-100" />
                   </div>
-                  <div className="h-8 w-20 rounded bg-gray-200" />
+                  <div className="h-8 w-20 rounded bg-slate-200" />
                 </div>
               ))}
             </div>
           ) : filteredProducts.length === 0 ? (
+            /* Empty State */
             <div className="px-6 py-20 text-center">
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100 text-4xl">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-100 text-4xl">
                 {search || categoryFilter !== "all" ? "🔍" : "📦"}
               </div>
 
-              <h2 className="mt-5 text-xl font-bold text-gray-900">
+              <h2 className="mt-5 text-xl font-bold text-slate-900">
                 {search || categoryFilter !== "all" || statusFilter !== "all"
                   ? message("No products found", "لم يتم العثور على منتجات")
                   : message("No products yet", "لا توجد منتجات بعد")}
               </h2>
 
-              <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
                 {message(
                   "Try changing your search or filters, or add your first product.",
                   "حاول تغيير البحث أو الفلاتر، أو أضف منتجك الأول."
@@ -644,310 +647,441 @@ export default function ProductsPage() {
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="mt-5 rounded-xl border border-gray-300 px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="mt-5 rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
                   {message("Clear Filters", "مسح الفلاتر")}
                 </button>
               ) : (
                 <Link
                   href="/products/new"
-                  className="mt-5 inline-flex rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+                  className="mt-5 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800 transition"
                 >
                   + {t("addProduct")}
                 </Link>
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1150px]">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50/80">
-                    {[
-                      t("name"),
-                      t("sku"),
-                      t("category"),
-                      t("price"),
-                      t("stock"),
-                      t("status"),
-                    ].map((heading) => (
-                      <th
-                        key={heading}
-                        className="px-5 py-4 text-start text-xs font-semibold uppercase tracking-wider text-gray-500"
-                      >
-                        {heading}
+            <>
+              {/* DESKTOP TABLE VIEW (Visible on large screens) */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full min-w-[1150px] text-left">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/80">
+                      {[
+                        t("name"),
+                        t("sku"),
+                        t("category"),
+                        t("price"),
+                        t("stock"),
+                        t("status"),
+                      ].map((heading) => (
+                        <th
+                          key={heading}
+                          className="px-5 py-4 text-start text-xs font-bold uppercase tracking-wider text-slate-500"
+                        >
+                          {heading}
+                        </th>
+                      ))}
+                      <th className="px-5 py-4 text-end text-xs font-bold uppercase tracking-wider text-slate-500">
+                        {message("Actions", "الإجراء")}
                       </th>
-                    ))}
-                    <th className="px-5 py-4 text-end text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      {message("Actions", "الإجراء")}
-                    </th>
-                  </tr>
-                </thead>
+                    </tr>
+                  </thead>
 
-                <tbody className="divide-y divide-gray-100">
-                  {filteredProducts.map((product) => {
-                    const isActionLoading = actionLoading === product._id;
-                    const stockStatus =
-                      product.stock === 0
-                        ? "out"
-                        : product.stock <= 5
-                          ? "low"
-                          : "good";
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredProducts.map((product) => {
+                      const isActionLoading = actionLoading === product._id;
+                      const stockStatus =
+                        product.stock === 0
+                          ? "out"
+                          : product.stock <= 5
+                            ? "low"
+                            : "good";
 
-                    const variantPrices =
-                      product.productType === "multiple" &&
-                      product.variants?.length
-                        ? product.variants
-                        : [];
+                      const variantPrices =
+                        product.productType === "multiple" &&
+                        product.variants?.length
+                          ? product.variants
+                          : [];
 
-                    const highestPrice = variantPrices.length
-                      ? Math.max(
-                          ...variantPrices.map(
-                            (variant) => Number(variant.price) || 0
+                      const highestPrice = variantPrices.length
+                        ? Math.max(
+                            ...variantPrices.map(
+                              (variant) => Number(variant.price) || 0
+                            )
                           )
-                        )
-                      : Number(product.price) || 0;
+                        : Number(product.price) || 0;
 
-                    return (
-                      <tr
-                        key={product._id}
-                        className="group transition hover:bg-gray-50/70"
-                      >
-                        {/* Product image and names */}
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
-                              {product.image ? (
-                                <img
-                                  src={product.image}
-                                  alt={getProductName(product)}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center text-xl text-gray-400">
-                                  📦
-                                </div>
-                              )}
+                      return (
+                        <tr
+                          key={product._id}
+                          className="group transition-colors hover:bg-slate-50/80"
+                        >
+                          {/* Product image & name */}
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-2xs">
+                                {product.image ? (
+                                  <img
+                                    src={product.image}
+                                    alt={getProductName(product)}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-xl text-slate-400">
+                                    📦
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className="truncate font-bold text-slate-900 text-sm">
+                                  {getProductName(product)}
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-slate-400">
+                                  {language === "ar"
+                                    ? product.nameEn || "-"
+                                    : product.nameAr || "-"}
+                                </p>
+                              </div>
                             </div>
+                          </td>
 
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-gray-900">
-                                {getProductName(product)}
+                          {/* SKU */}
+                          <td className="px-5 py-4">
+                            <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-xs font-bold text-slate-600">
+                              {product.sku}
+                            </span>
+                          </td>
+
+                          {/* Category */}
+                          <td className="px-5 py-4">
+                            <div className="max-w-[180px]">
+                              <p className="truncate text-sm font-semibold text-slate-700">
+                                {getProductCategory(product)}
                               </p>
-                              <p className="mt-0.5 truncate text-xs text-gray-400">
+                              <p className="truncate text-xs text-slate-400">
                                 {language === "ar"
-                                  ? product.nameEn || "-"
-                                  : product.nameAr || "-"}
+                                  ? product.categoryEn || "-"
+                                  : product.categoryAr || "-"}
                               </p>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* SKU */}
-                        <td className="px-5 py-4">
-                          <span className="rounded-lg bg-gray-100 px-2.5 py-1 font-mono text-xs font-medium text-gray-600">
-                            {product.sku}
-                          </span>
-                        </td>
+                          {/* Price & Variants */}
+                          <td className="px-5 py-4">
+                            <span className="font-black text-slate-900">
+                              QAR {highestPrice.toFixed(2)}
+                            </span>
 
-                        {/* Category */}
-                        <td className="px-5 py-4">
-                          <div className="max-w-[180px]">
-                            <p className="truncate text-sm font-medium text-gray-700">
-                              {getProductCategory(product)}
-                            </p>
-                            <p className="truncate text-xs text-gray-400">
-                              {language === "ar"
-                                ? product.categoryEn || "-"
-                                : product.categoryAr || "-"}
-                            </p>
-                          </div>
-                        </td>
+                            {variantPrices.length > 0 ? (
+                              <div className="mt-1.5">
+                                <button
+                                  type="button"
+                                  aria-expanded={expandedPrices.includes(product._id)}
+                                  onClick={() =>
+                                    setExpandedPrices((current) =>
+                                      current.includes(product._id)
+                                        ? current.filter((id) => id !== product._id)
+                                        : [...current, product._id]
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                                >
+                                  {expandedPrices.includes(product._id)
+                                    ? message("Hide weight prices ▲", "إخفاء الأسعار ▲")
+                                    : message(
+                                        `View ${variantPrices.length} weight prices ▼`,
+                                        `عرض ${variantPrices.length} أوزان ▼`
+                                      )}
+                                </button>
 
-                        {/* Price and weight variants */}
-                        <td className="px-5 py-4">
-                          <span className="font-semibold text-gray-900">
-                            QAR {highestPrice.toFixed(2)}
-                          </span>
+                                {expandedPrices.includes(product._id) && (
+                                  <div className="mt-2 min-w-[180px] space-y-1 rounded-xl border border-slate-200 bg-white p-2.5 text-xs shadow-md z-10">
+                                    {variantPrices.map((variant, index) => (
+                                      <div
+                                        key={
+                                          variant._id ||
+                                          `${variant.weight}-${variant.unit}-${index}`
+                                        }
+                                        className="flex items-center justify-between gap-4 py-0.5"
+                                      >
+                                        <span className="text-slate-500 font-medium">
+                                          {variant.weight} {variant.unit}
+                                        </span>
+                                        <span className="font-bold text-slate-900">
+                                          QAR {Number(variant.price).toFixed(2)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="mt-0.5 text-xs text-slate-500 font-medium">
+                                {product.singleWeight
+                                  ? `${product.singleWeight}${product.singleUnit || "g"}`
+                                  : message("Single Item", "منتج واحد")}
+                              </p>
+                            )}
+                          </td>
 
-                          {variantPrices.length > 0 ? (
-                            <div className="mt-2">
+                          {/* Stock Status */}
+                          <td className="px-5 py-4">
+                            {stockStatus === "out" ? (
+                              <span className="inline-flex rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-600">
+                                {t("outOfStock")}
+                              </span>
+                            ) : stockStatus === "low" ? (
+                              <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-600">
+                                {product.stock} {message("left", "متبقي")}
+                              </span>
+                            ) : (
+                              <span className="font-bold text-slate-700">
+                                {product.stock}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Active / Inactive Switch */}
+                          <td className="px-5 py-4">
+                            <button
+                              type="button"
+                              onClick={() => void openStatusDialog(product)}
+                              disabled={isActionLoading || actionLoading !== null}
+                              aria-label={
+                                product.active ? "Turn product off" : "Turn product on"
+                              }
+                              className={`relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-200 shadow-2xs ${
+                                product.active ? "bg-emerald-500" : "bg-slate-300"
+                              } ${
+                                isActionLoading || actionLoading !== null
+                                  ? "cursor-wait opacity-50"
+                                  : "cursor-pointer"
+                              }`}
+                            >
+                              <span
+                                className={`absolute h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                                  product.active
+                                    ? isArabic
+                                      ? "-translate-x-8"
+                                      : "translate-x-8"
+                                    : isArabic
+                                      ? "-translate-x-1"
+                                      : "translate-x-1"
+                                }`}
+                              />
+                              <span
+                                className={`absolute text-[9px] font-black ${
+                                  product.active
+                                    ? isArabic
+                                      ? "right-2 text-white"
+                                      : "left-2 text-white"
+                                    : isArabic
+                                      ? "left-2 text-slate-600"
+                                      : "right-2 text-slate-600"
+                                }`}
+                              >
+                                {product.active ? "ON" : "OFF"}
+                              </span>
+                            </button>
+
+                            {product.lastStatusChangedByName && (
+                              <div className="mt-1 max-w-36 text-[11px] leading-4 text-slate-400">
+                                <div>
+                                  {product.active ? "ON" : "OFF"}{" "}
+                                  {message("by", "بواسطة")}{" "}
+                                  <span className="font-semibold text-slate-600">{product.lastStatusChangedByName}</span>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Action Buttons */}
+                          <td className="px-5 py-4 text-end">
+                            <div className="flex items-center justify-end gap-2">
+                              <Link
+                                href={`/products/${product._id}`}
+                                className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:border-slate-900 hover:text-slate-900 transition shadow-2xs"
+                              >
+                                {t("view")}
+                              </Link>
+
+                              <Link
+                                href={`/products/${product._id}/edit`}
+                                className="rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-800 transition shadow-2xs"
+                              >
+                                {t("edit")}
+                              </Link>
+
                               <button
                                 type="button"
-                                aria-expanded={expandedPrices.includes(product._id)}
-                                onClick={() =>
-                                  setExpandedPrices((current) =>
-                                    current.includes(product._id)
-                                      ? current.filter((id) => id !== product._id)
-                                      : [...current, product._id]
-                                  )
-                                }
-                                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                                onClick={() => void deleteProduct(product)}
+                                disabled={actionLoading !== null}
+                                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50 transition shadow-2xs"
                               >
-                                {expandedPrices.includes(product._id)
-                                  ? message("Hide weight prices ▲", "إخفاء الأسعار ▲")
-                                  : message(
-                                      `View ${variantPrices.length} weight prices ▼`,
-                                      `عرض ${variantPrices.length} أوزان ▼`
-                                    )}
+                                {isActionLoading ? "..." : t("delete")}
                               </button>
-
-                              {expandedPrices.includes(product._id) && (
-                                <div className="mt-2 min-w-[180px] space-y-1 rounded-lg border border-gray-200 bg-white p-2 text-xs">
-                                  {variantPrices.map((variant, index) => (
-                                    <div
-                                      key={
-                                        variant._id ||
-                                        `${variant.weight}-${variant.unit}-${index}`
-                                      }
-                                      className="flex items-center justify-between gap-4"
-                                    >
-                                      <span className="text-gray-500">
-                                        {variant.weight} {variant.unit}
-                                      </span>
-                                      <span className="font-medium text-gray-900">
-                                        QAR {Number(variant.price).toFixed(2)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
                             </div>
-                          ) : (
-                            <p className="mt-1 text-xs text-gray-500">
-                              {product.singleWeight
-                                ? `${product.singleWeight}${product.singleUnit || "g"}`
-                                : message("Single Item", "منتج واحد")}
-                            </p>
-                          )}
-                        </td>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-                        {/* Stock */}
-                        <td className="px-5 py-4">
-                          {stockStatus === "out" ? (
-                            <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
-                              {t("outOfStock")}
-                            </span>
-                          ) : stockStatus === "low" ? (
-                            <span className="inline-flex rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-600">
-                              {product.stock} {message("left", "متبقي")}
-                            </span>
-                          ) : (
-                            <span className="font-medium text-gray-700">
-                              {product.stock}
-                            </span>
-                          )}
-                        </td>
+              {/* MOBILE & TABLET CARD VIEW (Visible on smaller screens) */}
+              <div className="block lg:hidden divide-y divide-slate-100 p-4 space-y-3">
+                {filteredProducts.map((product) => {
+                  const isActionLoading = actionLoading === product._id;
+                  const variantPrices =
+                    product.productType === "multiple" &&
+                    product.variants?.length
+                      ? product.variants
+                      : [];
 
-                        {/* ON/OFF toggle */}
-                        <td className="px-5 py-4">
+                  const highestPrice = variantPrices.length
+                    ? Math.max(
+                        ...variantPrices.map(
+                          (variant) => Number(variant.price) || 0
+                        )
+                      )
+                    : Number(product.price) || 0;
+
+                  return (
+                    <div
+                      key={`mobile-${product._id}`}
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3.5"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                          {product.image ? (
+                            <img
+                              src={product.image}
+                              alt={getProductName(product)}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xl text-slate-400">
+                              📦
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-bold text-slate-900 text-sm truncate">
+                              {getProductName(product)}
+                            </h3>
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-600 shrink-0">
+                              {product.sku}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 truncate mt-0.5">
+                            {getProductCategory(product)}
+                          </p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="font-black text-slate-900 text-sm">
+                              QAR {highestPrice.toFixed(2)}
+                            </span>
+                            <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                              product.stock === 0
+                                ? "bg-red-50 text-red-600"
+                                : product.stock <= 5
+                                  ? "bg-amber-50 text-amber-600"
+                                  : "bg-emerald-50 text-emerald-700"
+                            }`}>
+                              {product.stock === 0 ? t("outOfStock") : `${message("Stock:", "المخزون:")} ${product.stock}`}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Footer: Toggle Switch & Action Buttons */}
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100 gap-2">
+                        {/* ON/OFF Switch */}
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => void openStatusDialog(product)}
                             disabled={isActionLoading || actionLoading !== null}
-                            aria-label={
-                              product.active ? "Turn product off" : "Turn product on"
-                            }
-                            className={`relative inline-flex h-7 w-14 items-center rounded-full transition-all duration-200 ${
-                              product.active ? "bg-green-500" : "bg-gray-300"
-                            } ${
-                              isActionLoading || actionLoading !== null
-                                ? "cursor-wait opacity-50"
-                                : "cursor-pointer"
+                            className={`relative inline-flex h-6 w-12 items-center rounded-full transition-all duration-200 ${
+                              product.active ? "bg-emerald-500" : "bg-slate-300"
                             }`}
                           >
                             <span
-                              className={`absolute h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                              className={`absolute h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
                                 product.active
                                   ? isArabic
-                                    ? "-translate-x-8"
-                                    : "translate-x-8"
+                                    ? "-translate-x-7"
+                                    : "translate-x-7"
                                   : isArabic
                                     ? "-translate-x-1"
                                     : "translate-x-1"
                               }`}
                             />
                             <span
-                              className={`absolute text-[9px] font-bold ${
+                              className={`absolute text-[8px] font-black ${
                                 product.active
                                   ? isArabic
-                                    ? "right-2 text-white"
-                                    : "left-2 text-white"
+                                    ? "right-1.5 text-white"
+                                    : "left-1.5 text-white"
                                   : isArabic
-                                    ? "left-2 text-gray-600"
-                                    : "right-2 text-gray-600"
+                                    ? "left-1.5 text-slate-600"
+                                    : "right-1.5 text-slate-600"
                               }`}
                             >
                               {product.active ? "ON" : "OFF"}
                             </span>
                           </button>
+                        </div>
 
-                          {product.lastStatusChangedByName && (
-                            <div className="mt-1 max-w-36 text-[11px] leading-4 text-gray-500">
-                              <div>
-                                {product.active ? "ON" : "OFF"}{" "}
-                                {message("by", "بواسطة")}{" "}
-                                {product.lastStatusChangedByName}
-                              </div>
-                              {product.lastStatusChangedAt && (
-                                <div>
-                                  {new Date(
-                                    product.lastStatusChangedAt
-                                  ).toLocaleString(
-                                    language === "ar" ? "ar" : "en"
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </td>
+                        {/* Buttons */}
+                        <div className="flex items-center gap-1.5">
+                          <Link
+                            href={`/products/${product._id}`}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+                          >
+                            {t("view")}
+                          </Link>
 
-                        {/* Actions */}
-                        <td className="px-5 py-4 text-end">
-                          <div className="flex items-center justify-end gap-2">
-                            <Link
-                              href={`/products/${product._id}`}
-                              className="rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-700 hover:border-gray-900 hover:text-gray-900"
-                            >
-                              {t("view")}
-                            </Link>
+                          <Link
+                            href={`/products/${product._id}/edit`}
+                            className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 transition"
+                          >
+                            {t("edit")}
+                          </Link>
 
-                            <Link
-                              href={`/products/${product._id}/edit`}
-                              className="rounded-lg bg-gray-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-gray-800"
-                            >
-                              {t("edit")}
-                            </Link>
-
-                            <button
-                              type="button"
-                              onClick={() => void deleteProduct(product)}
-                              disabled={actionLoading !== null}
-                              className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-600 hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {isActionLoading ? "..." : t("delete")}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <button
+                            type="button"
+                            onClick={() => void deleteProduct(product)}
+                            disabled={actionLoading !== null}
+                            className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100 transition"
+                          >
+                            {t("delete")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer Summary */}
         {!loading && products.length > 0 && (
-          <div className="mt-4 flex flex-col gap-2 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 text-xs sm:text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between px-2">
             <span>
               {isArabic
                 ? `${filteredProducts.length} منتج معروض`
                 : `${filteredProducts.length} product${filteredProducts.length !== 1 ? "s" : ""} displayed`}
             </span>
             <span>
-              {message("Total: ", "الإجمالي: ")}
-              <span className="font-semibold text-gray-700">
+              {message("Total Database Products: ", "إجمالي المنتجات في القاعدة: ")}
+              <span className="font-bold text-slate-700">
                 {products.length}
               </span>
             </span>
@@ -955,10 +1089,10 @@ export default function ProductsPage() {
         )}
       </div>
 
-      {/* Employee PIN confirmation modal */}
+      {/* Employee PIN Confirmation Modal */}
       {statusTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
           role="dialog"
           aria-modal="true"
           aria-label="Confirm product status change"
@@ -967,111 +1101,119 @@ export default function ProductsPage() {
           }}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl bg-white p-6 sm:p-7 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150"
             dir={isArabic ? "rtl" : "ltr"}
           >
-            <h2 className="text-xl font-bold text-gray-900">
-              {statusTarget.active
-                ? message("Turn Product OFF", "إيقاف المنتج")
-                : message("Turn Product ON", "تشغيل المنتج")}
-            </h2>
+            <div>
+              <h2 className="text-xl font-black text-slate-900">
+                {statusTarget.active
+                  ? message("Turn Product OFF", "إيقاف المنتج")
+                  : message("Turn Product ON", "تشغيل المنتج")}
+              </h2>
 
-            <p className="mt-2 text-sm text-gray-600">
-              {getProductName(statusTarget)}
-            </p>
+              <p className="mt-1 text-sm font-bold text-indigo-600">
+                {getProductName(statusTarget)}
+              </p>
 
-            <p className="mt-1 text-sm text-gray-500">
-              {message(
-                "Select the employee and enter their 3-digit PIN.",
-                "اختر الموظف وأدخل رمز PIN المكون من 3 أرقام."
-              )}
-            </p>
-
-            <label
-              htmlFor="status-employee"
-              className="mt-5 block text-sm font-semibold text-gray-700"
-            >
-              {message("Employee Name *", "اسم الموظف *")}
-            </label>
-
-            <select
-              id="status-employee"
-              value={employeeId}
-              onChange={(e) => {
-                setEmployeeId(e.target.value);
-                setError("");
-              }}
-              disabled={employeeLoading || actionLoading !== null}
-              className="mt-2 w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 disabled:bg-gray-100"
-            >
-              <option value="">
-                {employeeLoading
-                  ? message("Loading employees...", "جارٍ تحميل الموظفين...")
-                  : message("Select Employee", "اختر الموظف")}
-              </option>
-
-              {employees.map((employee) => (
-                <option key={employee._id} value={employee._id}>
-                  {employee.name}
-                </option>
-              ))}
-            </select>
-
-            {employees.length === 0 && !employeeLoading && (
-              <p className="mt-2 text-sm text-red-600">
+              <p className="mt-1 text-xs text-slate-500">
                 {message(
-                  "No active employees found.",
-                  "لم يتم العثور على موظفين نشطين."
+                  "Select the employee and enter their 3-digit security PIN to authorize this change.",
+                  "اختر الموظف وأدخل رمز الأمان المكون من 3 أرقام للموافقة على التغيير."
                 )}
               </p>
-            )}
+            </div>
 
-            <label
-              htmlFor="employee-pin"
-              className="mt-4 block text-sm font-semibold text-gray-700"
-            >
-              {message("Employee PIN (3 digits) *", "رمز PIN للموظف (3 أرقام) *")}
-            </label>
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="status-employee"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5"
+                >
+                  {message("Employee Name *", "اسم الموظف *")}
+                </label>
 
-            <input
-              id="employee-pin"
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={3}
-              pattern="[0-9]{3}"
-              value={employeePin}
-              onChange={(e) => {
-                setEmployeePin(
-                  e.target.value.replace(/\D/g, "").slice(0, 3)
-                );
-                setError("");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  void confirmStatusChange();
-                }
-              }}
-              placeholder={message("Enter 3-digit PIN", "أدخل 3 أرقام")}
-              className="mt-2 w-full rounded-lg border border-gray-300 p-3 tracking-[0.35em] text-gray-900 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-100"
-              disabled={actionLoading !== null}
-            />
+                <select
+                  id="status-employee"
+                  value={employeeId}
+                  onChange={(e) => {
+                    setEmployeeId(e.target.value);
+                    setError("");
+                  }}
+                  disabled={employeeLoading || actionLoading !== null}
+                  className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm font-semibold text-slate-900 outline-none focus:border-slate-900 disabled:bg-slate-100 shadow-2xs"
+                >
+                  <option value="">
+                    {employeeLoading
+                      ? message("Loading employees...", "جارٍ تحميل الموظفين...")
+                      : message("Select Employee", "اختر الموظف")}
+                  </option>
 
-            {error && (
-              <div
-                role="alert"
-                className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-              >
-                {error}
+                  {employees.map((employee) => (
+                    <option key={employee._id} value={employee._id}>
+                      {employee.name}
+                    </option>
+                  ))}
+                </select>
+
+                {employees.length === 0 && !employeeLoading && (
+                  <p className="mt-1.5 text-xs font-medium text-rose-600">
+                    {message(
+                      "No active employees found.",
+                      "لم يتم العثور على موظفين نشطين."
+                    )}
+                  </p>
+                )}
               </div>
-            )}
 
-            <div className="mt-6 flex justify-end gap-3">
+              <div>
+                <label
+                  htmlFor="employee-pin"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5"
+                >
+                  {message("Employee PIN (3 digits) *", "رمز PIN للموظف (3 أرقام) *")}
+                </label>
+
+                <input
+                  id="employee-pin"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={3}
+                  pattern="[0-9]{3}"
+                  value={employeePin}
+                  onChange={(e) => {
+                    setEmployeePin(
+                      e.target.value.replace(/\D/g, "").slice(0, 3)
+                    );
+                    setError("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      void confirmStatusChange();
+                    }
+                  }}
+                  placeholder={message("Enter 3-digit PIN", "أدخل 3 أرقام")}
+                  className="w-full rounded-xl border border-slate-300 p-3 text-center text-lg tracking-[0.4em] font-mono text-slate-900 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-100 shadow-2xs"
+                  disabled={actionLoading !== null}
+                />
+              </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700"
+                >
+                  {error}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
                 disabled={actionLoading !== null}
                 onClick={closeStatusDialog}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
               >
                 {message("Cancel", "إلغاء")}
               </button>
@@ -1085,7 +1227,7 @@ export default function ProductsPage() {
                   actionLoading !== null
                 }
                 onClick={() => void confirmStatusChange()}
-                className="rounded-lg bg-gray-900 px-4 py-2 font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 transition shadow-sm"
               >
                 {actionLoading
                   ? message("Saving...", "جارٍ الحفظ...")
