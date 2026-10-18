@@ -294,12 +294,36 @@ export default function PurchaseCenterPage() {
     setActiveSavedListItems((previous) => previous.filter((item) => item.productId !== productId));
   }
 
+  // UPDATED: Find Products section theke select kora products gulo active list-e add korar robust function
   function addSelectedProductsToSavedList() {
+    if (!activeSavedListId) {
+      setError("Please open a saved shopping list first.");
+      return;
+    }
+    if (printSelected.length === 0) {
+      setError("Please select at least one product from 'Find Products' first.");
+      return;
+    }
+
     setActiveSavedListItems((previous) => {
-      const existing = new Set(previous.map((item) => item.productId));
-      return [...previous, ...printSelected.filter((id) => !existing.has(id)).map((productId) => ({ productId, quantity: "", unit: "kg" }))];
+      const existingMap = new Map(previous.map((item) => [item.productId, item]));
+      
+      printSelected.forEach((productId) => {
+        if (!existingMap.has(productId)) {
+          // Find Products er input fields ba purchaseItems theke quantity & unit nebe, na thakle default "kg" hobe
+          const pItem = purchaseItems[productId];
+          existingMap.set(productId, {
+            productId,
+            quantity: pItem?.quantity ?? "",
+            unit: pItem?.unit ?? "kg"
+          });
+        }
+      });
+
+      return Array.from(existingMap.values());
     });
-    setSuccess("Selected products added to the open list. Save changes to keep them in the database.");
+
+    setSuccess("Selected products added to the open list. Click 'Save Product & Quantity Changes' to store them.");
     setError("");
   }
 
