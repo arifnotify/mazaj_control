@@ -294,36 +294,12 @@ export default function PurchaseCenterPage() {
     setActiveSavedListItems((previous) => previous.filter((item) => item.productId !== productId));
   }
 
-  // UPDATED: Find Products section theke select kora products gulo active list-e add korar robust function
   function addSelectedProductsToSavedList() {
-    if (!activeSavedListId) {
-      setError("Please open a saved shopping list first.");
-      return;
-    }
-    if (printSelected.length === 0) {
-      setError("Please select at least one product from 'Find Products' first.");
-      return;
-    }
-
     setActiveSavedListItems((previous) => {
-      const existingMap = new Map(previous.map((item) => [item.productId, item]));
-      
-      printSelected.forEach((productId) => {
-        if (!existingMap.has(productId)) {
-          // Find Products er input fields ba purchaseItems theke quantity & unit nebe, na thakle default "kg" hobe
-          const pItem = purchaseItems[productId];
-          existingMap.set(productId, {
-            productId,
-            quantity: pItem?.quantity ?? "",
-            unit: pItem?.unit ?? "kg"
-          });
-        }
-      });
-
-      return Array.from(existingMap.values());
+      const existing = new Set(previous.map((item) => item.productId));
+      return [...previous, ...printSelected.filter((id) => !existing.has(id)).map((productId) => ({ productId, quantity: "", unit: "kg" }))];
     });
-
-    setSuccess("Selected products added to the open list. Click 'Save Product & Quantity Changes' to store them.");
+    setSuccess("Selected products added to the open list. Save changes to keep them in the database.");
     setError("");
   }
 
@@ -1125,10 +1101,47 @@ export default function PurchaseCenterPage() {
                   <div className="flex justify-between items-center">
                     <div>
                       <h3 className="font-bold text-indigo-900 text-base">Edit products: {activeList.name}</h3>
-                      <p className="text-xs text-indigo-700">Change the quantity & unit for each product, remove items, then save.</p>
+                      <p className="text-xs text-indigo-700">Change the quantity & unit for each product, remove items, or add new products.</p>
                     </div>
                     <button type="button" className="bg-white hover:bg-slate-100 text-slate-700 px-3 py-1 rounded-xl text-xs font-semibold border border-slate-200" onClick={() => { setActiveSavedListId(null); setActiveSavedListItems([]); }}>Close</button>
                   </div>
+
+                  {/* DIRECT NEW PRODUCT ADD SECTION */}
+                  <div className="p-3 bg-white rounded-xl border border-indigo-100 flex flex-col sm:flex-row gap-2 items-center">
+                    <select 
+                      id="new-product-select" 
+                      className="w-full sm:flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>-- Select a product to add to this list --</option>
+                      {products.map((p) => (
+                        <option key={p._id} value={p._id}>{productName(p)} {p.sku ? `(SKU: ${p.sku})` : ""}</option>
+                      ))}
+                    </select>
+                    <button 
+                      type="button" 
+                      className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm shrink-0"
+                      onClick={() => {
+                        const selectElement = document.getElementById("new-product-select") as HTMLSelectElement;
+                        const selectedProductId = selectElement?.value;
+                        if (!selectedProductId) {
+                          setError("Please select a product from the dropdown first.");
+                          return;
+                        }
+                        setActiveSavedListItems((previous) => {
+                          if (previous.some((item) => item.productId === selectedProductId)) {
+                            setError("This product is already in the list.");
+                            return previous;
+                          }
+                          setError("");
+                          return [...previous, { productId: selectedProductId, quantity: "", unit: "kg" }];
+                        });
+                      }}
+                    >
+                      + Add Product
+                    </button>
+                  </div>
+
                   {activeSavedListItems.length === 0 ? <div className="text-center py-6 text-slate-400 text-sm">No products in this list.</div> : (
                     <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                       {activeSavedListItems.map((item) => {
