@@ -128,7 +128,6 @@ function getCategoryNames(product: Product) {
     "غير مصنف";
 
   return {
-    // Group by normalized English category so the same category stays together.
     key: english.trim().toLocaleLowerCase(),
     en: english,
     ar: arabic,
@@ -221,136 +220,12 @@ export default function PurchaseCenterPage() {
     void loadSavedShoppingLists();
   }, [loadSavedShoppingLists]);
 
-  async function saveShoppingList() {
-    setError(""); setSuccess("");
-    const name = shoppingListName.trim();
-    if (!name) { setError("Please enter a name for this shopping list."); return; }
-    if (printSelected.length === 0) { setError("Select at least one product before saving a shopping list."); return; }
-    setSavingShoppingList(true);
-    try {
-      const response = await fetch("/api/saved-shopping-lists", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, items: printSelected.map((productId) => ({ productId, quantity: Math.max(1, Number(purchaseItems[productId]?.quantity || 1)) })), productIds: printSelected }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || data?.message || "Could not save shopping list.");
-      setShoppingListName("");
-      setSuccess("Shopping list saved to the database.");
-      await loadSavedShoppingLists();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save shopping list.");
-    } finally { setSavingShoppingList(false); }
-  }
-
-  function openShoppingList(list: SavedShoppingList) {
-    const items = Array.isArray(list.items) && list.items.length
-      ? list.items.map((item) => ({ productId: item.productId, quantity: Math.max(1, Number(item.quantity || 1)) }))
-      : (list.productIds || []).map((productId) => ({ productId, quantity: 1 }));
-    setActiveSavedListId(list._id);
-    setActiveSavedListItems(items);
-    setPrintSelected(items.map((item) => item.productId));
-    setSuccess(`Opened shopping list: ${list.name}. Edit quantities below and save changes.`);
-    setError("");
-  }
-
-  function printSavedShoppingList(list: SavedShoppingList) {
-    const items = Array.isArray(list.items) && list.items.length
-      ? list.items.map((item) => ({ productId: item.productId, quantity: Math.max(1, Number(item.quantity || 1)) }))
-      : (list.productIds || []).map((productId) => ({ productId, quantity: 1 }));
-    if (items.length === 0) {
-      setError("This saved shopping list has no products to print.");
-      return;
-    }
-
-    setActiveSavedListId(list._id);
-    setActiveSavedListItems(items);
-    setPrintSelected(items.map((item) => item.productId));
-    setError("");
-    setSuccess("");
-    // Allow React to render this list's products and saved quantities before printing.
-    window.setTimeout(() => window.print(), 150);
-  }
-
-  function updateSavedListQuantity(productId: string, quantity: number) {
-    setActiveSavedListItems((previous) => previous.map((item) => item.productId === productId
-      ? { ...item, quantity: Math.max(1, Number.isFinite(quantity) ? quantity : 1) }
-      : item));
-  }
-
-  function removeSavedListProduct(productId: string) {
-    setActiveSavedListItems((previous) => previous.filter((item) => item.productId !== productId));
-  }
-
-  function addSelectedProductsToSavedList() {
-    setActiveSavedListItems((previous) => {
-      const existing = new Set(previous.map((item) => item.productId));
-      return [...previous, ...printSelected.filter((id) => !existing.has(id)).map((productId) => ({ productId, quantity: 1 }))];
-    });
-    setSuccess("Selected products added to the open list. Save changes to keep them in the database.");
-    setError("");
-  }
-
-  async function saveActiveShoppingList() {
-    if (!activeSavedListId) return;
-    if (activeSavedListItems.length === 0) { setError("A saved shopping list must contain at least one product."); return; }
-    setSavingActiveSavedList(true); setError(""); setSuccess("");
-    try {
-      const response = await fetch("/api/saved-shopping-lists", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listId: activeSavedListId, items: activeSavedListItems }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || data?.message || "Could not save shopping list changes.");
-      setSuccess("Shopping list products and quantities saved to the database.");
-      await loadSavedShoppingLists();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save shopping list changes.");
-    } finally { setSavingActiveSavedList(false); }
-  }
-
-  async function editShoppingList(list: SavedShoppingList) {
-    const nextName = window.prompt("Edit shopping list name:", list.name);
-    if (nextName === null) return;
-    if (!nextName.trim()) { setError("Shopping list name cannot be empty."); return; }
-    setError(""); setSuccess("");
-    try {
-      const response = await fetch("/api/saved-shopping-lists", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listId: list._id, name: nextName.trim() }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || data?.message || "Could not update shopping list.");
-      setSuccess("Shopping list updated.");
-      await loadSavedShoppingLists();
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not update shopping list."); }
-  }
-
-  async function deleteShoppingList(list: SavedShoppingList) {
-    if (!window.confirm(`Delete saved shopping list "${list.name}"?`)) return;
-    setError(""); setSuccess("");
-    try {
-      const response = await fetch("/api/saved-shopping-lists", {
-        method: "DELETE", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listId: list._id }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || data?.message || "Could not delete shopping list.");
-      setSuccess("Shopping list deleted.");
-      await loadSavedShoppingLists();
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not delete shopping list."); }
-  }
-
   useEffect(() => {
     const supplier = suppliers.find((item) => item._id === selectedSupplier);
     const saved = supplier?.supplierProducts || [];
     setCatalogSelected(saved.map((item) => item.productId));
     setCatalogPrices(Object.fromEntries(saved.map((item) => [item.productId, Number(item.unitCost || 0)])));
   }, [selectedSupplier, suppliers]);
-
-  const disabledProducts = useMemo(
-    () => products.filter((product) => product.active === false),
-    [products]
-  );
 
   const categoryOptions = useMemo(() => {
     const categories = new Map<string, { value: string; label: string }>();
@@ -373,7 +248,6 @@ export default function PurchaseCenterPage() {
     let list = products;
 
     if (filter === "catalog") {
-      // Show ONLY products disabled in the dashboard.
       list = list.filter((product) => product.active === false);
     } else if (filter === "stock") {
       list = list.filter(
@@ -441,16 +315,12 @@ export default function PurchaseCenterPage() {
     0
   );
 
-  // Print selection can include ANY product, even if it is active or in stock.
   const selectedPrintProducts = useMemo(
     () => products.filter((product) => printSelected.includes(product._id)),
     [products, printSelected]
   );
 
   const printPages = useMemo(() => {
-    // Group all selected products by category FIRST, then flow the groups
-    // sequentially over A4 pages. This prevents category products being
-    // scattered between unrelated categories. Each page holds at most 12 cards.
     type PrintGroup = { key: string; categoryEn: string; categoryAr: string; products: Product[] };
     type PrintPage = { groups: PrintGroup[]; productCount: number };
 
@@ -471,8 +341,6 @@ export default function PurchaseCenterPage() {
     let currentPage: PrintPage = { groups: [], productCount: 0 };
 
     categoryGroups.forEach((categoryGroup) => {
-      // Keep the category contiguous. If it spans pages, continue it on the
-      // next page before starting another category.
       let remaining = [...categoryGroup.products];
       while (remaining.length > 0) {
         if (currentPage.productCount === 12) {
@@ -500,188 +368,10 @@ export default function PurchaseCenterPage() {
     return pages;
   }, [selectedPrintProducts]);
 
-  function togglePurchaseProduct(product: Product, checked: boolean) {
-    setPurchaseItems((previous) => {
-      const next = { ...previous };
-
-      if (checked) {
-        const selectedSupplierRecord = suppliers.find((item) => item._id === selectedSupplier);
-        const savedSupplierProduct = selectedSupplierRecord?.supplierProducts?.find((item) => item.productId === product._id);
-        next[product._id] = next[product._id] || {
-          quantity: 1,
-          unitCost: savedSupplierProduct ? Number(savedSupplierProduct.unitCost || 0) : Number(product.price || 0),
-        };
-      } else {
-        delete next[product._id];
-      }
-
-      return next;
-    });
-  }
-
-  function updatePurchaseField(
-    productId: string,
-    field: "quantity" | "unitCost",
-    value: number
-  ) {
-    setPurchaseItems((previous) => ({
-      ...previous,
-      [productId]: {
-        quantity: previous[productId]?.quantity ?? 1,
-        unitCost: previous[productId]?.unitCost ?? 0,
-        [field]: Math.max(0, value),
-      },
-    }));
-  }
-
-  function togglePrintProduct(productId: string, checked: boolean) {
-    setPrintSelected((previous) => {
-      if (checked) {
-        return previous.includes(productId)
-          ? previous
-          : [...previous, productId];
-      }
-
-      return previous.filter((id) => id !== productId);
-    });
-  }
-
-  function selectAllVisibleProducts() {
-    // Select all products currently shown by the chosen filter/search.
-    const visibleProductIds = filteredProducts.map((product) => product._id);
-
-    setPrintSelected((previous) =>
-      Array.from(new Set([...previous, ...visibleProductIds]))
-    );
-  }
-
-  // Prefer the quantity from the open saved list when this product belongs to it.
-  // For Find Products printing, use the order quantity when set, or default to 1
-  // so the print page always displays a quantity for every selected product.
   function getPrintQuantity(productId: string): number {
     const savedListItem = activeSavedListItems.find((item) => item.productId === productId);
     if (activeSavedListId && savedListItem) return savedListItem.quantity;
     return purchaseItems[productId]?.quantity ?? 1;
-  }
-
-  function printSelectedProducts() {
-    if (selectedPrintProducts.length === 0) {
-      setError("Please select at least one product to print.");
-      return;
-    }
-
-    setError("");
-    window.print();
-  }
-
-  function toggleCatalogProduct(productId: string, checked: boolean) {
-    setCatalogSelected((previous) => checked
-      ? (previous.includes(productId) ? previous : [...previous, productId])
-      : previous.filter((id) => id !== productId));
-    if (checked && catalogPrices[productId] == null) {
-      const product = products.find((item) => item._id === productId);
-      setCatalogPrices((previous) => ({ ...previous, [productId]: Number(product?.price || 0) }));
-    }
-  }
-
-  async function saveSupplierCatalog() {
-    setError("");
-    setSuccess("");
-    if (!selectedSupplier) {
-      setError("Please select a supplier before saving its product list.");
-      return;
-    }
-    setSavingCatalog(true);
-    try {
-      const response = await fetch("/api/purchase-center", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplierId: selectedSupplier,
-          supplierProducts: catalogSelected.map((productId) => ({
-            productId,
-            unitCost: Number(catalogPrices[productId] || 0),
-          })),
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || data?.error || "Could not save supplier products.");
-      setSuccess("Supplier product list and prices saved successfully.");
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save supplier product list.");
-    } finally {
-      setSavingCatalog(false);
-    }
-  }
-
-  function printSupplierCatalog() {
-    if (!selectedSupplier || catalogSelected.length === 0) {
-      setError("Select a supplier and at least one product in its supplier list to print.");
-      return;
-    }
-    setError("");
-    setSupplierPrintMode(true);
-    window.setTimeout(() => window.print(), 100);
-    window.onafterprint = () => setSupplierPrintMode(false);
-  }
-
-  async function createSupplier() {
-    setError("");
-    setSuccess("");
-    if (!supplierForm.name.trim()) {
-      setError("Please enter the supplier name.");
-      return;
-    }
-    setSavingSupplier(true);
-    try {
-      const response = await fetch("/api/purchase-center", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "createSupplier", ...supplierForm }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || data?.error || "Could not create supplier.");
-      const newId = String(data?.supplier?._id || "");
-      setSuccess("Supplier created successfully. You can now add its products and prices.");
-      setSupplierForm({ name: "", type: "regular", contactPerson: "", phone: "", whatsapp: "", email: "", marketName: "", address: "", notes: "" });
-      setShowCreateSupplier(false);
-      await loadData();
-      if (newId) setSelectedSupplier(newId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create supplier.");
-    } finally {
-      setSavingSupplier(false);
-    }
-  }
-
-  async function deleteSupplier() {
-    const supplier = suppliers.find((item) => item._id === selectedSupplier);
-    if (!supplier) {
-      setError("Please select a supplier to delete.");
-      return;
-    }
-    const confirmed = window.confirm(`Delete supplier "${supplier.name}"? It will be removed from active supplier lists, but past purchase orders will remain.`);
-    if (!confirmed) return;
-    setError("");
-    setSuccess("");
-    try {
-      const response = await fetch("/api/purchase-center", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierId: selectedSupplier }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || data?.error || "Could not delete supplier.");
-      setSelectedSupplier("");
-      setCatalogSelected([]);
-      setCatalogPrices({});
-      setPurchaseItems({});
-      setSuccess("Supplier deleted from active supplier list.");
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete supplier.");
-    }
   }
 
   async function createPurchaseOrder() {
@@ -733,751 +423,305 @@ export default function PurchaseCenterPage() {
     }
   }
 
-  async function updateOrderStatus(
-    orderId: string,
-    status: "ordered" | "received" | "cancelled"
-  ) {
-    setError("");
-    setSuccess("");
-
-    try {
-      const response = await fetch("/api/purchase-center", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, status }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error || "Could not update order status.");
-      }
-
-      setSuccess("Purchase order status updated.");
-      await loadData();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to update order."
-      );
-    }
-  }
-
   return (
-    <div className="purchase-page">
-      {/* PRINT-ONLY BILINGUAL SHOPPING LIST */}
-      {!supplierPrintMode && <section className="print-only" dir="ltr">
-        <style jsx global>{`
-          @media print {
-            @page { size: A4 portrait; margin: 7mm; }
-            .print-only { display: block !important; color: #111 !important; }
-            .screen-only { display: none !important; }
-            .print-page { break-after: page; page-break-after: always; width: 100%; }
-            .print-page:last-child { break-after: auto; page-break-after: auto; }
-            .print-header { margin: 0 0 5mm !important; padding: 0 0 3mm !important; }
-            .print-header h1 { font-size: 16pt !important; margin: 0 0 2mm !important; }
-            .print-header h2 { font-size: 13pt !important; margin: 0 0 2mm !important; }
-            .print-meta { font-size: 8pt !important; margin: 1mm 0 !important; }
-            .print-category { margin: 0 0 2mm !important; break-inside: auto; page-break-inside: auto; }
-            .print-category-heading { margin: 1mm 0 !important; padding: 1mm 2mm !important; }
-            .print-category-heading h2 { font-size: 9pt !important; margin: 0 !important; }
-            .print-category-heading p { font-size: 7pt !important; margin: 0 !important; }
-            .print-product-grid { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 2mm !important; }
-            .print-product { display: flex !important; flex-direction: row !important; gap: 2mm !important; padding: 2mm !important; min-width: 0; break-inside: avoid; page-break-inside: avoid; }
-            .print-product img, .print-no-image { width: 18mm !important; height: 18mm !important; min-width: 18mm !important; object-fit: contain !important; }
-            .print-product-info { min-width: 0; font-size: 7pt !important; line-height: 1.2 !important; }
-            .print-product-info strong { font-size: 7.5pt !important; overflow-wrap: anywhere; }
-            .print-product-info p { margin: 1mm 0 !important; font-size: 6.5pt !important; }
-            .quantity-blank { font-size: 7pt !important; margin: 1mm 0 !important; }
-            .print-checkbox-line { font-size: 7pt !important; }
-            .print-footer { margin-top: 3mm !important; font-size: 8pt !important; }
-          }
-        `}</style>
-        {printPages.map((page, pageIndex) => (
-          <div className="print-page" key={`print-page-${pageIndex}`}>
-            <header className="print-header">
-              <h1>MAZAJ — Purchase Shopping List</h1>
-              <h2 lang="ar" dir="rtl">مجاز — قائمة المشتريات</h2>
-              <div className="print-meta">
-                <span>Date: {new Date().toLocaleDateString("en-GB")}</span>
-                <span lang="ar" dir="rtl">التاريخ: {new Date().toLocaleDateString("ar-QA")}</span>
-              </div>
-              <div className="print-meta">
-                <span>Products: {selectedPrintProducts.length} · Page {pageIndex + 1} of {printPages.length}</span>
-                <span lang="ar" dir="rtl">عدد المنتجات: {selectedPrintProducts.length} · الصفحة {pageIndex + 1} من {printPages.length}</span>
-              </div>
-            </header>
-
-            {page.groups.map((group) => (
-              <section className="print-category" key={`${pageIndex}-${group.categoryEn}`}>
-                <div className="print-category-heading">
-                  <div><h2>{group.categoryEn}</h2><p>Category</p></div>
-                  <div className="print-category-ar" lang="ar" dir="rtl"><h2>{group.categoryAr}</h2><p>الفئة</p></div>
+    <div className="min-h-screen bg-slate-50 text-slate-800 p-3 sm:p-6 font-sans">
+      {/* PRINT-ONLY SECTION */}
+      {!supplierPrintMode && (
+        <section className="print-only hidden print:block" dir="ltr">
+          <style jsx global>{`
+            @media print {
+              @page { size: A4 portrait; margin: 7mm; }
+              .print-only { display: block !important; color: #111 !important; }
+              .screen-only { display: none !important; }
+              .print-page { break-after: page; page-break-after: always; width: 100%; }
+              .print-page:last-child { break-after: auto; page-break-after: auto; }
+            }
+          `}</style>
+          {printPages.map((page, pageIndex) => (
+            <div className="print-page mb-8" key={`print-page-${pageIndex}`}>
+              <header className="border-b-2 border-slate-800 pb-3 mb-4 flex justify-between items-center">
+                <div>
+                  <h1 className="text-xl font-bold">MAZAJ — Purchase Shopping List</h1>
+                  <h2 className="text-lg font-semibold" lang="ar" dir="rtl">مجاز — قائمة المشتريات</h2>
                 </div>
-                <div className="print-product-grid">
-                  {group.products.map((product) => (
-                    <article className="print-product" key={product._id}>
-                      {productImage(product) ? (
-                        <img src={productImage(product)} alt={productName(product)} />
-                      ) : (
-                        <div className="print-no-image"><span>No image</span><span lang="ar" dir="rtl">لا توجد صورة</span></div>
-                      )}
-                      <div className="print-product-info">
-                        <strong className="print-name-en" dir="ltr">{productName(product)}</strong>
-                        <strong className="print-name-ar" dir="rtl" lang="ar">{productNameArabic(product)}</strong>
-                        <p>SKU: {product.sku || "—"}</p>
-                        <p className="print-bilingual-line"><span>Quantity to buy:</span><span lang="ar" dir="rtl">الكمية المطلوبة:</span></p>
-                        <div className="quantity-blank">{getPrintQuantity(product._id) != null ? `${getPrintQuantity(product._id)} ${getPrintQuantity(product._id) === 1 ? "unit" : "units"}` : "__________________"}</div>
-                        <div className="quantity-blank quantity-blank-ar" lang="ar" dir="rtl">{getPrintQuantity(product._id) != null ? `${getPrintQuantity(product._id)} وحدة` : "__________________"}</div>
-                        <p className="print-bilingual-line"><span>Purchased:</span><span lang="ar" dir="rtl">تم الشراء:</span></p>
-                        <p className="print-checkbox-line">□ Yes / نعم　 □ No / لا</p>
-                      </div>
-                    </article>
-                  ))}
+                <div className="text-right text-xs">
+                  <p>Date: {new Date().toLocaleDateString("en-GB")}</p>
+                  <p>Page {pageIndex + 1} of {printPages.length}</p>
                 </div>
-              </section>
-            ))}
-            <footer className="print-footer">
-              <p>Checked by: ______________________________</p>
-              <p lang="ar" dir="rtl">تم التحقق بواسطة: ______________________________</p>
-            </footer>
-          </div>
-        ))}
-      </section>}
+              </header>
 
-      {supplierPrintMode && (() => {
-        const supplier = suppliers.find((item) => item._id === selectedSupplier);
-        const catalogProducts = products.filter((product) => catalogSelected.includes(product._id));
-        return <section className="print-only supplier-catalog-print" dir="ltr">
-          <style jsx global>{`@media print { .supplier-catalog-print { display:block !important; } .supplier-catalog-print table { width:100%; border-collapse:collapse; } .supplier-catalog-print th,.supplier-catalog-print td { border:1px solid #777; padding:6px; text-align:left; font-size:9pt; } .supplier-catalog-print img { width:48px;height:48px;object-fit:contain; } }`}</style>
-          <header className="print-header">
-            <h1>MAZAJ — Supplier Product Price List</h1>
-            <h2 lang="ar" dir="rtl">مجاز — قائمة المنتجات وأسعار المورد</h2>
-            <div className="print-meta">Supplier: {supplier?.name || "—"} · Date: {new Date().toLocaleDateString("en-GB")}</div>
-            {supplier?.phone && <div className="print-meta">Phone: {supplier.phone}</div>}
-            {supplier?.email && <div className="print-meta">Email: {supplier.email}</div>}
-            {supplier?.address && <div className="print-meta">Address: {supplier.address}</div>}
-          </header>
-          <table><thead><tr><th>#</th><th>Image</th><th>SKU</th><th>Product (English)</th><th>اسم المنتج (العربية)</th><th>Supplier Price (QAR)</th></tr></thead>
-            <tbody>{catalogProducts.map((product, index) => <tr key={product._id}><td>{index + 1}</td><td>{productImage(product) ? <img src={productImage(product)} alt={productName(product)} /> : "—"}</td><td>{product.sku || "—"}</td><td>{productName(product)}</td><td dir="rtl">{productNameArabic(product)}</td><td>{money(Number(catalogPrices[product._id] || 0))}</td></tr>)}</tbody>
-          </table>
-          <p className="print-footer">Total products: {catalogProducts.length}</p>
-        </section>;
-      })()}
-
-      {/* NORMAL SCREEN CONTENT */}
-      <div className="screen-only">
-        <style jsx global>{`
-          .collapsible-panel { padding: 0 !important; overflow: hidden; }
-          .collapsible-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; cursor:pointer; list-style:none; padding:18px 20px; }
-          .collapsible-heading::-webkit-details-marker { display:none; }
-          .collapse-hint { white-space:nowrap; font-size:12px; opacity:.7; }
-          .collapsible-panel[open] > .collapsible-heading { border-bottom:1px solid #e5e7eb; margin-bottom:16px; }
-          .collapsible-panel:not([open]) > .collapsible-heading { margin-bottom:0; }
-          @media print { .collapsible-heading { display:none !important; } }
-        `}</style>
-
-        <div className="page-heading">
-          <div>
-            <h1>Purchase Center</h1>
-            <p>
-              Find products to purchase from your regular supplier or a
-              market.
-            </p>
-          </div>
-
-          <div className="action-buttons">
-            <button type="button" className="button button-primary" onClick={() => setShowCreateSupplier((value) => !value)}>
-              {showCreateSupplier ? "Close Supplier Form" : "+ Create Supplier"}
-            </button>
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={() => void loadData()}
-              disabled={loading}
-            >
-              {loading ? "Loading..." : "Refresh"}
-            </button>
-          </div>
-        </div>
-
-        {showCreateSupplier && <section className="panel">
-          <div className="panel-heading"><div><h2>Create New Supplier</h2><p>Enter supplier details. The new supplier will be available in the supplier selector.</p></div></div>
-          <div className="order-form">
-            <label>Supplier name *<input className="text-input" value={supplierForm.name} onChange={(e) => setSupplierForm((p) => ({ ...p, name: e.target.value }))} placeholder="Supplier or company name" /></label>
-            <label>Supplier type<select className="text-input" value={supplierForm.type} onChange={(e) => setSupplierForm((p) => ({ ...p, type: e.target.value as "regular" | "market" }))}><option value="regular">Regular supplier</option><option value="market">Market</option></select></label>
-            <label>Contact person<input className="text-input" value={supplierForm.contactPerson} onChange={(e) => setSupplierForm((p) => ({ ...p, contactPerson: e.target.value }))} placeholder="Contact person" /></label>
-            <label>Phone<input className="text-input" value={supplierForm.phone} onChange={(e) => setSupplierForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone number" /></label>
-            <label>WhatsApp<input className="text-input" value={supplierForm.whatsapp} onChange={(e) => setSupplierForm((p) => ({ ...p, whatsapp: e.target.value }))} placeholder="WhatsApp number" /></label>
-            <label>Email<input className="text-input" type="email" value={supplierForm.email} onChange={(e) => setSupplierForm((p) => ({ ...p, email: e.target.value }))} placeholder="supplier@example.com" /></label>
-            {supplierForm.type === "market" && <label>Market name<input className="text-input" value={supplierForm.marketName} onChange={(e) => setSupplierForm((p) => ({ ...p, marketName: e.target.value }))} placeholder="Market name" /></label>}
-            <label>Address<input className="text-input" value={supplierForm.address} onChange={(e) => setSupplierForm((p) => ({ ...p, address: e.target.value }))} placeholder="Address / location" /></label>
-            <label>Notes<textarea className="text-input notes-input" rows={2} value={supplierForm.notes} onChange={(e) => setSupplierForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" /></label>
-          </div>
-          <div className="action-buttons" style={{ marginTop: 16 }}>
-            <button type="button" className="button button-primary" onClick={() => void createSupplier()} disabled={savingSupplier}>{savingSupplier ? "Saving Supplier..." : "Save Supplier"}</button>
-            <button type="button" className="button button-light" onClick={() => setShowCreateSupplier(false)} disabled={savingSupplier}>Cancel</button>
-          </div>
-        </section>}
-
-        {error && <div className="notice notice-error">{error}</div>}
-        {success && <div className="notice notice-success">{success}</div>}
-
-        <div className="summary-grid">
-          <div className="summary-card">
-            <span>Total products</span>
-            <strong>{products.length}</strong>
-          </div>
-
-          <div className="summary-card">
-            <span>Dashboard-disabled products</span>
-            <strong>{disabledProducts.length}</strong>
-          </div>
-
-          <div className="summary-card">
-            <span>Selected for purchase</span>
-            <strong>{selectedPurchaseItems.length}</strong>
-          </div>
-
-          <div className="summary-card">
-            <span>Estimated total</span>
-            <strong>{money(purchaseTotal)}</strong>
-          </div>
-        </div>
-
-
-        <details className="panel saved-shopping-lists-panel collapsible-panel">
-          <summary className="panel-heading collapsible-heading">
-            <div><h2>Saved Shopping Lists</h2><p>Save product selections in the database and reuse them whenever you need.</p></div>
-            <span className="collapse-hint">Open / Minimize</span>
-          </summary>
-          <div className="order-form">
-            <label>Shopping list name
-              <input className="text-input" value={shoppingListName} onChange={(event) => setShoppingListName(event.target.value)} placeholder="e.g. Weekly Grocery Purchase" />
-            </label>
-            <div className="action-buttons">
-              <button type="button" className="button button-primary" onClick={() => void saveShoppingList()} disabled={savingShoppingList}>
-                {savingShoppingList ? "Saving..." : `Save Selected Products (${printSelected.length})`}
-              </button>
-              <button type="button" className="button button-secondary" onClick={() => void loadSavedShoppingLists()}>Refresh Lists</button>
-            </div>
-          </div>
-          {savedShoppingLists.length === 0 ? (
-            <div className="empty-state">No saved shopping lists yet. Select products below and save your first list.</div>
-          ) : (
-            <div className="orders-list saved-shopping-list-items">
-              {savedShoppingLists.map((list) => {
-                const count = list.items ? list.items.length : (list.productIds || []).length;
-                const updated = list.updatedAt ? new Date(list.updatedAt).toLocaleString() : list.createdAt ? new Date(list.createdAt).toLocaleString() : "Saved list";
-                return (
-                  <article className="order-card saved-shopping-list-card" key={list._id}>
-                    <div className="order-card-top"><div><h3>{list.name}</h3><p>{count} product{count === 1 ? "" : "s"} · Updated {updated}</p></div></div>
-                    <div className="action-buttons">
-                      <button type="button" className="button button-primary" onClick={() => openShoppingList(list)}>Open</button>
-                      <button type="button" className="button button-secondary" onClick={() => printSavedShoppingList(list)}><span aria-hidden="true">🖨 </span>Print</button>
-                      <button type="button" className="button button-secondary" onClick={() => void editShoppingList(list)}>Edit</button>
-                      <button type="button" className="button button-light" onClick={() => void deleteShoppingList(list)}>Delete</button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-          {activeSavedListId && (() => {
-            const activeList = savedShoppingLists.find((list) => list._id === activeSavedListId);
-            if (!activeList) return null;
-            return (
-              <div className="saved-shopping-list-editor">
-                <div className="panel-heading">
-                  <div><h3>Edit products: {activeList.name}</h3><p>Change the quantity for each product, remove items, then save. Each saved list keeps its own quantities.</p></div>
-                  <button type="button" className="button button-light" onClick={() => { setActiveSavedListId(null); setActiveSavedListItems([]); }}>Close</button>
-                </div>
-                {activeSavedListItems.length === 0 ? <div className="empty-state">No products in this list.</div> : (
-                  <div className="product-list">
-                    {activeSavedListItems.map((item) => {
-                      const product = products.find((entry) => entry._id === item.productId);
-                      return (
-                        <article className="product-row saved-list-product-row" key={item.productId}>
-                          <div className="product-image">{product && productImage(product) ? <img src={productImage(product)} alt={productName(product)} /> : <div className="no-image">No image</div>}</div>
-                          <div className="product-details"><strong>{product ? productName(product) : "Product no longer available"}</strong>{product?.sku ? <span>SKU: {product.sku}</span> : null}</div>
-                          <label className="saved-list-quantity">Quantity
-                            <input className="text-input" type="number" min="1" step="1" value={item.quantity} onChange={(event) => updateSavedListQuantity(item.productId, Number(event.target.value))} />
-                          </label>
-                          <button type="button" className="button button-light" onClick={() => removeSavedListProduct(item.productId)}>Remove</button>
-                        </article>
-                      );
-                    })}
+              {page.groups.map((group) => (
+                <div key={`${pageIndex}-${group.categoryEn}`} className="mb-4">
+                  <div className="bg-slate-200 px-3 py-1 flex justify-between font-semibold text-sm mb-2">
+                    <span>{group.categoryEn}</span>
+                    <span lang="ar" dir="rtl">{group.categoryAr}</span>
                   </div>
-                )}
-                <div className="action-buttons">
-                  <button type="button" className="button button-secondary" onClick={addSelectedProductsToSavedList}>Add Selected Products from Find Products</button>
-                  <button type="button" className="button button-primary" onClick={() => void saveActiveShoppingList()} disabled={savingActiveSavedList || activeSavedListItems.length === 0}>{savingActiveSavedList ? "Saving..." : "Save Product & Quantity Changes"}</button>
-                </div>
-              </div>
-            );
-          })()}
-        </details>
-
-        <details className="panel collapsible-panel">
-          <summary className="panel-heading collapsible-heading">
-            <div><h2>Find Products</h2><p>Select products for an order or print a shopping list.</p></div>
-            <span className="collapse-hint">Open / Minimize</span>
-          </summary>
-
-          <div className="filter-row">
-            <input
-              className="text-input search-input"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search product name or SKU..."
-            />
-
-            <select
-              className="text-input filter-select"
-              value={filter}
-              onChange={(event) =>
-                setFilter(event.target.value as FilterType)
-              }
-            >
-              <option value="all">All products</option>
-              <option value="stock">Out of stock</option>
-              <option value="marketplace">
-                Unavailable on marketplace
-              </option>
-              <option value="catalog">
-                Product disabled in dashboard
-              </option>
-            </select>
-
-            <select
-              className="text-input filter-select"
-              value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
-              aria-label="Filter products by category"
-            >
-              <option value="all">All categories</option>
-              {categoryOptions.map((category) => (
-                <option key={category.value} value={category.value}>
-                  {category.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="print-actions">
-              <span>
-                {filteredProducts.length} product(s) shown · {selectedPrintProducts.length} selected for print
-              </span>
-
-              <div className="action-buttons">
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  onClick={selectAllVisibleProducts}
-                >
-                  Select All Visible Products
-                </button>
-
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={printSelectedProducts}
-                >
-                  Print Shopping List ({selectedPrintProducts.length})
-                </button>
-
-                <button
-                  type="button"
-                  className="button button-light"
-                  onClick={() => setPrintSelected([])}
-                >
-                  Clear Selection
-                </button>
-              </div>
-            </div>
-
-          {loading ? (
-            <div className="empty-state">Loading products...</div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="empty-state">
-              No products found for this filter.
-            </div>
-          ) : (
-            <div className="product-list">
-              {filteredProducts.map((product) => {
-                const purchaseSelected = Boolean(
-                  purchaseItems[product._id]
-                );
-                const printChecked = printSelected.includes(product._id);
-
-                return (
-                  <article className="product-row" key={product._id}>
-                    <label
-                      className="selection-checkbox"
-                      title="Select this product for the printed shopping list"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={printChecked}
-                        onChange={(event) =>
-                          togglePrintProduct(product._id, event.target.checked)
-                        }
-                      />
-                    </label>
-
-                    <div className="product-image">
-                      {productImage(product) ? (
-                        <img
-                          src={productImage(product)}
-                          alt={productName(product)}
-                        />
-                      ) : (
-                        <div className="no-image">No image</div>
-                      )}
-                    </div>
-
-                    <div className="product-details">
-                      <h3>{productName(product)}</h3>
-                      <p className="product-name-ar" dir="rtl" lang="ar">
-                        {productNameArabic(product)}
-                      </p>
-                      <p className="product-category" dir="ltr">
-                        {getCategoryNames(product).en}
-                        {getCategoryNames(product).ar ? ` / ${getCategoryNames(product).ar}` : ""}
-                      </p>
-                      <p>SKU: {product.sku || "—"}</p>
-                      <p>Stock: {Number(product.stock ?? 0)}</p>
-
-                      {product.active === false ? (
-                        <span className="status-tag status-disabled">
-                          Disabled in dashboard
-                        </span>
-                      ) : (
-                        <span className="status-tag status-active">
-                          Dashboard active
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="product-price">
-                      <span>Current price</span>
-                      <strong>
-                        {money(Number(product.price || 0))}
-                      </strong>
-                    </div>
-
-                    <div className="purchase-controls">
-                      <label className="purchase-check">
-                        <input
-                          type="checkbox"
-                          checked={purchaseSelected}
-                          onChange={(event) =>
-                            togglePurchaseProduct(
-                              product,
-                              event.target.checked
-                            )
-                          }
-                        />
-                        Add to order
-                      </label>
-
-                      {purchaseSelected && (
-                        <div className="quantity-fields">
-                          <label>
-                            Qty
-                            <input
-                              type="number"
-                              min="1"
-                              value={
-                                purchaseItems[product._id]?.quantity ?? 1
-                              }
-                              onChange={(event) =>
-                                updatePurchaseField(
-                                  product._id,
-                                  "quantity",
-                                  Number(event.target.value)
-                                )
-                              }
-                            />
-                          </label>
-
-                          <label>
-                            Unit cost (QAR)
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={
-                                purchaseItems[product._id]?.unitCost ?? 0
-                              }
-                              onChange={(event) =>
-                                updatePurchaseField(
-                                  product._id,
-                                  "unitCost",
-                                  Number(event.target.value)
-                                )
-                              }
-                            />
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </details>
-
-        <details className="panel collapsible-panel">
-          <summary className="panel-heading collapsible-heading"><div>
-            <h2>Supplier Product List & Prices</h2>
-            <p>Choose a supplier, save the products it sells, and keep its own QAR prices.</p>
-          </div><span className="collapse-hint">Open / Minimize</span></summary>
-          <div className="order-form">
-            <label>Supplier
-              <select className="text-input" value={selectedSupplier} onChange={(event) => setSelectedSupplier(event.target.value)}>
-                <option value="">Select supplier</option>
-                {suppliers.filter((supplier) => supplier.active !== false).map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.marketName ? ` — ${supplier.marketName}` : ""}</option>)}
-              </select>
-            </label>
-            <div className="action-buttons">
-              <button type="button" className="button button-primary" onClick={saveSupplierCatalog} disabled={savingCatalog || !selectedSupplier}>{savingCatalog ? "Saving..." : "Save Supplier Products & Prices"}</button>
-              <button type="button" className="button button-secondary" onClick={printSupplierCatalog} disabled={!selectedSupplier || catalogSelected.length === 0}>Print Supplier Price List</button>
-              <button type="button" className="button button-light" onClick={() => void deleteSupplier()} disabled={!selectedSupplier}>Delete Supplier</button>
-            </div>
-          </div>
-          {!selectedSupplier ? <div className="empty-state">Select a supplier to manage its product list.</div> : <div className="product-list">
-            {products.filter((product) => catalogSelected.includes(product._id) || search.trim() === "" || `${productName(product)} ${productNameArabic(product)} ${product.sku || ""}`.toLowerCase().includes(search.trim().toLowerCase())).map((product) => {
-              const checked = catalogSelected.includes(product._id);
-              return <article className="product-row" key={`supplier-catalog-${product._id}`}>
-                <label className="selection-checkbox"><input type="checkbox" checked={checked} onChange={(event) => toggleCatalogProduct(product._id, event.target.checked)} /></label>
-                <div className="product-image">{productImage(product) ? <img src={productImage(product)} alt={productName(product)} /> : <div className="no-image">No image</div>}</div>
-                <div className="product-details"><h3>{productName(product)}</h3><p className="product-name-ar" dir="rtl" lang="ar">{productNameArabic(product)}</p><p>SKU: {product.sku || "—"}</p></div>
-                <div className="purchase-controls"><label>Supplier price (QAR)<input type="number" min="0" step="0.01" disabled={!checked} value={catalogPrices[product._id] ?? Number(product.price || 0)} onChange={(event) => setCatalogPrices((previous) => ({ ...previous, [product._id]: Math.max(0, Number(event.target.value)) }))} /></label></div>
-              </article>;
-            })}
-          </div>}
-          <p>Products in this supplier list: <strong>{catalogSelected.length}</strong></p>
-        </details>
-
-        <details className="panel collapsible-panel">
-          <summary className="panel-heading collapsible-heading">
-            <div><h2>Create Purchase Order</h2><p>Save the selected products as a purchase order.</p></div>
-            <span className="collapse-hint">Open / Minimize</span>
-          </summary>
-
-          <div className="order-form">
-            <label>
-              Supplier / Market
-              <select
-                className="text-input"
-                value={selectedSupplier}
-                onChange={(event) => {
-                  const nextSupplierId = event.target.value;
-                  setSelectedSupplier(nextSupplierId);
-                  const nextSupplier = suppliers.find((item) => item._id === nextSupplierId);
-                  const savedPrices = new Map((nextSupplier?.supplierProducts || []).map((item) => [item.productId, Number(item.unitCost || 0)]));
-                  setPurchaseItems((previous) => {
-                    const next = { ...previous };
-                    Object.keys(next).forEach((productId) => {
-                      if (savedPrices.has(productId)) next[productId] = { ...next[productId], unitCost: savedPrices.get(productId)! };
-                    });
-                    return next;
-                  });
-                }}
-              >
-                <option value="">Select supplier or market</option>
-                {suppliers
-                  .filter((supplier) => supplier.active !== false)
-                  .map((supplier) => (
-                    <option key={supplier._id} value={supplier._id}>
-                      {supplier.name}
-                      {supplier.type === "market" && supplier.marketName
-                        ? ` — ${supplier.marketName}`
-                        : ""}
-                    </option>
-                  ))}
-              </select>
-            </label>
-
-            <label>
-              Notes
-              <textarea
-                className="text-input notes-input"
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Optional purchase notes..."
-                rows={3}
-              />
-            </label>
-          </div>
-
-          <div className="order-summary">
-            <div>
-              <span>Selected products</span>
-              <strong>{selectedPurchaseItems.length}</strong>
-            </div>
-
-            <div>
-              <span>Total quantity</span>
-              <strong>
-                {selectedPurchaseItems.reduce(
-                  (total, item) => total + item.quantity,
-                  0
-                )}
-              </strong>
-            </div>
-
-            <div>
-              <span>Estimated subtotal</span>
-              <strong>{money(purchaseTotal)}</strong>
-            </div>
-          </div>
-
-          {selectedPurchaseItems.length > 0 && (
-            <div className="selected-items">
-              {selectedPurchaseItems.map((item) => (
-                <div className="selected-item" key={item.productId}>
-                  {item.image ? (
-                    <img src={item.image} alt={item.name} />
-                  ) : (
-                    <div className="selected-no-image">—</div>
-                  )}
-
-                  <div>
-                    <strong>{item.name}</strong>
-                    <span>SKU: {item.sku || "—"}</span>
-                    <span>
-                      Qty: {item.quantity} × {money(item.unitCost)}
-                    </span>
-                  </div>
-
-                  <strong>{money(item.lineTotal)}</strong>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <button
-            type="button"
-            className="button button-primary create-order-button"
-            onClick={createPurchaseOrder}
-            disabled={saving || loading}
-          >
-            {saving ? "Creating order..." : "Create Purchase Order"}
-          </button>
-        </details>
-
-        <details className="panel collapsible-panel">
-          <summary className="panel-heading collapsible-heading">
-            <div><h2>Purchase Order History</h2><p>Previously saved purchase orders.</p></div>
-            <span className="collapse-hint">Open / Minimize</span>
-          </summary>
-
-          {orders.length === 0 ? (
-            <div className="empty-state">No purchase orders yet.</div>
-          ) : (
-            <div className="orders-list">
-              {orders.map((order) => (
-                <article className="order-card" key={order._id}>
-                  <div className="order-card-top">
-                    <div>
-                      <h3>{order.orderNumber || "Purchase Order"}</h3>
-                      <p>{order.supplierName || "Supplier not specified"}</p>
-                      <span className="order-date">
-                        {order.createdAt
-                          ? new Date(order.createdAt).toLocaleString()
-                          : ""}
-                      </span>
-                    </div>
-
-                    <span className="status-tag">
-                      {order.status || "draft"}
-                    </span>
-                  </div>
-
-                  <div className="order-card-items">
-                    {(order.items || []).map((item, index) => (
-                      <div
-                        className="order-history-item"
-                        key={`${order._id}-${item.productId || index}`}
-                      >
-                        {item.image ? (
-                          <img src={item.image} alt={item.name} />
+                  <div className="grid grid-cols-3 gap-2">
+                    {group.products.map((product) => (
+                      <div key={product._id} className="border border-slate-300 p-2 rounded flex gap-2 items-center text-xs">
+                        {productImage(product) ? (
+                          <img src={productImage(product)} alt={productName(product)} className="w-12 h-12 object-contain" />
                         ) : (
-                          <div className="selected-no-image">—</div>
+                          <div className="w-12 h-12 bg-slate-100 flex items-center justify-center text-[10px] text-slate-400">No img</div>
                         )}
-
                         <div>
-                          <strong>{item.name}</strong>
-                          <span>SKU: {item.sku || "—"}</span>
-                          <span>Quantity: {item.quantity}</span>
+                          <p className="font-bold line-clamp-1">{productName(product)}</p>
+                          <p className="line-clamp-1 text-slate-600" lang="ar">{productNameArabic(product)}</p>
+                          <p className="text-[10px] text-slate-500 mt-1">Qty: {getPrintQuantity(product._id)}</p>
                         </div>
-
-                        <strong>
-                          {money(
-                            Number(
-                              item.lineTotal ??
-                                item.quantity * item.unitCost
-                            )
-                          )}
-                        </strong>
                       </div>
                     ))}
                   </div>
-
-                  <div className="order-card-bottom">
-                    <strong>
-                      Total: {money(Number(order.subtotal || 0))}
-                    </strong>
-
-                    <div className="action-buttons">
-                      {order.status !== "ordered" &&
-                        order.status !== "received" &&
-                        order.status !== "cancelled" && (
-                          <button
-                            type="button"
-                            className="button button-secondary"
-                            onClick={() =>
-                              void updateOrderStatus(order._id, "ordered")
-                            }
-                          >
-                            Mark Ordered
-                          </button>
-                        )}
-
-                      {order.status !== "received" &&
-                        order.status !== "cancelled" && (
-                          <button
-                            type="button"
-                            className="button button-primary"
-                            onClick={() =>
-                              void updateOrderStatus(order._id, "received")
-                            }
-                          >
-                            Mark Received
-                          </button>
-                        )}
-
-                      {order.status !== "received" &&
-                        order.status !== "cancelled" && (
-                          <button
-                            type="button"
-                            className="button button-light"
-                            onClick={() =>
-                              void updateOrderStatus(order._id, "cancelled")
-                            }
-                          >
-                            Cancel
-                          </button>
-                        )}
-                    </div>
-                  </div>
-                </article>
+                </div>
               ))}
             </div>
-          )}
-        </details>
+          ))}
+        </section>
+      )}
+
+      {/* SCREEN DASHBOARD UI */}
+      <div className="screen-only max-w-7xl mx-auto space-y-6">
+        {/* Top Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">🛍️ Purchase Center</h1>
+            <p className="text-sm text-slate-500">Manage suppliers, purchase orders, catalog pricing, and inventory shopping lists.</p>
+          </div>
+          {success && <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl text-sm font-medium border border-emerald-200 w-full md:w-auto">{success}</div>}
+          {error && <div className="bg-rose-50 text-rose-700 px-4 py-2 rounded-xl text-sm font-medium border border-rose-200 w-full md:w-auto">{error}</div>}
+        </div>
+
+        {/* Filters and Controls Bar */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Search Products</label>
+            <input
+              type="text"
+              placeholder="Search by name or SKU..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Filter View</label>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as FilterType)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All Products</option>
+              <option value="stock">Out of Stock</option>
+              <option value="marketplace">Marketplace Inactive</option>
+              <option value="catalog">Disabled in Catalog</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Category</label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All Categories</option>
+              {categoryOptions.map((cat) => (
+                <option key={cat.value} value={cat.value}>{cat.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={() => window.print()}
+              disabled={selectedPrintProducts.length === 0}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-medium py-2 px-4 rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+            >
+              <span>🖨️ Print Selected ({selectedPrintProducts.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content Sections: Product Catalog Grid & Purchase Panel */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Products List Area */}
+          <div className="lg:col-span-2 bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+              <h2 className="font-bold text-slate-800 text-base">Product Inventory ({filteredProducts.length})</h2>
+              <button
+                onClick={() => setPrintSelected(filteredProducts.map((p) => p._id))}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+              >
+                Select All Visible
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="text-center py-12 text-slate-400">Loading inventory...</div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">No products found matching your filters.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
+                {filteredProducts.map((product) => {
+                  const isPrinted = printSelected.includes(product._id);
+                  const isPurchasing = !!purchaseItems[product._id];
+
+                  return (
+                    <div
+                      key={product._id}
+                      className={`border rounded-xl p-3 flex flex-col justify-between transition-all ${
+                        isPrinted ? "border-indigo-500 bg-indigo-50/20" : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex gap-3 items-start">
+                        {productImage(product) ? (
+                          <img src={productImage(product)} alt="" className="w-14 h-14 object-contain rounded-lg border border-slate-100 bg-slate-50 shrink-0" />
+                        ) : (
+                          <div className="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center text-[10px] text-slate-400 shrink-0">No image</div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-xs text-slate-900 truncate">{productName(product)}</p>
+                          <p className="text-[11px] text-slate-500 truncate" lang="ar">{productNameArabic(product)}</p>
+                          <p className="text-[10px] font-mono text-slate-400 mt-0.5">SKU: {product.sku || "—"} | Stock: {product.stock ?? 0}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isPrinted}
+                            onChange={(e) => {
+                              setPrintSelected((prev) => e.target.checked ? [...prev, product._id] : prev.filter((id) => id !== product._id));
+                            }}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                          />
+                          <span>Print list</span>
+                        </label>
+
+                        <button
+                          onClick={() => {
+                            const nextVal = !isPurchasing;
+                            if (nextVal) {
+                              setPurchaseItems((prev) => ({ ...prev, [product._id]: { quantity: 1, unitCost: Number(product.price || 0) } }));
+                            } else {
+                              setPurchaseItems((prev) => {
+                                const copy = { ...prev };
+                                delete copy[product._id];
+                                return copy;
+                              });
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                            isPurchasing ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          }`}
+                        >
+                          {isPurchasing ? "Added to PO ✓" : "+ Add to PO"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Active Purchase Order Sidebar */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div>
+              <h2 className="font-bold text-slate-800 text-base mb-4 pb-3 border-b border-slate-100">Draft Purchase Order</h2>
+              
+              <div className="space-y-3 mb-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Select Supplier</label>
+                  <select
+                    value={selectedSupplier}
+                    onChange={(e) => setSelectedSupplier(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Choose Supplier...</option>
+                    {suppliers.map((s) => (
+                      <option key={s._id} value={s._id}>{s.name} {s.marketName ? `(${s.marketName})` : ""}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Notes / Instructions</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Optional order notes..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Selected Items summary */}
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs font-bold text-slate-600 mb-2">Selected Items ({selectedPurchaseItems.length})</p>
+                {selectedPurchaseItems.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No products added to purchase order yet.</p>
+                ) : (
+                  <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                    {selectedPurchaseItems.map((item) => (
+                      <div key={item.productId} className="p-2 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-2 text-xs">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold truncate">{item.name}</p>
+                          <p className="text-[10px] text-slate-500">{money(item.lineTotal)}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              setPurchaseItems((prev) => ({
+                                ...prev,
+                                [item.productId]: { ...prev[item.productId], quantity: val }
+                              }));
+                            }}
+                            className="w-12 px-1 py-1 border border-slate-300 rounded text-center text-xs bg-white"
+                          />
+                          <button
+                            onClick={() => {
+                              setPurchaseItems((prev) => {
+                                const copy = { ...prev };
+                                delete copy[item.productId];
+                                return copy;
+                              });
+                            }}
+                            className="text-rose-500 hover:text-rose-700 px-1 font-bold"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Total and Submit */}
+            <div className="border-t border-slate-100 pt-4 mt-4">
+              <div className="flex justify-between items-center mb-3 text-sm font-bold">
+                <span>Total Amount:</span>
+                <span className="text-indigo-600">{money(purchaseTotal)}</span>
+              </div>
+              <button
+                disabled={saving || selectedPurchaseItems.length === 0 || !selectedSupplier}
+                onClick={createPurchaseOrder}
+                className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-all shadow-sm"
+              >
+                {saving ? "Creating Order..." : "Submit Purchase Order"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
