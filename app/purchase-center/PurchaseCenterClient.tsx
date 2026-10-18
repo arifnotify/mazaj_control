@@ -487,12 +487,13 @@ export default function PurchaseCenterPage() {
     categoryGroups.forEach((categoryGroup) => {
       let remaining = [...categoryGroup.products];
       while (remaining.length > 0) {
-        if (currentPage.productCount === 12) {
+        // প্রতি পেজে ১৫টি আইটেম লিমি트 করা হলো
+        if (currentPage.productCount === 15) {
           pages.push(currentPage);
           currentPage = { groups: [], productCount: 0 };
         }
 
-        const room = 12 - currentPage.productCount;
+        const room = 15 - currentPage.productCount;
         const chunk = remaining.slice(0, room);
         currentPage.groups.push({
           ...categoryGroup,
@@ -808,7 +809,7 @@ export default function PurchaseCenterPage() {
       {!supplierPrintMode && <section className="print-only hidden print:block" dir="ltr">
         <style jsx global>{`
           @media print {
-            @page { size: A4 portrait; margin: 5mm; }
+            @page { size: A4 portrait; margin: 4mm; }
             .print-only { display: block !important; color: #111 !important; }
             .screen-only { display: none !important; }
             .print-page { 
@@ -821,38 +822,38 @@ export default function PurchaseCenterPage() {
               justify-content: space-between; 
             }
             .print-page:last-child { break-after: auto; page-break-after: auto; }
-            .print-header { margin: 0 0 2mm !important; padding: 0 0 2mm !important; border-bottom: 2px solid #111 !important; }
+            .print-header { margin: 0 0 1.5mm !important; padding: 0 0 1.5mm !important; border-bottom: 2px solid #111 !important; }
             .print-header-top { display: flex; justify-content: space-between; align-items: center; }
-            .print-header h1 { font-size: 14pt !important; margin: 0 !important; font-weight: bold; }
-            .print-header h2 { font-size: 11pt !important; margin: 0 !important; font-weight: bold; }
-            .print-meta { font-size: 8pt !important; margin: 1mm 0 0 0 !important; display: flex; justify-content: space-between; }
-            .print-category { margin: 0 0 2mm !important; flex: 1; display: flex; flex-direction: column; }
-            .print-category-heading { margin: 1.5mm 0 !important; padding: 2mm 3mm !important; background: #e2e8f0 !important; display: flex; justify-content: space-between; font-weight: bold; border-radius: 3px; }
-            .print-category-heading h2 { font-size: 10pt !important; margin: 0 !important; }
+            .print-header h1 { font-size: 13pt !important; margin: 0 !important; font-weight: bold; }
+            .print-header h2 { font-size: 10pt !important; margin: 0 !important; font-weight: bold; }
+            .print-meta { font-size: 7.5pt !important; margin: 0.5mm 0 0 0 !important; display: flex; justify-content: space-between; }
+            .print-category { margin: 0 0 1.5mm !important; flex: 1; display: flex; flex-direction: column; }
+            .print-category-heading { margin: 1mm 0 !important; padding: 1.5mm 2.5mm !important; background: #e2e8f0 !important; display: flex; justify-content: space-between; font-weight: bold; border-radius: 3px; }
+            .print-category-heading h2 { font-size: 9pt !important; margin: 0 !important; }
             .print-product-grid { 
               display: grid !important; 
               grid-template-columns: repeat(3, minmax(0, 1fr)) !important; 
               grid-auto-rows: 1fr; 
-              gap: 2.5mm !important; 
+              gap: 2mm !important; 
               flex: 1;
             }
             .print-product { 
               display: flex !important; 
               flex-direction: row !important; 
-              gap: 3mm !important; 
-              padding: 3mm !important; 
-              border: 1.5px solid #475569 !important; 
-              border-radius: 6px !important; 
+              gap: 2mm !important; 
+              padding: 2mm !important; 
+              border: 1.2px solid #475569 !important; 
+              border-radius: 5px !important; 
               align-items: center;
               background: #fff !important; 
               height: 100%;
             }
-            .print-product img, .print-no-image { width: 22mm !important; height: 22mm !important; min-width: 22mm !important; object-fit: contain !important; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; }
-            .print-product-info { min-width: 0; font-size: 8pt !important; line-height: 1.3 !important; width: 100%; }
-            .print-product-info strong { font-size: 9pt !important; overflow-wrap: anywhere; display: block; font-weight: 700; color: #020617; }
-            .print-product-info p { margin: 1mm 0 !important; font-size: 7.5pt !important; color: #334155; }
-            .quantity-blank { font-size: 8.5pt !important; margin: 1mm 0 !important; font-weight: bold; color: #0f172a; background: #f8fafc; padding: 1mm 1.5mm; border-radius: 4px; border: 1px dashed #94a3b8; text-align: center; }
-            .print-footer { margin-top: 2mm !important; font-size: 8pt !important; border-top: 1px solid #64748b; padding-top: 2mm; display: flex; justify-content: space-between; font-weight: 600; }
+            .print-product img, .print-no-image { width: 17mm !important; height: 17mm !important; min-width: 17mm !important; object-fit: contain !important; border: 1px solid #cbd5e1; border-radius: 3px; background: #fff; }
+            .print-product-info { min-width: 0; font-size: 7.5pt !important; line-height: 1.2 !important; width: 100%; }
+            .print-product-info strong { font-size: 8.5pt !important; overflow-wrap: anywhere; display: block; font-weight: 700; color: #020617; }
+            .print-product-info p { margin: 0.5mm 0 !important; font-size: 7pt !important; color: #334155; }
+            .quantity-blank { font-size: 8pt !important; margin: 0.5mm 0 !important; font-weight: bold; color: #0f172a; background: #f8fafc; padding: 0.8mm 1mm; border-radius: 3px; border: 1px dashed #94a3b8; text-align: center; }
+            .print-footer { margin-top: 1.5mm !important; font-size: 7.5pt !important; border-top: 1px solid #64748b; padding-top: 1.5mm; display: flex; justify-content: space-between; font-weight: 600; }
           }
         `}</style>
         {printPages.map((page, pageIndex) => (
@@ -1664,7 +1665,7 @@ export default function PurchaseCenterPage() {
                           order.status !== "cancelled" && (
                             <button
                               type="button"
-                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                               onClick={() =>
                                 void updateOrderStatus(order._id, "cancelled")
                               }
