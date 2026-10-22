@@ -437,7 +437,16 @@ export default function StockReceivingPage() {
       const savedRequest: StoreRequest = data.request;
       setStoreRequests((current) => [savedRequest, ...current].filter((item, index, arr) => arr.findIndex((other) => other._id === item._id) === index));
 
-       const { subject, body } = buildStoreRequestEmail(savedRequest);
+       // Build the email from the exact items selected in the form. Some API
+       // responses return the saved request without its item array populated;
+       // relying only on savedRequest.items can therefore create an empty email.
+       const emailRequest: StoreRequest = {
+         ...savedRequest,
+         date: storeRequestDate,
+         items: storeRequestItems,
+         requestNote: storeRequestNote.trim(),
+       };
+       const { subject, body } = buildStoreRequestEmail(emailRequest);
        // Show a draft preview first. Opening Zoho from a direct click preserves
        // browser user activation for the mailto/app handoff.
        setEmailDraft({ to: "inventory@mazajnuts.com", subject, body });
