@@ -118,6 +118,7 @@ export default function StockReceivingPage() {
   const [storeRequestDate, setStoreRequestDate] = useState(getLocalDateKey());
   const [storeRequestItems, setStoreRequestItems] = useState<StoreRequestItem[]>([]);
   const [storeRequestSaving, setStoreRequestSaving] = useState(false);
+  const [emailDraft, setEmailDraft] = useState<{ to: string; subject: string; body: string } | null>(null);
   const [loadingStoreRequests, setLoadingStoreRequests] = useState(false);
   const [storeHistoryOpen, setStoreHistoryOpen] = useState(false);
   const [expandedRequestIds, setExpandedRequestIds] = useState<string[]>([]);
@@ -418,8 +419,6 @@ export default function StockReceivingPage() {
       return;
     }
 
-    // Open synchronously so the browser does not block the email draft after the API call.
-    const emailWindow = window.open("about:blank", "_blank");
     setStoreRequestSaving(true);
     setError("");
     try {
@@ -439,8 +438,9 @@ export default function StockReceivingPage() {
       setStoreRequests((current) => [savedRequest, ...current].filter((item, index, arr) => arr.findIndex((other) => other._id === item._id) === index));
 
        const { subject, body } = buildStoreRequestEmail(savedRequest);
-       if (emailWindow) emailWindow.close();
-       openZohoEmail("inventory@mazajnuts.com", subject, body);
+       // Show a draft preview first. Opening Zoho from a direct click preserves
+       // browser user activation for the mailto/app handoff.
+       setEmailDraft({ to: "inventory@mazajnuts.com", subject, body });
 
       setStoreRequestItems([]);
       setStoreRequestNote("");
@@ -449,10 +449,9 @@ export default function StockReceivingPage() {
       setMonth(requestMonth);
       await loadStoreRequests(requestMonth);
       window.alert(isArabic
-        ? "تم حفظ الطلب اليومي. تحقق من مسودة البريد واضغط إرسال لإرسال الطلب إلى مسؤول المخزن."
-        : "Daily store request saved. Review the email draft and click Send to email the storekeeper.");
+        ? "تم حفظ الطلب اليومي. راجع معاينة الرسالة، ثم افتح مسودة البريد لإرسال الطلب إلى مسؤول المخزن."
+        : "Daily store request saved. Review the draft preview, then click Open Prefilled Email Draft to open it in your mail app.");
     } catch (err) {
-      if (emailWindow) emailWindow.close();
       console.error(err);
       setError(err instanceof Error ? err.message : "Failed to submit store request");
     } finally {
@@ -2219,6 +2218,40 @@ export default function StockReceivingPage() {
             </div>
           </div>
         </div>
+
+        {emailDraft && (
+          <div className="no-print fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-3 sm:p-6">
+            <section role="dialog" aria-modal="true" aria-labelledby="email-draft-title" className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
+              <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+                <div>
+                  <h2 id="email-draft-title" className="text-lg font-black text-slate-900">{isArabic ? "مسودة البريد جاهزة" : "Email Draft Ready"}</h2>
+                  <p className="mt-1 text-sm text-slate-500">{isArabic ? "راجع الرسالة ثم افتح Zoho Mail لإرسالها بنفسك." : "Review the draft, then open Zoho Mail to send it yourself."}</p>
+                </div>
+                <button type="button" onClick={() => setEmailDraft(null)} aria-label="Close" className="rounded-lg px-3 py-1 text-xl font-bold text-slate-500 hover:bg-slate-100">×</button>
+              </div>
+              <div className="mt-4 space-y-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">To</p>
+                  <p className="mt-1 break-all rounded-lg bg-slate-50 p-3 text-sm text-slate-900">{emailDraft.to}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Subject</p>
+                  <p className="mt-1 break-words rounded-lg bg-slate-50 p-3 text-sm text-slate-900">{emailDraft.subject}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Message</p>
+                  <pre className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 font-sans text-sm text-slate-800">{emailDraft.body}</pre>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setEmailDraft(null)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">{isArabic ? "إغلاق" : "Close"}</button>
+                <button type="button" onClick={() => { window.open("https://mail.zoho.com/", "_blank", "noopener,noreferrer"); }} className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 hover:bg-blue-100">{isArabic ? "فتح موقع Zoho Mail" : "Open Zoho Mail website"}</button>
+                <button type="button" onClick={() => openZohoEmail(emailDraft.to, emailDraft.subject, emailDraft.body)} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700">{isArabic ? "فتح مسودة البريد" : "Open Prefilled Email Draft"}</button>
+              </div>
+              <p className="mt-3 text-xs text-slate-500">{isArabic ? "إذا لم يفتح زر المسودة Zoho، استخدم موقع Zoho Mail وانسخ تفاصيل الرسالة أعلاه. على الكمبيوتر، يجب تفعيل Mail To Handler في Zoho وإذن المتصفح." : "If the prefilled draft button does not open Zoho, use the website button and copy the message details above. On desktop, enable Zoho's Mail-To Handler and allow it in your browser."}</p>
+            </section>
+          </div>
+        )}
       </main>
     </>
   );
