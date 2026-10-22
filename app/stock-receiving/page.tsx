@@ -68,6 +68,25 @@ function getLocalMonth(date = new Date()) {
   return getLocalDateKey(date).slice(0, 7);
 }
 
+
+  // Open a Zoho Mail draft on desktop or the phone's configured mail app on mobile.
+  // Configure Zoho Mail as the browser's default mailto handler on desktop.
+  function openZohoEmail(to: string, subject: string, body: string) {
+    const params = new URLSearchParams({ subject, body });
+    const mailtoUrl = `mailto:${to}?${params.toString()}`;
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // If Zoho Mail is configured to handle mailto links, the app will open.
+      window.location.href = mailtoUrl;
+      return;
+    }
+
+    // On desktop, Zoho Mail's Mail-To Handler opens a prefilled Zoho compose draft.
+    // If the handler is not configured, the browser may use its default mail app.
+    window.location.href = mailtoUrl;
+  }
+
 function getProductFromRecord(
   record: ReceivingRecord
 ): Product | null {
@@ -420,16 +439,8 @@ export default function StockReceivingPage() {
       setStoreRequests((current) => [savedRequest, ...current].filter((item, index, arr) => arr.findIndex((other) => other._id === item._id) === index));
 
        const { subject, body } = buildStoreRequestEmail(savedRequest);
-       const gmailUrl = "https://mail.google.com/mail/?view=cm&fs=1" +
-         `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
-         `&su=${encodeURIComponent(subject)}` +
-         `&body=${encodeURIComponent(body)}`;
-       const mailtoUrl = `mailto:inventory@mazajnuts.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      if (emailWindow) {
-        emailWindow.location.href = gmailUrl;
-      } else {
-        window.location.href = mailtoUrl;
-      }
+       if (emailWindow) emailWindow.close();
+       openZohoEmail("inventory@mazajnuts.com", subject, body);
 
       setStoreRequestItems([]);
       setStoreRequestNote("");
@@ -1068,22 +1079,7 @@ export default function StockReceivingPage() {
     const subject =
       `MAZAJ NUTS ROASTERY - Stock Receiving Report - ${formatDate(printDate)}`;
 
-    const gmailUrl =
-      "https://mail.google.com/mail/?view=cm&fs=1" +
-      `&to=${encodeURIComponent(recipient)}` +
-      `&su=${encodeURIComponent(subject)}` +
-      `&body=${encodeURIComponent(body)}`;
-
-    const mailtoUrl =
-      `mailto:${recipient}?subject=${encodeURIComponent(subject)}` +
-      `&body=${encodeURIComponent(body)}`;
-
-    // Open Gmail compose in a new tab. If pop-ups are blocked, fall back to mailto.
-    const emailWindow = window.open(gmailUrl, "_blank");
-
-    if (!emailWindow) {
-      window.location.href = mailtoUrl;
-    }
+    openZohoEmail(recipient, subject, body);
   }
 
   // Use the dashboard language for both new and historical request emails.
@@ -1123,14 +1119,7 @@ export default function StockReceivingPage() {
 
   function openStoreRequestEmail(request: StoreRequest) {
     const { subject, body } = buildStoreRequestEmail(request);
-    const url = "https://mail.google.com/mail/?view=cm&fs=1" +
-      `&to=${encodeURIComponent("inventory@mazajnuts.com")}` +
-      `&su=${encodeURIComponent(subject)}` +
-      `&body=${encodeURIComponent(body)}`;
-    const emailWindow = window.open(url, "_blank");
-    if (!emailWindow) {
-      window.location.href = `mailto:inventory@mazajnuts.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    }
+    openZohoEmail("inventory@mazajnuts.com", subject, body);
   }
 
   const receivingByDate = useMemo(() => {
