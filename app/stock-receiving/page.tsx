@@ -87,6 +87,27 @@ function getLocalMonth(date = new Date()) {
     window.location.href = mailtoUrl;
   }
 
+  // iOS mailto handlers may open Zoho Mail but omit the body. Web Share lets
+  // the user choose Zoho Mail from the iPhone share sheet and passes the text
+  // as share content; the user still reviews and manually sends the email.
+  async function shareEmailText(to: string, subject: string, body: string) {
+    const shareText = `To: ${to}\nSubject: ${subject}\n\n${body}`;
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: subject, text: shareText });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareText);
+      window.alert("Email details copied. Open Zoho Mail, start a new email, and paste the copied details.");
+    } catch {
+      window.alert("Please copy the To, Subject, and Message from the preview manually, then paste them into Zoho Mail.");
+    }
+  }
+
 function getProductFromRecord(
   record: ReceivingRecord
 ): Product | null {
@@ -2254,6 +2275,7 @@ export default function StockReceivingPage() {
               </div>
               <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button type="button" onClick={() => setEmailDraft(null)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">{isArabic ? "إغلاق" : "Close"}</button>
+                <button type="button" onClick={() => { void shareEmailText(emailDraft.to, emailDraft.subject, emailDraft.body); }} className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 hover:bg-emerald-100">{isArabic ? "مشاركة نص البريد إلى Zoho (iPhone)" : "Share Email Text (iPhone — choose Zoho Mail)"}</button>
                 <button type="button" onClick={() => { window.open("https://mail.zoho.com/", "_blank", "noopener,noreferrer"); }} className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 hover:bg-blue-100">{isArabic ? "فتح موقع Zoho Mail" : "Open Zoho Mail website"}</button>
                 <button type="button" onClick={() => openZohoEmail(emailDraft.to, emailDraft.subject, emailDraft.body)} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700">{isArabic ? "فتح مسودة البريد" : "Open Prefilled Email Draft"}</button>
               </div>
