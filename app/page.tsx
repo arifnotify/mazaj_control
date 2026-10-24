@@ -441,6 +441,15 @@ export default function DashboardPage() {
                     : "View Products"}
                 </a>
 
+                <a
+                  href="/product-performance"
+                  className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3.5 text-center text-xs sm:text-sm font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-xs"
+                >
+                  {isArabic
+                    ? "أداء المنتجات"
+                    : "Product Performance"}
+                </a>
+
               </div>
             </div>
           </>
