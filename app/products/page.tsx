@@ -729,30 +729,22 @@ export default function ProductsPage() {
                     <button
                       key={star}
                       type="button"
-                      onClick={() => setRatingFilter((current) => current === star ? null : star)}
-                      aria-pressed={ratingFilter === star}
+                      onClick={() => setRatingFilter((current) => {
+                        if (current === star) return null;
+                        if (typeof current === "number") {
+                          const low = Math.min(current, star);
+                          const high = Math.max(current, star);
+                          return `range-${low}-${high}` as `range-${number}-${number}`;
+                        }
+                        return star;
+                      })}
+                      aria-pressed={ratingFilter === star || (typeof ratingFilter === "string" && !!ratingFilter.match(/^range-\d-\d$/) && (() => { const m = ratingFilter.match(/^range-(\d)-(\d)$/); return !!m && star >= Number(m[1]) && star <= Number(m[2]); })())}
                       aria-label={message(`Show ${star}-star products`, `عرض المنتجات بتقييم ${star} نجوم`)}
-                      title={message(`${star} star`, `${star} نجوم`)}
-                      className={`rounded-md px-1 text-lg leading-6 transition-colors ${ratingFilter === star ? "bg-amber-100 text-amber-600 ring-1 ring-amber-400" : "text-slate-300 hover:bg-amber-50 hover:text-amber-400"}`}
+                      title={message(`${star} star — click one star to filter, then another to select a range`, `${star} نجوم — اختر نجمة للتصفية ثم نجمة أخرى لتحديد النطاق`)}
+                      className={`rounded-md px-1 text-lg leading-6 transition-all duration-200 ${ratingFilter === star || (typeof ratingFilter === "string" && (() => { const m = ratingFilter.match(/^range-(\d)-(\d)$/); return !!m && star >= Number(m[1]) && star <= Number(m[2]); })()) ? "scale-105 bg-amber-100 text-amber-600 ring-1 ring-amber-400" : "text-slate-300 hover:scale-110 hover:bg-amber-50 hover:text-amber-400"}`}
                     >★</button>
                   ))}
-                  <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />
-                  {([
-                    ["range-1-2", "1–2"],
-                    ["range-1-3", "1–3"],
-                    ["range-2-4", "2–4"],
-                    ["range-1-4", "1–4"],
-                    ["range-1-5", "1–5"],
-                  ] as [`range-${number}-${number}`, string][]).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setRatingFilter((current) => current === value ? null : value)}
-                      aria-pressed={ratingFilter === value}
-                      title={message(`Show products rated ${label} stars`, `عرض المنتجات بتقييم من ${label} نجوم`)}
-                      className={`whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-bold transition-colors ${ratingFilter === value ? "bg-amber-100 text-amber-700 ring-1 ring-amber-400" : "text-slate-500 hover:bg-amber-50 hover:text-amber-700"}`}
-                    >{label}</button>
-                  ))}
+                  <span className="ml-1 hidden text-[10px] text-slate-400 sm:inline">{message("Click 2 stars for a range", "اختر نجمتين لتحديد النطاق")}</span>
                   <button
                     type="button"
                     onClick={() => setRatingFilter((current) => current === "unrated" ? null : "unrated")}
