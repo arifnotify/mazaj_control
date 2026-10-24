@@ -71,6 +71,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [expandedPrices, setExpandedPrices] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+  const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -135,22 +136,11 @@ export default function ProductsPage() {
       }
 
       setPerformanceRecords(records);
-
-      // Normalize IDs because Mongo ObjectIds and API-serialized IDs can differ
-      // in representation/case between endpoints.
-      const normalizeId = (value: unknown) => String(value ?? "").trim().toLowerCase();
-      const ratingByProduct = new Map(
-        records.map((record) => [normalizeId(record.productId), Number(record.rating) || 0] as const)
-      );
-
-      setProducts(list.map((product) => {
-        const id = normalizeId(product._id);
-        const recordRating = ratingByProduct.get(id);
-        return {
-          ...product,
-          rating: recordRating ?? 0,
-        };
-      }));
+      const ratingByProduct = new Map(records.map((record) => [record.productId, record.rating]));
+      setProducts(list.map((product) => ({
+        ...product,
+        rating: ratingByProduct.get(String(product._id)) ?? 0,
+      })));
     } catch (err) {
       console.error("Load products error:", err);
       setError(err instanceof Error ? err.message : "Failed to load products");
@@ -325,10 +315,12 @@ export default function ProductsPage() {
 
       const matchesCategory =
         categoryFilter === "all" || categoryKey === categoryFilter;
+      const matchesRating =
+        ratingFilter === null || Number(product.rating || 0) === ratingFilter;
 
-      return matchesSearch && matchesStatus && matchesCategory;
+      return matchesSearch && matchesStatus && matchesCategory && matchesRating;
     });
-  }, [products, search, statusFilter, categoryFilter]);
+  }, [products, search, statusFilter, categoryFilter, ratingFilter]);
 
   const totalProducts = products.length;
   const activeProducts = products.filter((p) => p.active).length;
@@ -344,6 +336,7 @@ export default function ProductsPage() {
     setSearch("");
     setStatusFilter("all");
     setCategoryFilter("all");
+    setRatingFilter(null);
   }
 
   function closeStatusDialog() {
@@ -721,6 +714,26 @@ export default function ProductsPage() {
                   </button>
                 ))}
 
+                <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1" role="group" aria-label={message("Filter by employer rating", "تصفية حسب تقييم صاحب العمل")}>
+                  <span className="mr-1 text-[11px] font-bold text-slate-500">{message("Stars", "النجوم")}</span>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setRatingFilter((current) => current === star ? null : star)}
+                      aria-pressed={ratingFilter === star}
+                      aria-label={message(`Show ${star}-star products`, `عرض المنتجات بتقييم ${star} نجوم`)}
+                      title={message(`${star} star`, `${star} نجوم`)}
+                      className={`rounded-md px-1 text-lg leading-6 transition-colors ${ratingFilter === star ? "bg-amber-100 text-amber-600 ring-1 ring-amber-400" : "text-slate-300 hover:bg-amber-50 hover:text-amber-400"}`}
+                    >★</button>
+                  ))}
+                  {ratingFilter !== null && (
+                    <button type="button" onClick={() => setRatingFilter(null)} className="ml-1 rounded px-1 text-[10px] font-bold text-slate-500 hover:bg-slate-100">
+                      {message("All ratings", "كل التقييمات")}
+                    </button>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={clearFilters}
@@ -791,7 +804,7 @@ export default function ProductsPage() {
               </div>
 
               <h2 className="mt-5 text-xl font-bold text-slate-900">
-                {search || categoryFilter !== "all" || statusFilter !== "all"
+                {search || categoryFilter !== "all" || statusFilter !== "all" || ratingFilter !== null
                   ? message("No products found", "لم يتم العثور على منتجات")
                   : message("No products yet", "لا توجد منتجات بعد")}
               </h2>
@@ -803,7 +816,7 @@ export default function ProductsPage() {
                 )}
               </p>
 
-              {search || categoryFilter !== "all" || statusFilter !== "all" ? (
+              {search || categoryFilter !== "all" || statusFilter !== "all" || ratingFilter !== null ? (
                 <button
                   type="button"
                   onClick={clearFilters}
