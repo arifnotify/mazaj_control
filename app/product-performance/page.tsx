@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "@/app/components/LanguageProvider";
-import ExcelJS from "exceljs";
 
 type Platform = "Snoonu" | "Talabat" | "Rafeeq" | "Keeta";
 type Product = {
@@ -170,50 +169,73 @@ export default function ProductPerformancePage() {
   }
 
   async function exportExcel() {
-    setError(""); setMessage("");
     try {
-      const workbook = new ExcelJS.Workbook();
-      workbook.creator = "MAZAJ CONTROL";
-      const ws = workbook.addWorksheet(tabLabel(tab, tx).slice(0, 31), { views: [{ state: "frozen", ySplit: 1 }] });
-      ws.columns = [
-        { header: tx("Product (English)", "المنتج (إنجليزي)"), key: "nameEn", width: 28 },
-        { header: tx("Product (Arabic)", "المنتج (عربي)"), key: "nameAr", width: 28 },
-        { header: tx("SKU / Barcode", "رمز المنتج / باركود"), key: "sku", width: 20 },
-        { header: tx("Category", "الفئة"), key: "category", width: 22 },
-        { header: tx("Employer rating (1–5 stars)", "تقييم الموظف (١–٥ نجوم)"), key: "rating", width: 24 },
-        { header: tx("Expiry date", "تاريخ الانتهاء"), key: "expiry", width: 16 },
-        { header: tx("Promotion platforms", "منصات العروض"), key: "platforms", width: 30 },
-        { header: tx("Notes", "ملاحظات"), key: "note", width: 32 },
+      setMessage("");
+      setError("");
+      // Generate an Excel-compatible SpreadsheetML workbook in the browser.
+      // This avoids a runtime dependency on exceljs and works without a package install.
+      const escapeXml = (value: unknown) => String(value ?? "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+      const cell = (value: unknown) =>
+        `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`;
+      const headers = [
+        tx("Product (English)", "المنتج (إنجليزي)"),
+        tx("Product (Arabic)", "المنتج (عربي)"),
+        tx("SKU / Barcode", "رمز المنتج / باركود"),
+        tx("Category", "الفئة"),
+        tx("Employer rating (1–5 stars)", "تقييم الموظف (١–٥ نجوم)"),
+        tx("Expiry date", "تاريخ الانتهاء"),
+        tx("Promotion platforms", "منصات العروض"),
+        tx("Promotion discounts", "خصومات العروض"),
+        tx("Notes", "ملاحظات"),
       ];
-      ws.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
-      ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF14532D" } };
-      for (const p of visible) {
+      const rows = visible.map(p => {
         const m = getMeta(p);
-        ws.addRow({
-          nameEn: p.nameEn || "", nameAr: p.nameAr || "", sku: p.sku || p.barcode || "",
-          category: categoryOf(p, isArabic), rating: m.rating ? `${m.rating}/5 ${stars(m.rating)}` : "",
-          expiry: m.expiryDate || "", platforms: PLATFORMS.filter(k => m.promotions[k]).join(", "), note: m.note || "",
-        });
-      }
-      if (visible.length === 0) {
-        ws.addRow({ nameEn: tx("No products in this list", "لا توجد منتجات في هذه القائمة") });
-      }
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        return [
+          p.nameEn || "",
+          p.nameAr || "",
+          p.sku || p.barcode || "",
+          categoryOf(p, isArabic),
+          m.rating ? `${m.rating}/5 ${stars(m.rating)}` : "",
+          m.expiryDate || "",
+          PLATFORMS.filter(k => m.promotions[k]).join(", "),
+          PLATFORMS.filter(k => m.promotions[k]).map(k => `${k}: ${m.promotionDiscount[k] || 0}%`).join("; "),
+          m.note || "",
+        ];
+      });
+      const xmlRows = [
+        `<Row>${headers.map(cell).join("")}</Row>`,
+        ...rows.map(r => `<Row>${r.map(cell).join("")}</Row>`),
+      ].join("\n");
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Worksheet ss:Name="${escapeXml(tabLabel(tab, tx).slice(0,31))}">
+  <Table>${xmlRows}</Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>`;
+      const blob = new Blob(["\ufeff", xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `product-performance-${tab}-${activePeriod}.xlsx`;
+      a.download = `product-performance-${tab}-${activePeriod}.xls`;
       a.style.display = "none";
       document.body.appendChild(a);
       a.click();
       a.remove();
-      // Do not revoke the object URL immediately; some browsers cancel the download.
       window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-      setMessage(tx("Excel file is being downloaded.", "جارٍ تنزيل ملف Excel."));
+      setMessage(tx("Excel-compatible file downloaded.", "تم تنزيل ملف متوافق مع Excel."));
     } catch (e) {
-      console.error("Excel export failed:", e);
-      setError(tx("Excel export failed. Make sure exceljs is installed (npm install exceljs), then restart the dev server.", "فشل تصدير Excel. تأكد من تثبيت exceljs عبر npm install exceljs ثم أعد تشغيل الخادم."));
+      console.error("Product performance export failed:", e);
+      setError(tx("Excel export failed. Please try again or use Print List.", "فشل تصدير Excel. حاول مرة أخرى أو استخدم طباعة القائمة."));
     }
   }
 
@@ -271,8 +293,6 @@ export default function ProductPerformancePage() {
     }`}</style>
   </main>;
 }
-
-
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(String(reader.result)); reader.onerror=reject; reader.readAsDataURL(blob); });
