@@ -109,7 +109,9 @@ export default function ProductsPage() {
       let records: PerformanceRecord[] = [];
       if (performanceResponse?.ok) {
         const performanceData = await readResponse(performanceResponse);
-        const rawRecords = Array.isArray(performanceData)
+        // /api/product-performance returns { success, data: { [productId]: record } }
+        // while older versions may return an array/items/records.
+        const rawRecords: any[] = Array.isArray(performanceData)
           ? performanceData
           : Array.isArray(performanceData.items)
             ? performanceData.items
@@ -117,7 +119,12 @@ export default function ProductsPage() {
               ? performanceData.records
               : Array.isArray(performanceData.data)
                 ? performanceData.data
-                : [];
+                : performanceData.data && typeof performanceData.data === "object"
+                  ? Object.entries(performanceData.data).map(([productId, record]) => ({
+                      ...(record as Record<string, unknown>),
+                      productId,
+                    }))
+                  : [];
         records = rawRecords
           .filter((item: any) => item && (item.productId || item.product?._id))
           .map((item: any) => ({
@@ -128,11 +135,22 @@ export default function ProductsPage() {
       }
 
       setPerformanceRecords(records);
-      const ratingByProduct = new Map(records.map((record) => [record.productId, record.rating]));
-      setProducts(list.map((product) => ({
-        ...product,
-        rating: ratingByProduct.get(String(product._id)) ?? 0,
-      })));
+
+      // Normalize IDs because Mongo ObjectIds and API-serialized IDs can differ
+      // in representation/case between endpoints.
+      const normalizeId = (value: unknown) => String(value ?? "").trim().toLowerCase();
+      const ratingByProduct = new Map(
+        records.map((record) => [normalizeId(record.productId), Number(record.rating) || 0] as const)
+      );
+
+      setProducts(list.map((product) => {
+        const id = normalizeId(product._id);
+        const recordRating = ratingByProduct.get(id);
+        return {
+          ...product,
+          rating: recordRating ?? 0,
+        };
+      }));
     } catch (err) {
       console.error("Load products error:", err);
       setError(err instanceof Error ? err.message : "Failed to load products");
@@ -174,11 +192,22 @@ export default function ProductsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ items: nextRecords }),
+        // Save only the selected product. The API reports how many valid product IDs it saved.
+        body: JSON.stringify({ items: [nextRecord] }),
       });
       const data = await readResponse(response);
-      if (!response.ok) {
+      if (!response.ok || data.success === false) {
         throw new Error(data.message || data.error || "Failed to save employer rating");
+      }
+      if (Number(data.saved) < 1) {
+        throw new Error("Rating was not saved: product ID was not accepted by the API.");
+      }
+
+      // Confirm the rating is readable from the database before showing a success message.
+      const verifyResponse = await fetch("/api/product-performance", { cache: "no-store" });
+      const verifyData = await readResponse(verifyResponse);
+      if (!verifyResponse.ok || Number(verifyData?.data?.[productId]?.rating) !== rating) {
+        throw new Error("Rating save could not be verified. Please check the product ID and API response.");
       }
 
       setPerformanceRecords(nextRecords);

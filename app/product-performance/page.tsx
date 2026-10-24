@@ -1,1404 +1,286 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useLanguage } from "../components/LanguageProvider";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLanguage } from "@/app/components/LanguageProvider";
+import ExcelJS from "exceljs";
 
-type Unit = "g" | "kg" | "pcs" | "ml" | "L";
-type ProductType = "single" | "multiple";
-type FilterStatus = "all" | "active" | "inactive";
-
-type WeightOption = {
-  _id?: string;
-  weight: number;
-  unit: Unit;
-  price: number;
-};
-
+type Platform = "Snoonu" | "Talabat" | "Rafeeq" | "Keeta";
 type Product = {
-  _id: string;
-  sku: string;
-  nameEn: string;
-  nameAr: string;
-  descriptionEn?: string;
-  descriptionAr?: string;
-  image?: string;
-  categoryEn?: string;
-  categoryAr?: string;
-  price: number;
-  stock: number;
-  rating?: number;
-  active: boolean;
-  lastStatusChangedByName?: string;
-  lastStatusChangedAt?: string;
-  productType?: ProductType;
-  singleWeight?: number | null;
-  singleUnit?: Unit | null;
-  variants?: WeightOption[];
-  createdAt?: string;
+  _id: string; sku?: string; barcode?: string; nameEn?: string; nameAr?: string;
+  categoryEn?: string; categoryAr?: string; category?: string; active?: boolean;
+  image?: string; imageUrl?: string; imageURL?: string; photo?: string;
+  thumbnail?: string; productImage?: string; expiryDate?: string;
+  expirationDate?: string; bestBefore?: string;
 };
-
-type PerformanceRecord = {
-  productId: string;
-  expiryDate?: string;
-  rating: number;
-  note?: string;
-  promotions?: string[];
-  promotionDiscount?: number | string;
-  promotionNote?: string;
-  [key: string]: unknown;
+type ProductMeta = {
+  expiryDate: string; rating: number; note: string;
+  promotions: Record<Platform, boolean>;
+  promotionDiscount: Record<Platform, string>;
+  promotionNote: Record<Platform, string>;
 };
-
-type Employee = {
-  _id: string;
-  name: string;
-  active?: boolean;
+type SavedAnalysis = { _id: string; title: string; periodType: "daily" | "monthly"; period: string; createdAt: string; counts?: Record<string, number> };
+type Tab = "all" | "starred" | "slow" | "steady" | "best" | "expiry" | "promotion";
+const PLATFORMS: Platform[] = ["Snoonu", "Talabat", "Rafeeq", "Keeta"];
+const blankPlatforms = <T,>(value: T): Record<Platform, T> => ({ Snoonu: value, Talabat: value, Rafeeq: value, Keeta: value });
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const blankMeta = (p?: Product): ProductMeta => ({
+  expiryDate: (p?.expiryDate || p?.expirationDate || p?.bestBefore || "").slice(0,10),
+  rating: 0, note: "", promotions: blankPlatforms(false),
+  promotionDiscount: blankPlatforms(""), promotionNote: blankPlatforms(""),
+});
+const imageOf = (p: Product) => p.imageUrl || p.imageURL || p.image || p.productImage || p.photo || p.thumbnail || "";
+const daysUntil = (value: string) => {
+  if (!value) return null;
+  const a = new Date(`${value}T00:00:00`), b = new Date(`${today()}T00:00:00`);
+  return Number.isNaN(a.getTime()) ? null : Math.ceil((a.getTime()-b.getTime())/86400000);
 };
+const categoryOf = (p: Product, arabic: boolean) => arabic
+  ? (p.categoryAr || p.categoryEn || p.category || "")
+  : (p.categoryEn || p.category || p.categoryAr || "");
+const tabLabel = (tab: Tab, tx: (en:string,ar:string)=>string) => ({
+  all: tx("All products","كل المنتجات"), starred: tx("Starred","المميزة"),
+  slow: tx("Low running (1–2★)","ضعيفة الحركة (١–٢★)"),
+  steady: tx("Steady (3★)","متوسطة الحركة (٣★)"),
+  best: tx("Best running (4–5★)","الأفضل حركة (٤–٥★)"),
+  expiry: tx("Near expiry / expired","قريبة / منتهية الصلاحية"),
+  promotion: tx("Promotions","العروض"),
+}[tab]);
+const stars = (rating: number) => "★".repeat(Math.max(0, Math.min(5, rating))) + "☆".repeat(5 - Math.max(0, Math.min(5, rating)));
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("Could not read blob"));
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read blob"));
+    reader.readAsDataURL(blob);
+  });
 
-export default function ProductsPage() {
-  const { language, isArabic, t } = useLanguage();
-
+export default function ProductPerformancePage() {
+  const { isArabic } = useLanguage();
   const [products, setProducts] = useState<Product[]>([]);
-  const [performanceRecords, setPerformanceRecords] = useState<PerformanceRecord[]>([]);
-  const [ratingSavingId, setRatingSavingId] = useState<string | null>(null);
-  const [ratingMessage, setRatingMessage] = useState<{ productId: string; text: string; ok: boolean } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [statusTarget, setStatusTarget] = useState<Product | null>(null);
-  const [employeeId, setEmployeeId] = useState("");
-  const [employeePin, setEmployeePin] = useState("");
-  const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [meta, setMeta] = useState<Record<string, ProductMeta>>({});
+  const [tab, setTab] = useState<Tab>("all");
+  const [platform, setPlatform] = useState<Platform | "All">("All");
+  const [periodType, setPeriodType] = useState<"daily" | "monthly">("daily");
+  const [period, setPeriod] = useState(today());
   const [search, setSearch] = useState("");
-  const [expandedPrices, setExpandedPrices] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [category, setCategory] = useState("All");
+  const [expiryDays, setExpiryDays] = useState("45");
+  const [analyses, setAnalyses] = useState<SavedAnalysis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const message = (en: string, ar: string) => (isArabic ? ar : en);
+  const tx = useCallback((en: string, ar: string) => isArabic ? ar : en, [isArabic]);
+  const activePeriod = periodType === "daily" ? period : period.slice(0,7);
 
   useEffect(() => {
-    void loadProducts();
+    let cancelled = false;
+    (async () => {
+      try {
+        const [pr, mr] = await Promise.all([
+          fetch("/api/products", { cache: "no-store" }),
+          fetch("/api/product-performance", { cache: "no-store" }),
+        ]);
+        const pd = await pr.json(), md = await mr.json();
+        if (!pr.ok) throw new Error(pd?.error || "Could not load products");
+        if (!mr.ok) throw new Error(md?.error || "Could not load product performance");
+        if (cancelled) return;
+        const rows: Product[] = Array.isArray(pd) ? pd : Array.isArray(pd?.products) ? pd.products : Array.isArray(pd?.data) ? pd.data : [];
+        setProducts(rows);
+        const saved = md?.data && typeof md.data === "object" ? md.data : {};
+        const normalized: Record<string, ProductMeta> = {};
+        for (const p of rows) {
+          const old = saved[p._id] || {};
+          normalized[p._id] = {
+            ...blankMeta(p), ...old,
+            rating: Math.max(0, Math.min(5, Number(old.rating ?? (old.starred ? 5 : 0)) || 0)),
+            promotions: { ...blankPlatforms(false), ...(old.promotions || {}) },
+            promotionDiscount: { ...blankPlatforms(""), ...(old.promotionDiscount || {}) },
+            promotionNote: { ...blankPlatforms(""), ...(old.promotionNote || {}) },
+          };
+        }
+        setMeta(normalized);
+        setAnalyses(Array.isArray(md?.analyses) ? md.analyses : []);
+      } catch (e) { if (!cancelled) setError(e instanceof Error ? e.message : "Could not load data"); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  async function readResponse(response: Response) {
-    return response.json().catch(() => ({}));
-  }
-
-  async function loadProducts() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const [response, performanceResponse] = await Promise.all([
-        fetch("/api/products", { cache: "no-store" }),
-        fetch("/api/product-performance", { cache: "no-store" }).catch(() => null),
-      ]);
-
-      const data = await readResponse(response);
-      if (!response.ok) {
-        throw new Error(data.message || data.error || "Failed to load products");
-      }
-
-      const list: Product[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data.products)
-          ? data.products
-          : [];
-
-      let records: PerformanceRecord[] = [];
-      if (performanceResponse?.ok) {
-        const performanceData = await readResponse(performanceResponse);
-        // /api/product-performance returns { success, data: { [productId]: record } }
-        // while older versions may return an array/items/records.
-        const rawRecords: any[] = Array.isArray(performanceData)
-          ? performanceData
-          : Array.isArray(performanceData.items)
-            ? performanceData.items
-            : Array.isArray(performanceData.records)
-              ? performanceData.records
-              : Array.isArray(performanceData.data)
-                ? performanceData.data
-                : performanceData.data && typeof performanceData.data === "object"
-                  ? Object.entries(performanceData.data).map(([productId, record]) => ({
-                      ...(record as Record<string, unknown>),
-                      productId,
-                    }))
-                  : [];
-        records = rawRecords
-          .filter((item: any) => item && (item.productId || item.product?._id))
-          .map((item: any) => ({
-            ...item,
-            productId: String(item.productId || item.product?._id),
-            rating: Math.max(0, Math.min(5, Number(item.rating) || 0)),
-          }));
-      }
-
-      setPerformanceRecords(records);
-      const ratingByProduct = new Map(records.map((record) => [record.productId, record.rating]));
-      setProducts(list.map((product) => ({
-        ...product,
-        rating: ratingByProduct.get(String(product._id)) ?? 0,
-      })));
-    } catch (err) {
-      console.error("Load products error:", err);
-      setError(err instanceof Error ? err.message : "Failed to load products");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function saveEmployerRating(product: Product, rating: number) {
-    if (ratingSavingId) return;
-
-    const productId = String(product._id);
-    const previousRating = Number(product.rating) || 0;
-    const existing = performanceRecords.find((record) => String(record.productId) === productId);
-    const nextRecord: PerformanceRecord = {
-      ...(existing || {}),
-      productId,
-      rating,
-      expiryDate: existing?.expiryDate || "",
-      note: existing?.note || "",
-      promotions: existing?.promotions || [],
-      promotionDiscount: existing?.promotionDiscount ?? 0,
-      promotionNote: existing?.promotionNote || "",
-    };
-    const nextRecords = existing
-      ? performanceRecords.map((record) =>
-          String(record.productId) === productId ? nextRecord : record
-        )
-      : [...performanceRecords, nextRecord];
-
-    setRatingSavingId(productId);
-    setRatingMessage(null);
-    setProducts((current) =>
-      current.map((item) => item._id === productId ? { ...item, rating } : item)
-    );
-
-    try {
-      const response = await fetch("/api/product-performance", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        // Save only the selected product. The API reports how many valid product IDs it saved.
-        body: JSON.stringify({ items: [nextRecord] }),
-      });
-      const data = await readResponse(response);
-      if (!response.ok || data.success === false) {
-        throw new Error(data.message || data.error || "Failed to save employer rating");
-      }
-      if (Number(data.saved) < 1) {
-        throw new Error("Rating was not saved: product ID was not accepted by the API.");
-      }
-
-      // Confirm the rating is readable from the database before showing a success message.
-      const verifyResponse = await fetch("/api/product-performance", { cache: "no-store" });
-      const verifyData = await readResponse(verifyResponse);
-      if (!verifyResponse.ok || Number(verifyData?.data?.[productId]?.rating) !== rating) {
-        throw new Error("Rating save could not be verified. Please check the product ID and API response.");
-      }
-
-      setPerformanceRecords(nextRecords);
-      setRatingMessage({
-        productId,
-        text: message("Rating saved", "تم حفظ التقييم"),
-        ok: true,
-      });
-    } catch (err) {
-      console.error("Save employer rating error:", err);
-      setProducts((current) =>
-        current.map((item) => item._id === productId ? { ...item, rating: previousRating } : item)
-      );
-      setRatingMessage({
-        productId,
-        text: err instanceof Error ? err.message : message("Could not save rating", "تعذر حفظ التقييم"),
-        ok: false,
-      });
-    } finally {
-      setRatingSavingId(null);
-    }
-  }
-
-  function EmployerRating({ product }: { product: Product }) {
-    const rating = Number(product.rating) || 0;
-    const isSaving = ratingSavingId === product._id;
-    return (
-      <div className="min-w-[118px]">
-        <div className="flex items-center gap-0.5" role="group" aria-label={message("Employer rating", "تقييم صاحب العمل")}>
-          {[1, 2, 3, 4, 5].map((star) => (
-            <button
-              key={star}
-              type="button"
-              onClick={() => void saveEmployerRating(product, star)}
-              disabled={ratingSavingId !== null}
-              aria-label={message(`Rate ${star} out of 5 stars`, `التقييم ${star} من 5`)}
-              aria-pressed={rating === star}
-              title={`${star}/5`}
-              className={`rounded px-0.5 text-xl leading-6 transition-colors disabled:cursor-wait disabled:opacity-50 ${
-                star <= rating ? "text-amber-400" : "text-slate-300 hover:text-amber-300"
-              }`}
-            >
-              ★
-            </button>
-          ))}
-          <span className="ml-1 text-[11px] font-bold text-slate-600">{rating ? `${rating}/5` : "—"}</span>
-        </div>
-        {isSaving && <p className="mt-0.5 text-[10px] text-slate-500">{message("Saving…", "جارٍ الحفظ…")}</p>}
-        {ratingMessage?.productId === product._id && !isSaving && (
-          <p className={`mt-0.5 max-w-[150px] break-words text-[10px] ${ratingMessage.ok ? "text-emerald-600" : "text-rose-600"}`}>
-            {ratingMessage.text}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  function getProductName(product: Product) {
-    return language === "ar"
-      ? product.nameAr || product.nameEn || "-"
-      : product.nameEn || product.nameAr || "-";
-  }
-
-  function getProductCategory(product: Product) {
-    return language === "ar"
-      ? product.categoryAr || product.categoryEn || "بدون فئة"
-      : product.categoryEn || product.categoryAr || "No Category";
-  }
+  const getMeta = (p: Product) => meta[p._id] || blankMeta(p);
+  const updateMeta = (p: Product, patch: Partial<ProductMeta>) =>
+    setMeta(cur => ({ ...cur, [p._id]: { ...blankMeta(p), ...cur[p._id], ...patch } }));
+  const expiryStatus = (p: Product) => {
+    const days = daysUntil(getMeta(p).expiryDate);
+    return { days, near: days !== null && days >= 0 && days <= Number(expiryDays || 0), expired: days !== null && days < 0 };
+  };
 
   const categories = useMemo(() => {
-    const map = new Map<string, { en: string; ar: string }>();
+    const vals = products.map(p => categoryOf(p, isArabic).trim()).filter(Boolean);
+    return [...new Set(vals)].sort((a,b)=>a.localeCompare(b));
+  }, [products, isArabic]);
 
-    products.forEach((product) => {
-      const en = product.categoryEn?.trim() || "";
-      const ar = product.categoryAr?.trim() || "";
-
-      if (!en && !ar) return;
-
-      const key = `${en.toLowerCase()}|${ar.toLowerCase()}`;
-
-      if (!map.has(key)) {
-        map.set(key, { en: en || ar, ar: ar || en });
-      }
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return products.filter(p => {
+      if (p.active === false) return false;
+      const m = meta[p._id] || blankMeta(p), rating = Number(m.rating || 0), ex = expiryStatus(p);
+      const name = `${p.nameEn || ""} ${p.nameAr || ""} ${p.sku || ""} ${p.barcode || ""}`.toLowerCase();
+      if (q && !name.includes(q)) return false;
+      if (category !== "All" && categoryOf(p, isArabic).trim() !== category) return false;
+      if (tab === "starred") return rating > 0;
+      if (tab === "slow") return rating >= 1 && rating <= 2;
+      if (tab === "steady") return rating === 3;
+      if (tab === "best") return rating >= 4 && rating <= 5;
+      if (tab === "expiry") return ex.near || ex.expired;
+      if (tab === "promotion") return platform === "All" ? PLATFORMS.some(k => m.promotions[k]) : m.promotions[platform];
+      return true;
+    }).sort((a,b) => {
+      if (tab === "slow") return (meta[a._id]?.rating || 0) - (meta[b._id]?.rating || 0);
+      if (tab === "best") return (meta[b._id]?.rating || 0) - (meta[a._id]?.rating || 0);
+      if (tab === "expiry") return (daysUntil(meta[a._id]?.expiryDate || "") ?? 99999) - (daysUntil(meta[b._id]?.expiryDate || "") ?? 99999);
+      return (a.nameEn || a.nameAr || "").localeCompare(b.nameEn || b.nameAr || "");
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, meta, tab, platform, search, category, isArabic, expiryDays]);
 
-    return Array.from(map.entries())
-      .map(([key, value]) => ({ key, ...value }))
-      .sort((a, b) =>
-        (language === "ar" ? a.ar : a.en).localeCompare(
-          language === "ar" ? b.ar : b.en
-        )
-      );
-  }, [products, language]);
-
-  const filteredProducts = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return products.filter((product) => {
-      const matchesSearch =
-        !query ||
-        product.sku?.toLowerCase().includes(query) ||
-        product.nameEn?.toLowerCase().includes(query) ||
-        product.nameAr?.toLowerCase().includes(query) ||
-        product.categoryEn?.toLowerCase().includes(query) ||
-        product.categoryAr?.toLowerCase().includes(query);
-
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active" && product.active) ||
-        (statusFilter === "inactive" && !product.active);
-
-      const categoryKey =
-        `${(product.categoryEn || "").toLowerCase()}|` +
-        `${(product.categoryAr || "").toLowerCase()}`;
-
-      const matchesCategory =
-        categoryFilter === "all" || categoryKey === categoryFilter;
-
-      return matchesSearch && matchesStatus && matchesCategory;
-    });
-  }, [products, search, statusFilter, categoryFilter]);
-
-  const totalProducts = products.length;
-  const activeProducts = products.filter((p) => p.active).length;
-  const inactiveProducts = products.filter((p) => !p.active).length;
-  const lowStockProducts = products.filter(
-    (p) => p.stock > 0 && p.stock <= 5
-  ).length;
-  const outOfStockProducts = products.filter(
-    (p) => p.stock === 0
-  ).length;
-
-  function clearFilters() {
-    setSearch("");
-    setStatusFilter("all");
-    setCategoryFilter("all");
+  async function saveAll() {
+    setSaving(true); setMessage(""); setError("");
+    try {
+      const items = Object.entries(meta).map(([productId, m]) => ({ productId, ...m }));
+      const response = await fetch("/api/product-performance", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({items}) });
+      const result = await response.json(); if (!response.ok) throw new Error(result?.error || "Save failed");
+      setMessage(tx("All changes saved to MongoDB.","تم حفظ جميع التغييرات في قاعدة البيانات."));
+    } catch(e) { setError(e instanceof Error ? e.message : "Save failed"); }
+    finally { setSaving(false); }
   }
 
-  function closeStatusDialog() {
-    if (actionLoading) return;
+  async function saveAnalysis() {
+    setSaving(true); setMessage(""); setError("");
+    try {
+      const active = products.filter(p => p.active !== false);
+      const counts = {
+        all: active.length,
+        starred: active.filter(p => (meta[p._id]?.rating || 0) > 0).length,
+        slow: active.filter(p => [1,2].includes(meta[p._id]?.rating || 0)).length,
+        steady: active.filter(p => (meta[p._id]?.rating || 0) === 3).length,
+        best: active.filter(p => (meta[p._id]?.rating || 0) >= 4).length,
+        expiry: active.filter(p => { const d = daysUntil(meta[p._id]?.expiryDate || ""); return d !== null && d <= Number(expiryDays || 0); }).length,
+        promotion: active.filter(p => PLATFORMS.some(k => meta[p._id]?.promotions?.[k])).length,
+      };
+      const response = await fetch("/api/product-performance", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action:"save-analysis", title:`${periodType === "daily" ? tx("Daily","يومي") : tx("Monthly","شهري")} ${activePeriod}`, periodType, period:activePeriod, counts}) });
+      const result = await response.json(); if (!response.ok) throw new Error(result?.error || "Could not save analysis");
+      setAnalyses(current => [result.analysis, ...current]);
+      setMessage(tx("Analysis snapshot saved.","تم حفظ نسخة التحليل."));
+    } catch(e) { setError(e instanceof Error ? e.message : "Could not save analysis"); }
+    finally { setSaving(false); }
+  }
 
-    setStatusTarget(null);
-    setEmployeeId("");
-    setEmployeePin("");
-    setEmployees([]);
+  async function exportExcel() {
     setError("");
-  }
-
-  async function openStatusDialog(product: Product) {
-    setStatusTarget(product);
-    setEmployeeId("");
-    setEmployeePin("");
-    setEmployees([]);
-    setEmployeeLoading(true);
-    setError("");
-
+    setMessage("");
     try {
-      const response = await fetch("/api/employees", {
-        cache: "no-store",
+    const workbook = new ExcelJS.Workbook(); workbook.creator = "MAZAJ CONTROL";
+    const worksheetName = tabLabel(tab, tx).replace(/[\\/*?:\[\]]/g, "-").slice(0,31).replace(/^\'+|\'+$/g, "") || "Products";
+    const ws = workbook.addWorksheet(worksheetName, { views:[{state:"frozen",ySplit:1}] });
+    ws.columns = [
+      {header:tx("Image","الصورة"),key:"image",width:14},
+      {header:tx("Product (English)","المنتج (إنجليزي)"),key:"nameEn",width:28},
+      {header:tx("Product (Arabic)","المنتج (عربي)"),key:"nameAr",width:28},
+      {header:tx("SKU / Barcode","رمز المنتج / باركود"),key:"sku",width:20},
+      {header:tx("Category","الفئة"),key:"category",width:22},
+      {header:tx("Employer rating (1–5 stars)","تقييم الموظف (١–٥ نجوم)"),key:"rating",width:22},
+      {header:tx("Expiry date","تاريخ الانتهاء"),key:"expiry",width:16},
+      {header:tx("Promotion platforms","منصات العروض"),key:"platforms",width:30},
+      {header:tx("Notes","ملاحظات"),key:"note",width:32},
+    ];
+    ws.getRow(1).font = {bold:true,color:{argb:"FFFFFFFF"}};
+    ws.getRow(1).fill = {type:"pattern",pattern:"solid",fgColor:{argb:"FF14532D"}};
+    for (const p of visible) {
+      const m = getMeta(p), row = ws.addRow({
+        nameEn:p.nameEn || "", nameAr:p.nameAr || "", sku:p.sku || p.barcode || "",
+        category:categoryOf(p,isArabic), rating:m.rating ? `${m.rating}/5 ${stars(m.rating)}` : "",
+        expiry:m.expiryDate, platforms:PLATFORMS.filter(k=>m.promotions[k]).join(", "), note:m.note,
       });
-
-      const data = await readResponse(response);
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || data.error || "Failed to load employees"
-        );
+      row.height = 54;
+      const src = imageOf(p);
+      if (src) {
+        try {
+          const res = await fetch(src); if (res.ok) {
+            const blob = await res.blob();
+            if (blob.type.startsWith("image/")) {
+              const data = await blobToDataUrl(blob);
+              const imageId = workbook.addImage({base64:data,extension:blob.type.includes("png")?"png":"jpeg"});
+              ws.addImage(imageId, { tl: { col: 0, row: row.number - 1 }, ext: { width: 48, height: 48 }, editAs: "oneCell" } as any);
+            }
+          }
+        } catch { /* keep row even if image host blocks cross-origin fetch */ }
       }
-
-      const list: Employee[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data.employees)
-          ? data.employees
-          : [];
-
-      setEmployees(
-        list.filter(
-          (employee) =>
-            employee.active !== false && employee.name?.trim()
-        )
-      );
-    } catch (err) {
-      console.error("Load employees error:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load employees"
-      );
-    } finally {
-      setEmployeeLoading(false);
+    }
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href=url; a.download=`product-performance-${tab}-${activePeriod}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      console.error("Excel export failed:", e);
+      const details = e instanceof Error ? e.message : String(e);
+      setError(tx(`Excel export failed: ${details}`, `فشل تصدير Excel: ${details}`));
     }
   }
 
-  async function confirmStatusChange() {
-    if (!statusTarget || actionLoading) return;
-
-    if (!employeeId) {
-      setError(message("Please select an employee.", "يرجى اختيار الموظف"));
-      return;
-    }
-
-    if (!/^\d{3}$/.test(employeePin)) {
-      setError(
-        message(
-          "Please enter a valid 3-digit employee PIN.",
-          "أدخل رمز PIN صحيحًا مكونًا من 3 أرقام"
-        )
-      );
-      return;
-    }
-
-    const product = statusTarget;
-
-    try {
-      setActionLoading(product._id);
-      setError("");
-
-      const response = await fetch(`/api/products/${product._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-        body: JSON.stringify({
-          active: !product.active,
-          statusEmployeeId: employeeId,
-          employeePin,
-        }),
-      });
-
-      const data = await readResponse(response);
-
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-            data.error ||
-            message(
-              "Failed to update product status.",
-              "فشل تحديث حالة المنتج"
-            )
-        );
-      }
-
-      const updatedProduct: Product | undefined = data.product;
-
-      if (
-        !updatedProduct ||
-        updatedProduct._id !== product._id ||
-        typeof updatedProduct.active !== "boolean"
-      ) {
-        throw new Error(
-          "The server did not return the updated product. Check the PUT API response."
-        );
-      }
-
-      setProducts((current) =>
-        current.map((item) =>
-          item._id === product._id
-            ? { ...item, ...updatedProduct }
-            : item
-        )
-      );
-
-      setStatusTarget(null);
-      setEmployeeId("");
-      setEmployeePin("");
-      setEmployees([]);
-      setError("");
-    } catch (err) {
-      console.error("Product status update error:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update product status."
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
-  async function deleteProduct(product: Product) {
-    const confirmed = window.confirm(
-      message(
-        `Are you sure you want to delete "${getProductName(product)}"?\n\nThis action cannot be undone.`,
-        `هل أنت متأكد أنك تريد حذف المنتج "${getProductName(product)}"؟\n\nلا يمكن التراجع عن هذا الإجراء.`
-      )
-    );
-
-    if (!confirmed) return;
-
-    try {
-      setActionLoading(product._id);
-      setError("");
-
-      const response = await fetch(`/api/products/${product._id}`, {
-        method: "DELETE",
-      });
-
-      const data = await readResponse(response);
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || data.error || "Failed to delete product"
-        );
-      }
-
-      setProducts((current) =>
-        current.filter((item) => item._id !== product._id)
-      );
-    } catch (err) {
-      console.error("Delete product error:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to delete product"
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
-  const selectedCategory = categories.find(
-    (category) => category.key === categoryFilter
-  );
-
-  return (
-    <main
-      className="min-h-screen bg-slate-50 p-2 sm:p-4 lg:p-6 font-sans text-slate-950 overflow-x-hidden max-w-full box-border"
-      dir={isArabic ? "rtl" : "ltr"}
-    >
-      <div className="mx-auto max-w-[1500px] w-full space-y-4 sm:space-y-6 box-border overflow-x-hidden">
-        
-        {/* Header Section */}
-        <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 sm:p-6 shadow-xs border border-slate-200 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 flex-1">
-            <Link
-              href="/"
-              className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
-            >
-              <span>{isArabic ? "→" : "←"}</span>
-              {t("dashboard")}
-            </Link>
-
-            <h1 className="text-xl sm:text-3xl font-black tracking-tight text-slate-900 truncate">
-              {t("products")}
-            </h1>
-
-            <p className="mt-0.5 text-xs sm:text-sm text-slate-500">
-              {message(
-                "Manage your products, inventory levels and live status.",
-                "إدارة المنتجات ومستويات المخزون وحالة التوفر المباشرة."
-              )}
-            </p>
-          </div>
-
-          <Link
-            href="/products/new"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-slate-800 shadow-sm transition-all shrink-0"
-          >
-            <span className="text-base leading-none">+</span>
-            {t("addProduct")}
-          </Link>
-        </div>
-
-        {/* Statistics Grid */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          {[
-            {
-              label: t("total"),
-              value: totalProducts,
-              icon: "📦",
-              color: "text-slate-900",
-              bg: "bg-slate-100",
-            },
-            {
-              label: t("active"),
-              value: activeProducts,
-              icon: "✓",
-              color: "text-emerald-600",
-              bg: "bg-emerald-50",
-            },
-            {
-              label: t("inactive"),
-              value: inactiveProducts,
-              icon: "⏸",
-              color: "text-rose-600",
-              bg: "bg-rose-50",
-            },
-            {
-              label: t("lowStock"),
-              value: lowStockProducts,
-              icon: "⚠",
-              color: "text-amber-600",
-              bg: "bg-amber-50",
-            },
-            {
-              label: t("outOfStock"),
-              value: outOfStockProducts,
-              icon: "!",
-              color: "text-red-700",
-              bg: "bg-red-50",
-            },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 shadow-xs"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                    {item.label}
-                  </p>
-                  <p className={`mt-1 text-2xl sm:text-3xl font-black ${item.color}`}>
-                    {item.value}
-                  </p>
-                </div>
-                <div
-                  className={`flex h-8 w-8 sm:h-11 sm:w-11 items-center justify-center rounded-xl text-base sm:text-xl ${item.bg}`}
-                >
-                  {item.icon}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* General Error Banner */}
-        {error && !statusTarget && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-xs">
-            <span>{error}</span>
-            <button
-              type="button"
-              onClick={() => void loadProducts()}
-              className="shrink-0 font-bold underline"
-            >
-              {message("Retry", "إعادة المحاولة")}
-            </button>
-          </div>
-        )}
-
-        {/* Main Content Card / Filter & Table Section */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs w-full max-w-full">
-          
-          {/* Search & Filters Header */}
-          <div className="border-b border-slate-200 p-3 sm:p-6 bg-slate-50/50">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-2.5 lg:flex-row">
-                {/* Search Input */}
-                <div className="relative w-full lg:max-w-md">
-                  <span
-                    className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-slate-400 ${
-                      isArabic ? "right-3.5" : "left-3.5"
-                    }`}
-                  >
-                    🔍
-                  </span>
-
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder={message(
-                      "Search SKU, product or category...",
-                      "البحث برمز المنتج أو الاسم أو الفئة..."
-                    )}
-                    className={`w-full rounded-xl border border-slate-300 bg-white py-2.5 text-xs sm:text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900 shadow-2xs ${
-                      isArabic ? "pr-10 pl-3.5" : "pl-10 pr-3.5"
-                    }`}
-                  />
-                </div>
-
-                {/* Category Dropdown */}
-                <div className="w-full lg:max-w-xs">
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 outline-none focus:border-slate-900 shadow-2xs"
-                  >
-                    <option value="all">
-                      {message("All Categories", "كل الفئات")}
-                    </option>
-                    {categories.map((category) => (
-                      <option key={category.key} value={category.key}>
-                        {language === "ar" ? category.ar : category.en}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Status Filters & Buttons */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                {(
-                  [
-                    ["all", message("All", "الكل")],
-                    ["active", t("active")],
-                    ["inactive", t("inactive")],
-                  ] as [FilterStatus, string][]
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setStatusFilter(value)}
-                    className={`rounded-xl px-3 py-1.5 text-xs font-bold transition shadow-2xs ${
-                      statusFilter === value
-                        ? value === "active"
-                          ? "bg-emerald-600 text-white"
-                          : value === "inactive"
-                            ? "bg-rose-600 text-white"
-                            : "bg-slate-900 text-white"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  {message("Clear Filters", "مسح الفلاتر")}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void loadProducts()}
-                  disabled={loading}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition ml-auto"
-                >
-                  ↻ {t("refresh")}
-                </button>
-              </div>
-            </div>
-
-            {/* Results Counter info */}
-            {!loading && (
-              <div className="mt-3 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between border-t border-slate-200/60 pt-2.5">
-                <div>
-                  {message("Showing ", "عرض ")}
-                  <span className="font-bold text-slate-900">
-                    {filteredProducts.length}
-                  </span>
-                  {message(" of ", " من ")}
-                  <span className="font-bold text-slate-900">
-                    {products.length}
-                  </span>
-                  {message(" products", " منتج")}
-                </div>
-
-                {selectedCategory && (
-                  <div className="font-semibold text-slate-700">
-                    {message("Category: ", "الفئة: ")}
-                    {language === "ar"
-                      ? selectedCategory.ar
-                      : selectedCategory.en}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Loading Skeleton */}
-          {loading ? (
-            <div className="space-y-4 p-8 sm:p-12">
-              {[1, 2, 3, 4, 5].map((item) => (
-                <div
-                  key={item}
-                  className="flex animate-pulse items-center gap-4"
-                >
-                  <div className="h-12 w-12 rounded-xl bg-slate-200" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 w-1/3 rounded bg-slate-200" />
-                    <div className="h-3 w-1/4 rounded bg-slate-100" />
-                  </div>
-                  <div className="h-8 w-20 rounded bg-slate-200" />
-                </div>
-              ))}
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="px-6 py-20 text-center">
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-100 text-4xl">
-                {search || categoryFilter !== "all" ? "🔍" : "📦"}
-              </div>
-
-              <h2 className="mt-5 text-xl font-bold text-slate-900">
-                {search || categoryFilter !== "all" || statusFilter !== "all"
-                  ? message("No products found", "لم يتم العثور على منتجات")
-                  : message("No products yet", "لا توجد منتجات بعد")}
-              </h2>
-
-              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-                {message(
-                  "Try changing your search or filters, or add your first product.",
-                  "حاول تغيير البحث أو الفلاتر، أو أضف منتجك الأول."
-                )}
-              </p>
-
-              {search || categoryFilter !== "all" || statusFilter !== "all" ? (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="mt-5 rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  {message("Clear Filters", "مسح الفلاتر")}
-                </button>
-              ) : (
-                <Link
-                  href="/products/new"
-                  className="mt-5 inline-flex rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800 transition"
-                >
-                  + {t("addProduct")}
-                </Link>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* DESKTOP TABLE VIEW (With horizontal scrolling containment & compact actions) */}
-              <div className="hidden lg:block w-full overflow-x-auto max-w-full">
-                <table className="w-full min-w-[1000px] text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/80">
-                      {[
-                        t("name"),
-                        t("sku"),
-                        t("category"),
-                        t("price"),
-                        message("Employer Rating", "تقييم صاحب العمل"),
-                        t("status"),
-                      ].map((heading) => (
-                        <th
-                          key={heading}
-                          className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wider text-slate-500"
-                        >
-                          {heading}
-                        </th>
-                      ))}
-                      <th className="px-4 py-3 text-end text-xs font-bold uppercase tracking-wider text-slate-500 w-[180px]">
-                        {message("Actions", "الإجراء")}
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredProducts.map((product) => {
-                      const isActionLoading = actionLoading === product._id;
-                      const variantPrices =
-                        product.productType === "multiple" &&
-                        product.variants?.length
-                          ? product.variants
-                          : [];
-
-                      const highestPrice = variantPrices.length
-                        ? Math.max(
-                            ...variantPrices.map(
-                              (variant) => Number(variant.price) || 0
-                            )
-                          )
-                        : Number(product.price) || 0;
-
-                      return (
-                        <tr
-                          key={product._id}
-                          className="group transition-colors hover:bg-slate-50/80"
-                        >
-                          {/* Product image & name */}
-                          <td className="px-4 py-3 max-w-[250px]">
-                            <div className="flex items-center gap-2.5">
-                              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-2xs">
-                                {product.image ? (
-                                  <img
-                                    src={product.image}
-                                    alt={getProductName(product)}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-base text-slate-400">
-                                    📦
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate font-bold text-slate-900 text-xs sm:text-sm">
-                                  {getProductName(product)}
-                                </p>
-                                <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                                  {language === "ar"
-                                    ? product.nameEn || "-"
-                                    : product.nameAr || "-"}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* SKU */}
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-600">
-                              {product.sku}
-                            </span>
-                          </td>
-
-                          {/* Category */}
-                          <td className="px-4 py-3 max-w-[140px]">
-                            <div className="truncate">
-                              <p className="truncate text-xs font-semibold text-slate-700">
-                                {getProductCategory(product)}
-                              </p>
-                            </div>
-                          </td>
-
-                          {/* Price & Variants */}
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <span className="font-black text-slate-900 text-xs sm:text-sm">
-                              QAR {highestPrice.toFixed(2)}
-                            </span>
-
-                            {variantPrices.length > 0 ? (
-                              <div className="mt-1">
-                                <button
-                                  type="button"
-                                  aria-expanded={expandedPrices.includes(product._id)}
-                                  onClick={() =>
-                                    setExpandedPrices((current) =>
-                                      current.includes(product._id)
-                                        ? current.filter((id) => id !== product._id)
-                                        : [...current, product._id]
-                                    )
-                                  }
-                                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-100 transition"
-                                >
-                                  {expandedPrices.includes(product._id)
-                                    ? message("Hide weights ▲", "إخفاء ▲")
-                                    : message(
-                                        `${variantPrices.length} weights ▼`,
-                                        `${variantPrices.length} أوزان ▼`
-                                      )}
-                                </button>
-
-                                {expandedPrices.includes(product._id) && (
-                                  <div className="mt-1.5 min-w-[160px] space-y-1 rounded-xl border border-slate-200 bg-white p-2 text-[11px] shadow-lg z-20 absolute">
-                                    {variantPrices.map((variant, index) => (
-                                      <div
-                                        key={
-                                          variant._id ||
-                                          `${variant.weight}-${variant.unit}-${index}`
-                                        }
-                                        className="flex items-center justify-between gap-3 py-0.5"
-                                      >
-                                        <span className="text-slate-500 font-medium">
-                                          {variant.weight} {variant.unit}
-                                        </span>
-                                        <span className="font-bold text-slate-900">
-                                          QAR {Number(variant.price).toFixed(2)}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <p className="mt-0.5 text-[11px] text-slate-500 font-medium">
-                                {product.singleWeight
-                                  ? `${product.singleWeight}${product.singleUnit || "g"}`
-                                  : message("Single", "مفرد")}
-                              </p>
-                            )}
-                          </td>
-
-                          {/* Employer Rating */}
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <EmployerRating product={product} />
-                          </td>
-
-                          {/* Active / Inactive Switch & Date Info */}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void openStatusDialog(product)}
-                                disabled={isActionLoading || actionLoading !== null}
-                                aria-label={
-                                  product.active ? "Turn product off" : "Turn product on"
-                                }
-                                className={`relative inline-flex h-6 w-12 shrink-0 items-center rounded-full transition-all duration-200 shadow-2xs ${
-                                  product.active ? "bg-emerald-500" : "bg-slate-300"
-                                } ${
-                                  isActionLoading || actionLoading !== null
-                                    ? "cursor-wait opacity-50"
-                                    : "cursor-pointer"
-                                }`}
-                              >
-                                <span
-                                  className={`absolute h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                                    product.active
-                                      ? isArabic
-                                        ? "-translate-x-7"
-                                        : "translate-x-7"
-                                      : isArabic
-                                        ? "-translate-x-1"
-                                        : "translate-x-1"
-                                  }`}
-                                />
-                                <span
-                                  className={`absolute text-[8px] font-black ${
-                                    product.active
-                                      ? isArabic
-                                        ? "right-1.5 text-white"
-                                        : "left-1.5 text-white"
-                                      : isArabic
-                                        ? "left-1.5 text-slate-600"
-                                        : "right-1.5 text-slate-600"
-                                  }`}
-                                >
-                                  {product.active ? "ON" : "OFF"}
-                                </span>
-                              </button>
-                            </div>
-
-                            {(product.lastStatusChangedByName || product.lastStatusChangedAt) && (
-                              <div className="mt-1 text-[10px] leading-tight text-slate-500 max-w-[150px]">
-                                {product.lastStatusChangedByName && (
-                                  <div className="font-semibold text-slate-700 truncate">
-                                    {product.active ? "ON" : "OFF"} by {product.lastStatusChangedByName}
-                                  </div>
-                                )}
-                                {product.lastStatusChangedAt && (
-                                  <div className="text-[9px] text-slate-400">
-                                    {new Date(product.lastStatusChangedAt).toLocaleString(
-                                      language === "ar" ? "ar-QA" : "en-GB",
-                                      {
-                                        day: "numeric",
-                                        month: "short",
-                                        year: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      }
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Action Buttons (Strictly Contained & Flexible for Zoom) */}
-                          <td className="px-4 py-3 text-end whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1.5 flex-wrap max-w-[180px] ml-auto">
-                              <Link
-                                href={`/products/${product._id}`}
-                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:border-slate-900 transition shadow-2xs"
-                              >
-                                {t("view")}
-                              </Link>
-
-                              <Link
-                                href={`/products/${product._id}/edit`}
-                                className="rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-800 transition shadow-2xs"
-                              >
-                                {t("edit")}
-                              </Link>
-
-                              <button
-                                type="button"
-                                onClick={() => void deleteProduct(product)}
-                                disabled={actionLoading !== null}
-                                className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50 transition shadow-2xs"
-                              >
-                                {isActionLoading ? "..." : t("delete")}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* MOBILE & TABLET CARD VIEW (Visible on smaller screens, fully contained) */}
-              <div className="block lg:hidden divide-y divide-slate-100 p-3 space-y-3 w-full max-w-full box-border">
-                {filteredProducts.map((product) => {
-                  const isActionLoading = actionLoading === product._id;
-                  const variantPrices =
-                    product.productType === "multiple" &&
-                    product.variants?.length
-                      ? product.variants
-                      : [];
-
-                  const highestPrice = variantPrices.length
-                    ? Math.max(
-                        ...variantPrices.map(
-                          (variant) => Number(variant.price) || 0
-                        )
-                      )
-                    : Number(product.price) || 0;
-
-                  return (
-                    <div
-                      key={`mobile-${product._id}`}
-                      className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-3 w-full max-w-full box-border overflow-hidden"
-                    >
-                      <div className="flex items-start gap-2.5 w-full">
-                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-                          {product.image ? (
-                            <img
-                              src={product.image}
-                              alt={getProductName(product)}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-lg text-slate-400">
-                              📦
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <h3 className="font-bold text-slate-900 text-xs sm:text-sm truncate">
-                              {getProductName(product)}
-                            </h3>
-                            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-600 shrink-0">
-                              {product.sku}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                            {getProductCategory(product)}
-                          </p>
-                          <div className="mt-1.5 flex items-center justify-between">
-                            <span className="font-black text-slate-900 text-xs sm:text-sm">
-                              QAR {highestPrice.toFixed(2)}
-                            </span>
-                            <div className="min-w-0">
-                              <EmployerRating product={product} />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Status Info for Mobile */}
-                      {(product.lastStatusChangedByName || product.lastStatusChangedAt) && (
-                        <div className="bg-slate-50 px-2.5 py-1.5 rounded-xl text-[11px] text-slate-600 space-y-0.5">
-                          {product.lastStatusChangedByName && (
-                            <div className="font-semibold truncate">
-                              {product.active ? "ON" : "OFF"} by {product.lastStatusChangedByName}
-                            </div>
-                          )}
-                          {product.lastStatusChangedAt && (
-                            <div className="text-[9px] text-slate-400">
-                              {new Date(product.lastStatusChangedAt).toLocaleString(
-                                language === "ar" ? "ar-QA" : "en-GB",
-                                {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                }
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Card Footer: Toggle Switch & Action Buttons */}
-                      <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 gap-2 flex-wrap">
-                        {/* ON/OFF Switch */}
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void openStatusDialog(product)}
-                            disabled={isActionLoading || actionLoading !== null}
-                            className={`relative inline-flex h-6 w-12 items-center rounded-full transition-all duration-200 ${
-                              product.active ? "bg-emerald-500" : "bg-slate-300"
-                            }`}
-                          >
-                            <span
-                              className={`absolute h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                                product.active
-                                  ? isArabic
-                                    ? "-translate-x-7"
-                                    : "translate-x-7"
-                                  : isArabic
-                                    ? "-translate-x-1"
-                                    : "translate-x-1"
-                              }`}
-                            />
-                            <span
-                              className={`absolute text-[8px] font-black ${
-                                product.active
-                                  ? isArabic
-                                    ? "right-1.5 text-white"
-                                    : "left-1.5 text-white"
-                                  : isArabic
-                                    ? "left-1.5 text-slate-600"
-                                    : "right-1.5 text-slate-600"
-                              }`}
-                            >
-                              {product.active ? "ON" : "OFF"}
-                            </span>
-                          </button>
-                        </div>
-
-                        {/* Buttons */}
-                        <div className="flex items-center gap-1.5">
-                          <Link
-                            href={`/products/${product._id}`}
-                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition"
-                          >
-                            {t("view")}
-                          </Link>
-
-                          <Link
-                            href={`/products/${product._id}/edit`}
-                            className="rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-800 transition"
-                          >
-                            {t("edit")}
-                          </Link>
-
-                          <button
-                            type="button"
-                            onClick={() => void deleteProduct(product)}
-                            disabled={actionLoading !== null}
-                            className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-100 transition"
-                          >
-                            {t("delete")}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Footer Summary */}
-        {!loading && products.length > 0 && (
-          <div className="flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between px-1">
-            <span>
-              {isArabic
-                ? `${filteredProducts.length} منتج معروض`
-                : `${filteredProducts.length} product${filteredProducts.length !== 1 ? "s" : ""} displayed`}
-            </span>
-            <span>
-              {message("Total Database Products: ", "إجمالي المنتجات في القاعدة: ")}
-              <span className="font-bold text-slate-700">
-                {products.length}
-              </span>
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Employee PIN Confirmation Modal */}
-      {statusTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 box-border overflow-y-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Confirm product status change"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) closeStatusDialog();
-          }}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-5 sm:p-7 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 my-auto box-border"
-            dir={isArabic ? "rtl" : "ltr"}
-          >
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900">
-                {statusTarget.active
-                  ? message("Turn Product OFF", "إيقاف المنتج")
-                  : message("Turn Product ON", "تشغيل المنتج")}
-              </h2>
-
-              <p className="mt-1 text-xs sm:text-sm font-bold text-indigo-600 truncate">
-                {getProductName(statusTarget)}
-              </p>
-
-              <p className="mt-1 text-xs text-slate-500">
-                {message(
-                  "Select the employee and enter their 3-digit security PIN to authorize this change.",
-                  "اختر الموظف وأدخل رمز الأمان المكون من 3 أرقام للموافقة على التغيير."
-                )}
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label
-                  htmlFor="status-employee"
-                  className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1"
-                >
-                  {message("Employee Name *", "اسم الموظف *")}
-                </label>
-
-                <select
-                  id="status-employee"
-                  value={employeeId}
-                  onChange={(e) => {
-                    setEmployeeId(e.target.value);
-                    setError("");
-                  }}
-                  disabled={employeeLoading || actionLoading !== null}
-                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs sm:text-sm font-semibold text-slate-900 outline-none focus:border-slate-900 disabled:bg-slate-100 shadow-2xs"
-                >
-                  <option value="">
-                    {employeeLoading
-                      ? message("Loading employees...", "جارٍ تحميل الموظفين...")
-                      : message("Select Employee", "اختر الموظف")}
-                  </option>
-
-                  {employees.map((employee) => (
-                    <option key={employee._id} value={employee._id}>
-                      {employee.name}
-                    </option>
-                  ))}
-                </select>
-
-                {employees.length === 0 && !employeeLoading && (
-                  <p className="mt-1 text-xs font-medium text-rose-600">
-                    {message(
-                      "No active employees found.",
-                      "لم يتم العثور على موظفين نشطين."
-                    )}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="employee-pin"
-                  className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1"
-                >
-                  {message("Employee PIN (3 digits) *", "رمز PIN للموظف (3 أرقام) *")}
-                </label>
-
-                <input
-                  id="employee-pin"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  maxLength={3}
-                  pattern="[0-9]{3}"
-                  value={employeePin}
-                  onChange={(e) => {
-                    setEmployeePin(
-                      e.target.value.replace(/\D/g, "").slice(0, 3)
-                    );
-                    setError("");
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      void confirmStatusChange();
-                    }
-                  }}
-                  placeholder={message("Enter 3-digit PIN", "أدخل 3 أرقام")}
-                  className="w-full rounded-xl border border-slate-300 p-2.5 text-center text-base tracking-[0.4em] font-mono text-slate-900 outline-none focus:border-slate-900 shadow-2xs"
-                  disabled={actionLoading !== null}
-                />
-              </div>
-
-              {error && (
-                <div
-                  role="alert"
-                  className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700"
-                >
-                  {error}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-1">
-              <button
-                type="button"
-                disabled={actionLoading !== null}
-                onClick={closeStatusDialog}
-                className="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
-              >
-                {message("Cancel", "إلغاء")}
-              </button>
-
-              <button
-                type="button"
-                disabled={
-                  !employeeId ||
-                  !/^\d{3}$/.test(employeePin) ||
-                  employeeLoading ||
-                  actionLoading !== null
-                }
-                onClick={() => void confirmStatusChange()}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-xs sm:text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 transition shadow-sm"
-              >
-                {actionLoading
-                  ? message("Saving...", "جارٍ الحفظ...")
-                  : statusTarget.active
-                    ? message("Confirm OFF", "تأكيد الإيقاف")
-                    : message("Confirm ON", "تأكيد التشغيل")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </main>
-  );
-}
+  return <main dir={isArabic?"rtl":"ltr"} className="min-h-screen bg-slate-50 p-4 text-slate-900 sm:p-6">
+    <div className="screen-content mx-auto max-w-[1600px] space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
+        <div><p className="text-sm font-bold uppercase tracking-wide text-emerald-700">MAZAJ CONTROL</p><h1 className="mt-1 text-2xl font-black sm:text-3xl">{tx("Product Performance","أداء المنتجات")}</h1><p className="mt-2 text-sm text-slate-600">{tx("Rate products yourself from 1 to 5 stars. Low / best running lists are based on your rating, not sales or stock figures.","قيّم المنتجات بنفسك من نجمة إلى خمس نجوم. قوائم الحركة تعتمد على تقييمك وليس على المبيعات أو المخزون.")}</p></div>
+        <div className="flex flex-wrap gap-2"><button onClick={saveAll} disabled={saving} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{saving?tx("Saving…","جارٍ الحفظ…"):tx("Save changes","حفظ التغييرات")}</button><button onClick={saveAnalysis} disabled={saving} className="rounded-xl border border-emerald-700 px-4 py-2.5 text-sm font-bold text-emerald-800 disabled:opacity-50">{tx("Save analysis snapshot","حفظ نسخة التحليل")}</button><button onClick={exportExcel} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold">{tx("Export Excel (.xlsx)","تصدير Excel (.xlsx)")}</button><button onClick={()=>window.print()} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold">{tx("Print list","طباعة القائمة")}</button></div>
+      </header>
+      {message&&<p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 print:hidden">{message}</p>}
+      {error&&<p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800 print:hidden">{error}</p>}
+      <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-5 print:hidden">
+        <label className="text-sm font-bold">{tx("Analysis type","نوع التحليل")}<select value={periodType} onChange={e=>{const v=e.target.value as "daily"|"monthly";setPeriodType(v);setPeriod(v==="daily"?today():today().slice(0,7));}} className="mt-2 w-full rounded-lg border border-slate-300 p-2.5 font-normal"><option value="daily">{tx("Daily","يومي")}</option><option value="monthly">{tx("Monthly","شهري")}</option></select></label>
+        <label className="text-sm font-bold">{tx("Date / month","التاريخ / الشهر")}<input type={periodType==="daily"?"date":"month"} value={periodType==="daily"?period:period.slice(0,7)} onChange={e=>setPeriod(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 p-2.5 font-normal"/></label>
+        <label className="text-sm font-bold">{tx("Promotion platform","منصة العرض")}<select value={platform} onChange={e=>setPlatform(e.target.value as Platform|"All")} className="mt-2 w-full rounded-lg border border-slate-300 p-2.5 font-normal"><option value="All">{tx("All platforms","كل المنصات")}</option>{PLATFORMS.map(p=><option key={p} value={p}>{p}</option>)}</select></label>
+        <label className="text-sm font-bold">{tx("Category","الفئة")}<select value={category} onChange={e=>setCategory(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 p-2.5 font-normal"><option value="All">{tx("All categories","كل الفئات")}</option>{categories.map(c=><option key={c} value={c}>{c}</option>)}</select></label>
+        <label className="text-sm font-bold">{tx("Search product","البحث عن منتج")}<input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tx("Name, Arabic name, SKU","الاسم أو الرمز")} className="mt-2 w-full rounded-lg border border-slate-300 p-2.5 font-normal"/></label>
+        <label className="text-sm font-bold">{tx("Near expiry alert (days)","تنبيه قرب الانتهاء (أيام)")}<input type="number" min="0" value={expiryDays} onChange={e=>setExpiryDays(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 p-2.5 font-normal"/></label>
+      </section>
+      <div className="flex flex-wrap gap-2 print:hidden">{(["all","starred","slow","steady","best","expiry","promotion"] as Tab[]).map(t=><button key={t} onClick={()=>setTab(t)} className={`rounded-full px-4 py-2 text-sm font-bold ${tab===t?"bg-slate-900 text-white":"border border-slate-300 bg-white"}`}>{tabLabel(t,tx)}</button>)}</div>
+      {tab==="promotion"&&<section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 print:hidden">{tx("Tick each delivery app for products you want to promote. Select one app above to create a separate app-specific list.","حدد تطبيق التوصيل الذي تريد الترويج للمنتج فيه. اختر تطبيقاً واحداً أعلاه لعرض قائمة منفصلة له.")}</section>}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><h2 className="font-black">{tabLabel(tab,tx)} — {activePeriod}</h2><span className="text-sm text-slate-500">{visible.length} {tx("products","منتجات")}</span></div>
+        {loading?<p className="p-10 text-center">{tx("Loading products…","جارٍ تحميل المنتجات…")}</p>:visible.length===0?<p className="p-10 text-center text-slate-500">{tx("No products match this list and category.","لا توجد منتجات مطابقة لهذه القائمة والفئة.")}</p>:<div className="overflow-x-auto"><table className="w-full min-w-[1200px] text-sm"><thead className="bg-slate-100 text-xs text-slate-600"><tr>{[tx("Product","المنتج"),tx("SKU / Barcode","رمز المنتج / باركود"),tx("Employer rating (1–5)","تقييم الموظف (١–٥)"),tx("Expiry date","تاريخ الانتهاء"),tx("Promote on apps","الترويج عبر التطبيقات"),tx("Discount %","الخصم %"),tx("Promotion note","ملاحظة العرض"),tx("Notes","ملاحظات")].map(h=><th key={h} className="px-3 py-3 text-start">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{visible.map(p=>{const m=getMeta(p), ex=expiryStatus(p), src=imageOf(p);return <tr key={p._id} className="align-top hover:bg-slate-50">
+          <td className="px-3 py-3"><div className="flex items-start gap-3">{src?<img src={src} alt={p.nameEn||p.nameAr||"Product"} className="h-16 w-16 rounded-lg border border-slate-200 bg-white object-contain" onError={e=>{e.currentTarget.style.display="none";}}/>:<div className="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-100 text-[10px] text-slate-400">{tx("No image","لا صورة")}</div>}<div className="min-w-44"><p className="font-bold">{isArabic?(p.nameAr||p.nameEn||"منتج بلا اسم"):(p.nameEn||p.nameAr||"Unnamed product")}</p>{p.nameAr&&p.nameEn&&<p className="mt-1 text-xs text-slate-500" dir={isArabic?"ltr":"rtl"}>{isArabic?p.nameEn:p.nameAr}</p>}<p className="mt-1 text-xs text-slate-400">{categoryOf(p,isArabic)}</p><p className={`mt-1 text-xs font-bold ${ex.expired?"text-rose-700":ex.near?"text-amber-700":m.rating<=2&&m.rating>0?"text-orange-700":m.rating>=4?"text-emerald-700":"text-slate-500"}`}>{ex.expired?tx("Expired","منتهي الصلاحية"):ex.near?tx("Near expiry","قريب الانتهاء"):m.rating>0?`${m.rating}/5 — ${m.rating<=2?tx("Low running","ضعيف الحركة"):m.rating===3?tx("Steady","متوسط الحركة"):tx("Best running","أفضل حركة")}`:tx("Not rated","لم يتم التقييم")}</p></div></div></td>
+          <td className="px-3 py-3">{p.sku||p.barcode||"—"}</td>
+          <td className="px-3 py-3"><div className="flex flex-col gap-2"><div className="flex gap-0.5" role="group" aria-label={tx("Set product rating","تقييم المنتج")}>{[1,2,3,4,5].map(n=><button key={n} type="button" title={`${n}/5`} onClick={()=>updateMeta(p,{rating:n})} className={`text-xl leading-7 ${m.rating>=n?"text-amber-500":"text-slate-300"} hover:scale-110`} aria-label={`${n} ${tx("stars","نجوم")}`}>★</button>)}<button type="button" title={tx("Clear rating","مسح التقييم")} onClick={()=>updateMeta(p,{rating:0})} className="ms-2 text-xs text-slate-500">{tx("Clear","مسح")}</button></div><span className="text-xs text-slate-500">{m.rating?`${m.rating}/5 ${stars(m.rating)}`:tx("Choose 1–5 stars","اختر من ١ إلى ٥ نجوم")}</span></div></td>
+          <td className="px-3 py-3"><input type="date" value={m.expiryDate} onChange={e=>updateMeta(p,{expiryDate:e.target.value})} className="rounded-md border border-slate-300 p-1.5"/><p className="mt-1 text-xs text-slate-500">{ex.days===null?"—":ex.days<0?`${Math.abs(ex.days)} ${tx("days overdue","أيام بعد الانتهاء")}`:`${ex.days} ${tx("days left","يوم متبقٍ")}`}</p></td>
+          <td className="px-3 py-3"><div className="space-y-1.5">{PLATFORMS.map(k=><label key={k} className="flex items-center gap-2"><input type="checkbox" checked={m.promotions[k]} onChange={e=>updateMeta(p,{promotions:{...m.promotions,[k]:e.target.checked}})}/><span>{k}</span></label>)}</div></td>
+          <td className="px-3 py-3"><div className="space-y-1">{PLATFORMS.filter(k=>platform==="All"||platform===k).map(k=><label key={k} className="flex items-center gap-1 text-xs"><span>{k}</span><input type="number" min="0" max="100" value={m.promotionDiscount[k]} onChange={e=>updateMeta(p,{promotionDiscount:{...m.promotionDiscount,[k]:e.target.value}})} className="w-16 rounded border border-slate-300 p-1"/></label>)}</div></td>
+          <td className="px-3 py-3"><div className="space-y-1">{PLATFORMS.filter(k=>m.promotions[k]&&(platform==="All"||platform===k)).map(k=><label key={k} className="block text-xs">{k}<input value={m.promotionNote[k]} onChange={e=>updateMeta(p,{promotionNote:{...m.promotionNote,[k]:e.target.value}})} placeholder={tx("Campaign / offer note","ملاحظة الحملة / العرض")} className="mt-1 w-44 rounded border border-slate-300 p-1.5"/></label>)}</div></td>
+          <td className="px-3 py-3"><textarea value={m.note} onChange={e=>updateMeta(p,{note:e.target.value})} rows={2} className="w-44 rounded-md border border-slate-300 p-2" placeholder={tx("Notes","ملاحظات")}/></td>
+        </tr>})}</tbody></table></div>}
+      </section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:hidden"><h2 className="font-black">{tx("Saved daily / monthly analyses","التحليلات اليومية / الشهرية المحفوظة")}</h2>{analyses.length===0?<p className="mt-2 text-sm text-slate-500">{tx("No saved snapshots yet. Click Save analysis snapshot to save this summary.","لا توجد تحليلات محفوظة بعد. اضغط حفظ نسخة التحليل لحفظ الملخص.")}</p>:<div className="mt-3 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-slate-500"><th className="p-2 text-start">{tx("Period","الفترة")}</th><th className="p-2 text-start">{tx("Type","النوع")}</th><th className="p-2 text-start">{tx("Saved at","وقت الحفظ")}</th><th className="p-2 text-start">{tx("All","الكل")}</th><th className="p-2 text-start">{tx("Low / Steady / Best","ضعيف / متوسط / ممتاز")}</th></tr></thead><tbody>{analyses.map(a=><tr key={a._id} className="border-t border-slate-100"><td className="p-2">{a.period}</td><td className="p-2">{a.periodType==="daily"?tx("Daily","يومي"):tx("Monthly","شهري")}</td><td className="p-2">{a.createdAt?new Date(a.createdAt).toLocaleString(isArabic?"ar-QA":"en-GB"):"—"}</td><td className="p-2">{a.counts?.all??"—"}</td><td className="p-2">{a.counts?.slow??0} / {a.counts?.steady??0} / {a.counts?.best??0}</td></tr>)}</tbody></table></div>}</section>
+      <p className="text-xs leading-5 text-slate-500 print:hidden">{tx("Low running = 1–2 stars, steady = 3 stars, best running = 4–5 stars. Rating is set by the employer. Units sold and stock are not shown or used. Save changes to store data in MongoDB.","ضعيف الحركة = نجمة أو نجمتان، متوسط = ٣ نجوم، الأفضل حركة = ٤ أو ٥ نجوم. الموظف يحدد التقييم. لا يتم عرض أو استخدام الوحدات المباعة أو المخزون. احفظ التغييرات لتخزين البيانات في MongoDB.")}</p>
+    </div>
+    <section className="print-area">
+      <h1>{tx("MAZAJ CONTROL — Product Performance","MAZAJ CONTROL — أداء المنتجات")}</h1>
+      <p className="print-subtitle">{tabLabel(tab,tx)} — {activePeriod} · {visible.length} {tx("products","منتجات")}</p>
+      {loading ? <p>{tx("Loading products…","جارٍ تحميل المنتجات…")}</p> : visible.length === 0 ? <p>{tx("No products match this list and category.","لا توجد منتجات مطابقة لهذه القائمة والفئة.")}</p> : <table className="print-table">
+        <thead><tr><th>{tx("Product","المنتج")}</th><th>{tx("SKU / Barcode","رمز المنتج / باركود")}</th><th>{tx("Rating","التقييم")}</th><th>{tx("Expiry date","تاريخ الانتهاء")}</th><th>{tx("Promote on apps","الترويج عبر التطبيقات")}</th><th>{tx("Discount %","الخصم %")}</th><th>{tx("Promotion note","ملاحظة العرض")}</th><th>{tx("Notes","ملاحظات")}</th></tr></thead>
+        <tbody>{visible.map(p=>{const m=getMeta(p), src=imageOf(p); return <tr key={p._id}>
+          <td>{src ? <img src={src} alt="" className="print-product-image"/> : null}<strong>{isArabic?(p.nameAr||p.nameEn||"منتج بلا اسم"):(p.nameEn||p.nameAr||"Unnamed product")}</strong><div>{categoryOf(p,isArabic)}</div></td>
+          <td>{p.sku||p.barcode||"—"}</td><td>{m.rating ? `${m.rating}/5 ${stars(m.rating)}` : "—"}</td><td>{m.expiryDate||"—"}</td>
+          <td>{PLATFORMS.filter(k=>m.promotions[k]).join(", ")||"—"}</td><td>{PLATFORMS.filter(k=>m.promotions[k]).map(k=>`${k}: ${m.promotionDiscount[k]||0}%`).join("; ")||"—"}</td>
+          <td>{PLATFORMS.filter(k=>m.promotions[k]&&m.promotionNote[k]).map(k=>`${k}: ${m.promotionNote[k]}`).join("; ")||"—"}</td><td>{m.note||"—"}</td>
+        </tr>;})}</tbody></table>}
+    </section>
+    <style jsx global>{`@media screen { .print-area { display:none!important; } } @media print { @page { size:landscape; margin:10mm; } html,body { background:#fff!important; color:#111!important; margin:0!important; padding:0!important; } body * { visibility:hidden!important; } .screen-content { display:none!important; } .print-area, .print-area * { visibility:visible!important; } .print-area { display:block!important; position:absolute!important; left:0!important; top:0!important; width:100%!important; padding:0!important; background:#fff!important; color:#111!important; font-size:9px!important; } .print-area h1 { font-size:18px!important; font-weight:700!important; margin:0 0 5px!important; } .print-subtitle { margin:0 0 12px!important; } .print-table { display:table!important; width:100%!important; min-width:0!important; border-collapse:collapse!important; table-layout:fixed!important; } .print-table thead { display:table-header-group!important; } .print-table tbody { display:table-row-group!important; } .print-table tr { display:table-row!important; break-inside:avoid!important; page-break-inside:avoid!important; } .print-table th,.print-table td { display:table-cell!important; border:1px solid #999!important; padding:5px!important; vertical-align:top!important; overflow-wrap:anywhere!important; } .print-table th { background:#eee!important; font-weight:700!important; } .print-product-image { display:block!important; width:auto!important; height:auto!important; max-width:38px!important; max-height:38px!important; object-fit:contain!important; margin-bottom:3px!important; } }`}</style>
+  </main>
+};
