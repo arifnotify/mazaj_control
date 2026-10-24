@@ -46,6 +46,16 @@ const tabLabel = (tab: Tab, tx: (en:string,ar:string)=>string) => ({
   promotion: tx("Promotions","العروض"),
 }[tab]);
 const stars = (rating: number) => "★".repeat(Math.max(0, Math.min(5, rating))) + "☆".repeat(5 - Math.max(0, Math.min(5, rating)));
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("Could not read blob"));
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read blob"));
+    reader.readAsDataURL(blob);
+  });
 
 export default function ProductPerformancePage() {
   const { isArabic } = useLanguage();
@@ -260,23 +270,17 @@ export default function ProductPerformancePage() {
       <p className="text-xs leading-5 text-slate-500 print:hidden">{tx("Low running = 1–2 stars, steady = 3 stars, best running = 4–5 stars. Rating is set by the employer. Units sold and stock are not shown or used. Save changes to store data in MongoDB.","ضعيف الحركة = نجمة أو نجمتان، متوسط = ٣ نجوم، الأفضل حركة = ٤ أو ٥ نجوم. الموظف يحدد التقييم. لا يتم عرض أو استخدام الوحدات المباعة أو المخزون. احفظ التغييرات لتخزين البيانات في MongoDB.")}</p>
     </div>
     <section className="print-area">
-      <h1 className="print-title">MAZAJ CONTROL — {tx("Product Performance","أداء المنتجات")}</h1>
-      <p className="print-subtitle">{tabLabel(tab,tx)} — {activePeriod} — {visible.length} {tx("products","منتجات")}</p>
+      <h1>{tx("MAZAJ CONTROL — Product Performance","MAZAJ CONTROL — أداء المنتجات")}</h1>
+      <p className="print-subtitle">{tabLabel(tab,tx)} — {activePeriod} · {visible.length} {tx("products","منتجات")}</p>
       {loading ? <p>{tx("Loading products…","جارٍ تحميل المنتجات…")}</p> : visible.length === 0 ? <p>{tx("No products match this list and category.","لا توجد منتجات مطابقة لهذه القائمة والفئة.")}</p> : <table className="print-table">
-        <thead><tr>{[tx("Product","المنتج"),tx("SKU / Barcode","رمز المنتج / باركود"),tx("Rating","التقييم"),tx("Expiry date","تاريخ الانتهاء"),tx("Promote on apps","الترويج عبر التطبيقات"),tx("Discount %","الخصم %"),tx("Promotion note / Notes","ملاحظة العرض / ملاحظات")].map(h=><th key={h}>{h}</th>)}</tr></thead>
+        <thead><tr><th>{tx("Product","المنتج")}</th><th>{tx("SKU / Barcode","رمز المنتج / باركود")}</th><th>{tx("Rating","التقييم")}</th><th>{tx("Expiry date","تاريخ الانتهاء")}</th><th>{tx("Promote on apps","الترويج عبر التطبيقات")}</th><th>{tx("Discount %","الخصم %")}</th><th>{tx("Promotion note","ملاحظة العرض")}</th><th>{tx("Notes","ملاحظات")}</th></tr></thead>
         <tbody>{visible.map(p=>{const m=getMeta(p), src=imageOf(p); return <tr key={p._id}>
-          <td><div className="print-product">{src ? <img src={src} alt="" /> : null}<div><strong>{isArabic?(p.nameAr||p.nameEn||"منتج بلا اسم"):(p.nameEn||p.nameAr||"Unnamed product")}</strong>{p.nameAr&&p.nameEn?<div>{isArabic?p.nameEn:p.nameAr}</div>:null}<small>{categoryOf(p,isArabic)}</small></div></div></td>
+          <td>{src ? <img src={src} alt="" className="print-product-image"/> : null}<strong>{isArabic?(p.nameAr||p.nameEn||"منتج بلا اسم"):(p.nameEn||p.nameAr||"Unnamed product")}</strong><div>{categoryOf(p,isArabic)}</div></td>
           <td>{p.sku||p.barcode||"—"}</td><td>{m.rating ? `${m.rating}/5 ${stars(m.rating)}` : "—"}</td><td>{m.expiryDate||"—"}</td>
-          <td>{PLATFORMS.filter(k=>m.promotions[k]&&(platform==="All"||platform===k)).join(", ")||"—"}</td>
-          <td>{PLATFORMS.filter(k=>platform==="All"||platform===k).map(k=>m.promotionDiscount[k]?`${k}: ${m.promotionDiscount[k]}%`:"").filter(Boolean).join(" / ")||"—"}</td>
-          <td>{PLATFORMS.filter(k=>m.promotions[k]&&(platform==="All"||platform===k)).map(k=>m.promotionNote[k]).filter(Boolean).join("; ")}{m.note?` — ${m.note}`:""}</td>
-        </tr>})}</tbody>
-      </table>}
+          <td>{PLATFORMS.filter(k=>m.promotions[k]).join(", ")||"—"}</td><td>{PLATFORMS.filter(k=>m.promotions[k]).map(k=>`${k}: ${m.promotionDiscount[k]||0}%`).join("; ")||"—"}</td>
+          <td>{PLATFORMS.filter(k=>m.promotions[k]&&m.promotionNote[k]).map(k=>`${k}: ${m.promotionNote[k]}`).join("; ")||"—"}</td><td>{m.note||"—"}</td>
+        </tr>;})}</tbody></table>}
     </section>
-    <style jsx global>{`@media screen { .print-area { display:none!important; } } @media print { @page { size:auto; margin:10mm; } html,body { background:#fff!important; color:#111!important; height:auto!important; overflow:visible!important; -webkit-print-color-adjust:exact; print-color-adjust:exact; } .screen-content { display:none!important; } .print-area { display:block!important; position:relative!important; width:100%!important; color:#111!important; background:#fff!important; font-family:Arial,sans-serif!important; } .print-title { font-size:18px!important; font-weight:700!important; margin:0 0 5px!important; } .print-subtitle { font-size:11px!important; margin:0 0 12px!important; } .print-table { display:table!important; width:100%!important; min-width:0!important; border-collapse:collapse!important; table-layout:auto!important; font-size:9px!important; } .print-table thead { display:table-header-group!important; } .print-table tbody { display:table-row-group!important; } .print-table tr { display:table-row!important; break-inside:avoid!important; page-break-inside:avoid!important; } .print-table th,.print-table td { display:table-cell!important; border:1px solid #bbb!important; padding:5px!important; vertical-align:top!important; text-align:start!important; overflow-wrap:anywhere!important; } .print-table th { background:#eee!important; font-weight:700!important; } .print-product { display:flex!important; align-items:flex-start!important; gap:6px!important; } .print-product img { display:block!important; width:42px!important; height:42px!important; max-width:42px!important; max-height:42px!important; object-fit:contain!important; flex-shrink:0!important; } .print-product small { display:block!important; margin-top:2px!important; color:#555!important; } button,input,select,textarea,nav,aside { display:none!important; } }`}</style>
-  </main>;
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(String(reader.result)); reader.onerror=reject; reader.readAsDataURL(blob); });
-}
+    <style jsx global>{`@media screen { .print-area { display:none!important; } } @media print { @page { size:landscape; margin:10mm; } html,body { background:#fff!important; color:#111!important; margin:0!important; padding:0!important; } body * { visibility:hidden!important; } .screen-content { display:none!important; } .print-area, .print-area * { visibility:visible!important; } .print-area { display:block!important; position:absolute!important; left:0!important; top:0!important; width:100%!important; padding:0!important; background:#fff!important; color:#111!important; font-size:9px!important; } .print-area h1 { font-size:18px!important; font-weight:700!important; margin:0 0 5px!important; } .print-subtitle { margin:0 0 12px!important; } .print-table { display:table!important; width:100%!important; min-width:0!important; border-collapse:collapse!important; table-layout:fixed!important; } .print-table thead { display:table-header-group!important; } .print-table tbody { display:table-row-group!important; } .print-table tr { display:table-row!important; break-inside:avoid!important; page-break-inside:avoid!important; } .print-table th,.print-table td { display:table-cell!important; border:1px solid #999!important; padding:5px!important; vertical-align:top!important; overflow-wrap:anywhere!important; } .print-table th { background:#eee!important; font-weight:700!important; } .print-product-image { display:block!important; width:auto!important; height:auto!important; max-width:38px!important; max-height:38px!important; object-fit:contain!important; margin-bottom:3px!important; } }`}</style>
+  </main>
+};
