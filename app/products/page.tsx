@@ -72,6 +72,7 @@ export default function ProductsPage() {
   const [expandedPrices, setExpandedPrices] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [ratingFilter, setRatingFilter] = useState<number | null | "unrated" | `range-${number}-${number}`>(null);
+  const [ratingAnchor, setRatingAnchor] = useState<number | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -343,6 +344,7 @@ export default function ProductsPage() {
 
   function clearFilters() {
     setSearch("");
+    setRatingAnchor(null);
     setStatusFilter("all");
     setCategoryFilter("all");
     setRatingFilter(null);
@@ -729,15 +731,39 @@ export default function ProductsPage() {
                     <button
                       key={star}
                       type="button"
-                      onClick={() => setRatingFilter((current) => {
-                        if (current === star) return null;
-                        if (typeof current === "number") {
-                          const low = Math.min(current, star);
-                          const high = Math.max(current, star);
-                          return `range-${low}-${high}` as `range-${number}-${number}`;
-                        }
-                        return star;
-                      })}
+                      onClick={() => {
+                        setRatingFilter((current) => {
+                          if (current === star) {
+                            setRatingAnchor(null);
+                            return null;
+                          }
+                          if (typeof current === "number") {
+                            setRatingAnchor(current);
+                            const low = Math.min(current, star);
+                            const high = Math.max(current, star);
+                            return `range-${low}-${high}` as `range-${number}-${number}`;
+                          }
+                          if (typeof current === "string") {
+                            const match = current.match(/^range-(\d)-(\d)$/);
+                            if (match) {
+                              const anchor = ratingAnchor ?? Number(match[1]);
+                              if (star === anchor) {
+                                setRatingAnchor(null);
+                                return null;
+                              }
+                              const low = Math.min(anchor, star);
+                              const high = Math.max(anchor, star);
+                              return `range-${low}-${high}` as `range-${number}-${number}`;
+                            }
+                          }
+                          setRatingAnchor(star);
+                          return star;
+                        });
+                      }}
+                      onDoubleClick={() => {
+                        setRatingFilter(null);
+                        setRatingAnchor(null);
+                      }}
                       aria-pressed={ratingFilter === star || (typeof ratingFilter === "string" && !!ratingFilter.match(/^range-\d-\d$/) && (() => { const m = ratingFilter.match(/^range-(\d)-(\d)$/); return !!m && star >= Number(m[1]) && star <= Number(m[2]); })())}
                       aria-label={message(`Show ${star}-star products`, `عرض المنتجات بتقييم ${star} نجوم`)}
                       title={message(`${star} star — click one star to filter, then another to select a range`, `${star} نجوم — اختر نجمة للتصفية ثم نجمة أخرى لتحديد النطاق`)}
@@ -747,7 +773,7 @@ export default function ProductsPage() {
                   <span className="ml-1 hidden text-[10px] text-slate-400 sm:inline">{message("Click 2 stars for a range", "اختر نجمتين لتحديد النطاق")}</span>
                   <button
                     type="button"
-                    onClick={() => setRatingFilter((current) => current === "unrated" ? null : "unrated")}
+                    onClick={() => { setRatingAnchor(null); setRatingFilter((current) => current === "unrated" ? null : "unrated"); }}
                     aria-pressed={ratingFilter === "unrated"}
                     className={`rounded-md px-2 py-1 text-[11px] font-bold transition-colors ${ratingFilter === "unrated" ? "bg-slate-200 text-slate-900 ring-1 ring-slate-400" : "text-slate-500 hover:bg-slate-100"}`}
                     title={message("Show products without a rating", "عرض المنتجات بدون تقييم")}
@@ -755,7 +781,7 @@ export default function ProductsPage() {
                     ☆ {message("Not Rated", "بدون تقييم")}
                   </button>
                   {ratingFilter !== null && (
-                    <button type="button" onClick={() => setRatingFilter(null)} className="ml-1 rounded px-1 text-[10px] font-bold text-slate-500 hover:bg-slate-100">
+                    <button type="button" onClick={() => { setRatingFilter(null); setRatingAnchor(null); }} className="ml-1 rounded px-1 text-[10px] font-bold text-slate-500 hover:bg-slate-100">
                       {message("All ratings", "كل التقييمات")}
                     </button>
                   )}
