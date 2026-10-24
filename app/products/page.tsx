@@ -27,6 +27,7 @@ type Product = {
   categoryAr?: string;
   price: number;
   stock: number;
+  rating?: number;
   active: boolean;
   lastStatusChangedByName?: string;
   lastStatusChangedAt?: string;
@@ -35,6 +36,17 @@ type Product = {
   singleUnit?: Unit | null;
   variants?: WeightOption[];
   createdAt?: string;
+};
+
+type PerformanceRecord = {
+  productId: string;
+  expiryDate?: string;
+  rating: number;
+  note?: string;
+  promotions?: string[];
+  promotionDiscount?: number | string;
+  promotionNote?: string;
+  [key: string]: unknown;
 };
 
 type Employee = {
@@ -47,6 +59,9 @@ export default function ProductsPage() {
   const { language, isArabic, t } = useLanguage();
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [performanceRecords, setPerformanceRecords] = useState<PerformanceRecord[]>([]);
+  const [ratingSavingId, setRatingSavingId] = useState<string | null>(null);
+  const [ratingMessage, setRatingMessage] = useState<{ productId: string; text: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [statusTarget, setStatusTarget] = useState<Product | null>(null);
@@ -75,33 +90,150 @@ export default function ProductsPage() {
       setLoading(true);
       setError("");
 
-      const response = await fetch("/api/products", {
-        cache: "no-store",
-      });
+      const [response, performanceResponse] = await Promise.all([
+        fetch("/api/products", { cache: "no-store" }),
+        fetch("/api/product-performance", { cache: "no-store" }).catch(() => null),
+      ]);
 
       const data = await readResponse(response);
-
       if (!response.ok) {
-        throw new Error(
-          data.message || data.error || "Failed to load products"
-        );
+        throw new Error(data.message || data.error || "Failed to load products");
       }
 
-      const list = Array.isArray(data)
+      const list: Product[] = Array.isArray(data)
         ? data
         : Array.isArray(data.products)
           ? data.products
           : [];
 
-      setProducts(list);
+      let records: PerformanceRecord[] = [];
+      if (performanceResponse?.ok) {
+        const performanceData = await readResponse(performanceResponse);
+        const rawRecords = Array.isArray(performanceData)
+          ? performanceData
+          : Array.isArray(performanceData.items)
+            ? performanceData.items
+            : Array.isArray(performanceData.records)
+              ? performanceData.records
+              : Array.isArray(performanceData.data)
+                ? performanceData.data
+                : [];
+        records = rawRecords
+          .filter((item: any) => item && (item.productId || item.product?._id))
+          .map((item: any) => ({
+            ...item,
+            productId: String(item.productId || item.product?._id),
+            rating: Math.max(0, Math.min(5, Number(item.rating) || 0)),
+          }));
+      }
+
+      setPerformanceRecords(records);
+      const ratingByProduct = new Map(records.map((record) => [record.productId, record.rating]));
+      setProducts(list.map((product) => ({
+        ...product,
+        rating: ratingByProduct.get(String(product._id)) ?? 0,
+      })));
     } catch (err) {
       console.error("Load products error:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load products"
-      );
+      setError(err instanceof Error ? err.message : "Failed to load products");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function saveEmployerRating(product: Product, rating: number) {
+    if (ratingSavingId) return;
+
+    const productId = String(product._id);
+    const previousRating = Number(product.rating) || 0;
+    const existing = performanceRecords.find((record) => String(record.productId) === productId);
+    const nextRecord: PerformanceRecord = {
+      ...(existing || {}),
+      productId,
+      rating,
+      expiryDate: existing?.expiryDate || "",
+      note: existing?.note || "",
+      promotions: existing?.promotions || [],
+      promotionDiscount: existing?.promotionDiscount ?? 0,
+      promotionNote: existing?.promotionNote || "",
+    };
+    const nextRecords = existing
+      ? performanceRecords.map((record) =>
+          String(record.productId) === productId ? nextRecord : record
+        )
+      : [...performanceRecords, nextRecord];
+
+    setRatingSavingId(productId);
+    setRatingMessage(null);
+    setProducts((current) =>
+      current.map((item) => item._id === productId ? { ...item, rating } : item)
+    );
+
+    try {
+      const response = await fetch("/api/product-performance", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ items: nextRecords }),
+      });
+      const data = await readResponse(response);
+      if (!response.ok) {
+        throw new Error(data.message || data.error || "Failed to save employer rating");
+      }
+
+      setPerformanceRecords(nextRecords);
+      setRatingMessage({
+        productId,
+        text: message("Rating saved", "تم حفظ التقييم"),
+        ok: true,
+      });
+    } catch (err) {
+      console.error("Save employer rating error:", err);
+      setProducts((current) =>
+        current.map((item) => item._id === productId ? { ...item, rating: previousRating } : item)
+      );
+      setRatingMessage({
+        productId,
+        text: err instanceof Error ? err.message : message("Could not save rating", "تعذر حفظ التقييم"),
+        ok: false,
+      });
+    } finally {
+      setRatingSavingId(null);
+    }
+  }
+
+  function EmployerRating({ product }: { product: Product }) {
+    const rating = Number(product.rating) || 0;
+    const isSaving = ratingSavingId === product._id;
+    return (
+      <div className="min-w-[118px]">
+        <div className="flex items-center gap-0.5" role="group" aria-label={message("Employer rating", "تقييم صاحب العمل")}>
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button
+              key={star}
+              type="button"
+              onClick={() => void saveEmployerRating(product, star)}
+              disabled={ratingSavingId !== null}
+              aria-label={message(`Rate ${star} out of 5 stars`, `التقييم ${star} من 5`)}
+              aria-pressed={rating === star}
+              title={`${star}/5`}
+              className={`rounded px-0.5 text-xl leading-6 transition-colors disabled:cursor-wait disabled:opacity-50 ${
+                star <= rating ? "text-amber-400" : "text-slate-300 hover:text-amber-300"
+              }`}
+            >
+              ★
+            </button>
+          ))}
+          <span className="ml-1 text-[11px] font-bold text-slate-600">{rating ? `${rating}/5` : "—"}</span>
+        </div>
+        {isSaving && <p className="mt-0.5 text-[10px] text-slate-500">{message("Saving…", "جارٍ الحفظ…")}</p>}
+        {ratingMessage?.productId === product._id && !isSaving && (
+          <p className={`mt-0.5 max-w-[150px] break-words text-[10px] ${ratingMessage.ok ? "text-emerald-600" : "text-rose-600"}`}>
+            {ratingMessage.text}
+          </p>
+        )}
+      </div>
+    );
   }
 
   function getProductName(product: Product) {
@@ -671,7 +803,7 @@ export default function ProductsPage() {
                         t("sku"),
                         t("category"),
                         t("price"),
-                        t("stock"),
+                        message("Employer Rating", "تقييم صاحب العمل"),
                         t("status"),
                       ].map((heading) => (
                         <th
@@ -690,13 +822,6 @@ export default function ProductsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {filteredProducts.map((product) => {
                       const isActionLoading = actionLoading === product._id;
-                      const stockStatus =
-                        product.stock === 0
-                          ? "out"
-                          : product.stock <= 5
-                            ? "low"
-                            : "good";
-
                       const variantPrices =
                         product.productType === "multiple" &&
                         product.variants?.length
@@ -820,21 +945,9 @@ export default function ProductsPage() {
                             )}
                           </td>
 
-                          {/* Stock Status */}
+                          {/* Employer Rating */}
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {stockStatus === "out" ? (
-                              <span className="inline-flex rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-600">
-                                {t("outOfStock")}
-                              </span>
-                            ) : stockStatus === "low" ? (
-                              <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-600">
-                                {product.stock} {message("left", "متبقي")}
-                              </span>
-                            ) : (
-                              <span className="font-bold text-slate-700 text-xs">
-                                {product.stock}
-                              </span>
-                            )}
+                            <EmployerRating product={product} />
                           </td>
 
                           {/* Active / Inactive Switch & Date Info */}
@@ -995,15 +1108,9 @@ export default function ProductsPage() {
                             <span className="font-black text-slate-900 text-xs sm:text-sm">
                               QAR {highestPrice.toFixed(2)}
                             </span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              product.stock === 0
-                                ? "bg-red-50 text-red-600"
-                                : product.stock <= 5
-                                  ? "bg-amber-50 text-amber-600"
-                                  : "bg-emerald-50 text-emerald-700"
-                            }`}>
-                              {product.stock === 0 ? t("outOfStock") : `${message("Stock:", "المخزون:")} ${product.stock}`}
-                            </span>
+                            <div className="min-w-0">
+                              <EmployerRating product={product} />
+                            </div>
                           </div>
                         </div>
                       </div>
