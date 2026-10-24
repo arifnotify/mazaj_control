@@ -13,11 +13,12 @@ type Product = {
   expirationDate?: string; bestBefore?: string;
 };
 type ProductMeta = {
-  expiryDate: string; rating: number; note: string;
+  expiryDate: string; rating: number; ratingByEmployeeId?: string; ratingByName?: string; ratingAt?: string | Date | null; note: string;
   promotions: Record<Platform, boolean>;
   promotionDiscount: Record<Platform, string>;
   promotionNote: Record<Platform, string>;
 };
+type Employee = { _id: string; name: string; active?: boolean };
 type SavedAnalysis = { _id: string; title: string; periodType: "daily" | "monthly"; period: string; createdAt: string; counts?: Record<string, number> };
 type Tab = "all" | "starred" | "slow" | "steady" | "best" | "expiry" | "promotion";
 const PLATFORMS: Platform[] = ["Snoonu", "Talabat", "Rafeeq", "Keeta"];
@@ -73,6 +74,13 @@ export default function ProductPerformancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [ratingTarget, setRatingTarget] = useState<Product | null>(null);
+  const [pendingRating, setPendingRating] = useState(0);
+  const [employeeId, setEmployeeId] = useState("");
+  const [employeePin, setEmployeePin] = useState("");
+  const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [ratingSaving, setRatingSaving] = useState(false);
   const tx = useCallback((en: string, ar: string) => isArabic ? ar : en, [isArabic]);
   const activePeriod = periodType === "daily" ? period : period.slice(0,7);
 
@@ -146,6 +154,75 @@ export default function ProductPerformancePage() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, meta, tab, platform, search, category, isArabic, expiryDays]);
+
+  async function openRatingDialog(product: Product, rating: number) {
+    setRatingTarget(product);
+    setPendingRating(rating);
+    setEmployeeId("");
+    setEmployeePin("");
+    setEmployees([]);
+    setEmployeeLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/employees", { cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || data.error || "Could not load employees");
+      const list: Employee[] = Array.isArray(data) ? data : Array.isArray(data.employees) ? data.employees : [];
+      setEmployees(list.filter((e) => e.active !== false && e.name?.trim()));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load employees");
+    } finally {
+      setEmployeeLoading(false);
+    }
+  }
+
+  function closeRatingDialog() {
+    if (ratingSaving) return;
+    setRatingTarget(null);
+    setPendingRating(0);
+    setEmployeeId("");
+    setEmployeePin("");
+    setError("");
+  }
+
+  async function confirmRatingChange() {
+    if (!ratingTarget || ratingSaving) return;
+    if (!employeeId) { setError(tx("Please select an employee.", "يرجى اختيار الموظف.")); return; }
+    if (!/^\\d{3}$/.test(employeePin)) { setError(tx("Enter the 3-digit employee PIN.", "أدخل رمز PIN المكون من 3 أرقام.")); return; }
+    setRatingSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/product-performance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ action: "save-rating", productId: ratingTarget._id, rating: pendingRating, employeeId, employeePin }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.success === false) throw new Error(data.message || data.error || "Failed to save rating");
+      const old = meta[ratingTarget._id] || blankMeta(ratingTarget);
+      setMeta((current) => ({
+        ...current,
+        [ratingTarget._id]: {
+          ...blankMeta(ratingTarget),
+          ...old,
+          rating: pendingRating,
+          ratingByEmployeeId: data.ratingByEmployeeId || employeeId,
+          ratingByName: data.ratingByName || employees.find((e) => e._id === employeeId)?.name || "",
+          ratingAt: data.ratingAt || new Date().toISOString(),
+        },
+      }));
+      setMessage(tx("Rating saved successfully.", "تم حفظ التقييم بنجاح."));
+      setRatingTarget(null);
+      setPendingRating(0);
+      setEmployeeId("");
+      setEmployeePin("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save rating");
+    } finally {
+      setRatingSaving(false);
+    }
+  }
 
   async function saveAll() {
     setSaving(true); setMessage(""); setError("");
@@ -258,7 +335,7 @@ export default function ProductPerformancePage() {
         {loading?<p className="p-10 text-center">{tx("Loading products…","جارٍ تحميل المنتجات…")}</p>:visible.length===0?<p className="p-10 text-center text-slate-500">{tx("No products match this list and category.","لا توجد منتجات مطابقة لهذه القائمة والفئة.")}</p>:<div className="overflow-x-auto"><table className="w-full min-w-[1200px] text-sm"><thead className="bg-slate-100 text-xs text-slate-600"><tr>{[tx("Product","المنتج"),tx("SKU / Barcode","رمز المنتج / باركود"),tx("Employer rating (1–5)","تقييم الموظف (١–٥)"),tx("Expiry date","تاريخ الانتهاء"),tx("Promote on apps","الترويج عبر التطبيقات"),tx("Discount %","الخصم %"),tx("Promotion note","ملاحظة العرض"),tx("Notes","ملاحظات")].map(h=><th key={h} className="px-3 py-3 text-start">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{visible.map(p=>{const m=getMeta(p), ex=expiryStatus(p), src=imageOf(p);return <tr key={p._id} className="align-top hover:bg-slate-50">
           <td className="px-3 py-3"><div className="flex items-start gap-3">{src?<img src={src} alt={p.nameEn||p.nameAr||"Product"} className="h-16 w-16 rounded-lg border border-slate-200 bg-white object-contain" onError={e=>{e.currentTarget.style.display="none";}}/>:<div className="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-100 text-[10px] text-slate-400">{tx("No image","لا صورة")}</div>}<div className="min-w-44"><p className="font-bold">{isArabic?(p.nameAr||p.nameEn||"منتج بلا اسم"):(p.nameEn||p.nameAr||"Unnamed product")}</p>{p.nameAr&&p.nameEn&&<p className="mt-1 text-xs text-slate-500" dir={isArabic?"ltr":"rtl"}>{isArabic?p.nameEn:p.nameAr}</p>}<p className="mt-1 text-xs text-slate-400">{categoryOf(p,isArabic)}</p><p className={`mt-1 text-xs font-bold ${ex.expired?"text-rose-700":ex.near?"text-amber-700":m.rating<=2&&m.rating>0?"text-orange-700":m.rating>=4?"text-emerald-700":"text-slate-500"}`}>{ex.expired?tx("Expired","منتهي الصلاحية"):ex.near?tx("Near expiry","قريب الانتهاء"):m.rating>0?`${m.rating}/5 — ${m.rating<=2?tx("Low running","ضعيف الحركة"):m.rating===3?tx("Steady","متوسط الحركة"):tx("Best running","أفضل حركة")}`:tx("Not rated","لم يتم التقييم")}</p></div></div></td>
           <td className="px-3 py-3">{p.sku||p.barcode||"—"}</td>
-          <td className="px-3 py-3"><div className="flex flex-col gap-2"><div className="flex gap-0.5" role="group" aria-label={tx("Set product rating","تقييم المنتج")}>{[1,2,3,4,5].map(n=><button key={n} type="button" title={`${n}/5`} onClick={()=>updateMeta(p,{rating:n})} className={`text-xl leading-7 ${m.rating>=n?"text-amber-500":"text-slate-300"} hover:scale-110`} aria-label={`${n} ${tx("stars","نجوم")}`}>★</button>)}<button type="button" title={tx("Clear rating","مسح التقييم")} onClick={()=>updateMeta(p,{rating:0})} className="ms-2 text-xs text-slate-500">{tx("Clear","مسح")}</button></div><span className="text-xs text-slate-500">{m.rating?`${m.rating}/5 ${stars(m.rating)}`:tx("Choose 1–5 stars","اختر من ١ إلى ٥ نجوم")}</span></div></td>
+          <td className="px-3 py-3"><div className="flex flex-col gap-1"><div className="flex gap-0.5" role="group" aria-label={tx("Set product rating","تقييم المنتج")}>{[1,2,3,4,5].map(n=><button key={n} type="button" title={`${n}/5`} onClick={()=>openRatingDialog(p,n)} className={`text-xl leading-7 ${m.rating>=n?"text-amber-500":"text-slate-300"} hover:scale-110`} aria-label={`${n} ${tx("stars","نجوم")}`}>★</button>)}</div><span className="text-xs text-slate-500">{m.rating?`${m.rating}/5 ${stars(m.rating)}`:tx("Choose 1–5 stars","اختر من ١ إلى ٥ نجوم")}</span>{m.rating>0 && <span className="text-[10px] leading-4 text-slate-500">{m.ratingByName ? `${tx("By","بواسطة")}: ${m.ratingByName}` : ""}{m.ratingAt ? `${m.ratingByName ? " · " : ""}${new Date(m.ratingAt).toLocaleDateString(isArabic?"ar-QA":"en-GB")}` : ""}</span>}</div></td>
           <td className="px-3 py-3"><input type="date" value={m.expiryDate} onChange={e=>updateMeta(p,{expiryDate:e.target.value})} className="rounded-md border border-slate-300 p-1.5"/><p className="mt-1 text-xs text-slate-500">{ex.days===null?"—":ex.days<0?`${Math.abs(ex.days)} ${tx("days overdue","أيام بعد الانتهاء")}`:`${ex.days} ${tx("days left","يوم متبقٍ")}`}</p></td>
           <td className="px-3 py-3"><div className="space-y-1.5">{PLATFORMS.map(k=><label key={k} className="flex items-center gap-2"><input type="checkbox" checked={m.promotions[k]} onChange={e=>updateMeta(p,{promotions:{...m.promotions,[k]:e.target.checked}})}/><span>{k}</span></label>)}</div></td>
           <td className="px-3 py-3"><div className="space-y-1">{PLATFORMS.filter(k=>platform==="All"||platform===k).map(k=><label key={k} className="flex items-center gap-1 text-xs"><span>{k}</span><input type="number" min="0" max="100" value={m.promotionDiscount[k]} onChange={e=>updateMeta(p,{promotionDiscount:{...m.promotionDiscount,[k]:e.target.value}})} className="w-16 rounded border border-slate-300 p-1"/></label>)}</div></td>
@@ -269,6 +346,32 @@ export default function ProductPerformancePage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:hidden"><h2 className="font-black">{tx("Saved daily / monthly analyses","التحليلات اليومية / الشهرية المحفوظة")}</h2>{analyses.length===0?<p className="mt-2 text-sm text-slate-500">{tx("No saved snapshots yet. Click Save analysis snapshot to save this summary.","لا توجد تحليلات محفوظة بعد. اضغط حفظ نسخة التحليل لحفظ الملخص.")}</p>:<div className="mt-3 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-slate-500"><th className="p-2 text-start">{tx("Period","الفترة")}</th><th className="p-2 text-start">{tx("Type","النوع")}</th><th className="p-2 text-start">{tx("Saved at","وقت الحفظ")}</th><th className="p-2 text-start">{tx("All","الكل")}</th><th className="p-2 text-start">{tx("Low / Steady / Best","ضعيف / متوسط / ممتاز")}</th></tr></thead><tbody>{analyses.map(a=><tr key={a._id} className="border-t border-slate-100"><td className="p-2">{a.period}</td><td className="p-2">{a.periodType==="daily"?tx("Daily","يومي"):tx("Monthly","شهري")}</td><td className="p-2">{a.createdAt?new Date(a.createdAt).toLocaleString(isArabic?"ar-QA":"en-GB"):"—"}</td><td className="p-2">{a.counts?.all??"—"}</td><td className="p-2">{a.counts?.slow??0} / {a.counts?.steady??0} / {a.counts?.best??0}</td></tr>)}</tbody></table></div>}</section>
       <p className="text-xs leading-5 text-slate-500 print:hidden">{tx("Low running = 1–2 stars, steady = 3 stars, best running = 4–5 stars. Rating is set by the employer. Units sold and stock are not shown or used. Save changes to store data in MongoDB.","ضعيف الحركة = نجمة أو نجمتان، متوسط = ٣ نجوم، الأفضل حركة = ٤ أو ٥ نجوم. الموظف يحدد التقييم. لا يتم عرض أو استخدام الوحدات المباعة أو المخزون. احفظ التغييرات لتخزين البيانات في MongoDB.")}</p>
     </div>
+    {ratingTarget && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-3 backdrop-blur-sm print:hidden" role="dialog" aria-modal="true" aria-label={tx("Confirm star rating","تأكيد تقييم المنتج")} onMouseDown={(e)=>{if(e.target===e.currentTarget) closeRatingDialog();}}>
+      <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-2xl" dir={isArabic?"rtl":"ltr"}>
+        <div>
+          <h2 className="text-lg font-black">{tx("Confirm Star Rating","تأكيد تقييم المنتج")}</h2>
+          <p className="mt-1 text-xs text-slate-500">{isArabic ? (ratingTarget.nameAr || ratingTarget.nameEn || "منتج") : (ratingTarget.nameEn || ratingTarget.nameAr || "Unnamed product")}</p>
+          <div className="mt-2 flex items-center gap-1 text-2xl">{[1,2,3,4,5].map(n=><span key={n} className={n<=pendingRating?"text-amber-500":"text-slate-200"}>★</span>)}<span className="text-xs font-bold text-slate-500">{pendingRating}/5</span></div>
+          <p className="mt-2 text-xs text-slate-500">{tx("Select employee and enter the same 3-digit PIN used for product ON/OFF.","اختر الموظف وأدخل رمز PIN المكون من 3 أرقام المستخدم لتشغيل/إيقاف المنتج.")}</p>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-bold">{tx("Employee","الموظف")}</label>
+          <select value={employeeId} onChange={e=>{setEmployeeId(e.target.value);setError("");}} disabled={employeeLoading||ratingSaving} className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
+            <option value="">{employeeLoading?tx("Loading employees…","جارٍ تحميل الموظفين…"):tx("Select employee","اختر الموظف")}</option>
+            {employees.map(e=><option key={e._id} value={e._id}>{e.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-bold">{tx("3-digit Employee PIN","رمز PIN للموظف (3 أرقام)")}</label>
+          <input type="password" inputMode="numeric" autoComplete="off" maxLength={3} value={employeePin} onChange={e=>{setEmployeePin(e.target.value.replace(/\\D/g,"").slice(0,3));setError("");}} placeholder="•••" className="w-full rounded-xl border border-slate-300 p-3 text-sm tracking-[0.35em]" />
+        </div>
+        {error && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
+        <div className="flex gap-2">
+          <button type="button" onClick={closeRatingDialog} disabled={ratingSaving} className="flex-1 rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold disabled:opacity-50">{tx("Cancel","إلغاء")}</button>
+          <button type="button" onClick={confirmRatingChange} disabled={ratingSaving||employeeLoading||!employeeId||!/^\\d{3}$/.test(employeePin)} className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{ratingSaving?tx("Verifying…","جارٍ التحقق…"):tx("Verify PIN & Save","تحقق واحفظ")}</button>
+        </div>
+      </div>
+    </div>}
     <section className="print-area">
       <h1>{tx("MAZAJ CONTROL — Product Performance","MAZAJ CONTROL — أداء المنتجات")}</h1>
       <p className="print-subtitle">{tabLabel(tab,tx)} — {activePeriod} · {visible.length} {tx("products","منتجات")}</p>
