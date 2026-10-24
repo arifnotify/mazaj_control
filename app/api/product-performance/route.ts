@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       if (!mongoose.isValidObjectId(employeeId)) {
         return NextResponse.json({ success: false, message: "Please select a valid employee." }, { status: 400 });
       }
-      if (!/^\\d{3}$/.test(employeePin)) {
+      if (!/^\d{3}$/.test(employeePin)) {
         return NextResponse.json({ success: false, message: "Employee PIN must contain exactly 3 digits." }, { status: 400 });
       }
       if (!Number.isInteger(rating) || rating < 1 || rating > 5) {

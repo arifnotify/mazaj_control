@@ -192,7 +192,7 @@ export default function ProductsPage() {
       setError(message("Please select an employee.", "يرجى اختيار الموظف"));
       return;
     }
-    if (!/^\\d{3}$/.test(employeePin)) {
+    if (!/^\d{3}$/.test(employeePin)) {
       setError(message("Please enter a valid 3-digit employee PIN.", "أدخل رمز PIN صحيحًا مكونًا من 3 أرقام"));
       return;
     }
@@ -1377,12 +1377,12 @@ export default function ProductsPage() {
             </div>
             <div>
               <label htmlFor="rating-employee-pin" className="mb-1 block text-[11px] font-bold text-slate-500">{message("Employee PIN (3 digits) *", "رمز PIN للموظف (3 أرقام) *")}</label>
-              <input id="rating-employee-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={3} value={employeePin} onChange={(e) => { setEmployeePin(e.target.value.replace(/\\D/g, "").slice(0, 3)); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") void confirmRatingChange(); }} placeholder={message("Enter 3-digit PIN", "أدخل 3 أرقام")} disabled={ratingSavingId !== null} className="w-full rounded-xl border border-slate-300 p-2.5 text-center font-mono text-base tracking-[0.4em] text-slate-900" />
+              <input id="rating-employee-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={3} value={employeePin} onChange={(e) => { setEmployeePin(e.target.value.replace(/\D/g, "").slice(0, 3)); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") void confirmRatingChange(); }} placeholder={message("Enter 3-digit PIN", "أدخل 3 أرقام")} disabled={ratingSavingId !== null} className="w-full rounded-xl border border-slate-300 p-2.5 text-center font-mono text-base tracking-[0.4em] text-slate-900" />
             </div>
             {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{error}</div>}
             <div className="flex justify-end gap-2">
               <button type="button" disabled={ratingSavingId !== null} onClick={closeRatingDialog} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">{message("Cancel", "إلغاء")}</button>
-              <button type="button" disabled={!employeeId || !/^\\d{3}$/.test(employeePin) || employeeLoading || ratingSavingId !== null} onClick={() => void confirmRatingChange()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{ratingSavingId ? message("Saving...", "جارٍ الحفظ...") : message("Verify PIN & Save", "تحقق واحفظ")}</button>
+              <button type="button" disabled={!employeeId || !/^\d{3}$/.test(employeePin) || employeeLoading || ratingSavingId !== null} onClick={() => void confirmRatingChange()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{ratingSavingId ? message("Saving...", "جارٍ الحفظ...") : message("Verify PIN & Save", "تحقق واحفظ")}</button>
             </div>
           </div>
         </div>
