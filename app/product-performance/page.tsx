@@ -181,11 +181,22 @@ export default function ProductsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ items: nextRecords }),
+        // Save only the selected product. The API reports how many valid product IDs it saved.
+        body: JSON.stringify({ items: [nextRecord] }),
       });
       const data = await readResponse(response);
       if (!response.ok || data.success === false) {
         throw new Error(data.message || data.error || "Failed to save employer rating");
+      }
+      if (Number(data.saved) < 1) {
+        throw new Error("Rating was not saved: product ID was not accepted by the API.");
+      }
+
+      // Confirm the rating is readable from the database before showing a success message.
+      const verifyResponse = await fetch("/api/product-performance", { cache: "no-store" });
+      const verifyData = await readResponse(verifyResponse);
+      if (!verifyResponse.ok || Number(verifyData?.data?.[productId]?.rating) !== rating) {
+        throw new Error("Rating save could not be verified. Please check the product ID and API response.");
       }
 
       setPerformanceRecords(nextRecords);
