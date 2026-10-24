@@ -71,7 +71,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [expandedPrices, setExpandedPrices] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [ratingFilter, setRatingFilter] = useState<number | null | "unrated">(null);
+  const [ratingFilter, setRatingFilter] = useState<number | null | "unrated" | `range-${number}-${number}`>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -315,11 +315,17 @@ export default function ProductsPage() {
 
       const matchesCategory =
         categoryFilter === "all" || categoryKey === categoryFilter;
+      const productRating = Number(product.rating || 0);
+      const rangeMatch = typeof ratingFilter === "string"
+        ? ratingFilter.match(/^range-(\d)-(\d)$/)
+        : null;
       const matchesRating =
         ratingFilter === null ||
         (ratingFilter === "unrated"
-          ? Number(product.rating || 0) === 0
-          : Number(product.rating || 0) === ratingFilter);
+          ? productRating === 0
+          : rangeMatch
+            ? productRating >= Number(rangeMatch[1]) && productRating <= Number(rangeMatch[2])
+            : productRating === ratingFilter);
 
       return matchesSearch && matchesStatus && matchesCategory && matchesRating;
     });
@@ -729,6 +735,23 @@ export default function ProductsPage() {
                       title={message(`${star} star`, `${star} نجوم`)}
                       className={`rounded-md px-1 text-lg leading-6 transition-colors ${ratingFilter === star ? "bg-amber-100 text-amber-600 ring-1 ring-amber-400" : "text-slate-300 hover:bg-amber-50 hover:text-amber-400"}`}
                     >★</button>
+                  ))}
+                  <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />
+                  {([
+                    ["range-1-2", "1–2"],
+                    ["range-1-3", "1–3"],
+                    ["range-2-4", "2–4"],
+                    ["range-1-4", "1–4"],
+                    ["range-1-5", "1–5"],
+                  ] as [`range-${number}-${number}`, string][]).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setRatingFilter((current) => current === value ? null : value)}
+                      aria-pressed={ratingFilter === value}
+                      title={message(`Show products rated ${label} stars`, `عرض المنتجات بتقييم من ${label} نجوم`)}
+                      className={`whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-bold transition-colors ${ratingFilter === value ? "bg-amber-100 text-amber-700 ring-1 ring-amber-400" : "text-slate-500 hover:bg-amber-50 hover:text-amber-700"}`}
+                    >{label}</button>
                   ))}
                   <button
                     type="button"
