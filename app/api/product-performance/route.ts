@@ -134,4 +134,5 @@ export async function POST(request: NextRequest) {
     console.error("Product performance analysis save error:", error);
     return NextResponse.json({ error: "Could not save analysis snapshot." }, { status: 500 });
   }
+  
 }
