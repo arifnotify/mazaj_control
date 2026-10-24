@@ -143,6 +143,7 @@ export default function StockReceivingPage() {
   const [emailDraft, setEmailDraft] = useState<{ to: string; subject: string; body: string } | null>(null);
   const [loadingStoreRequests, setLoadingStoreRequests] = useState(false);
   const [storeHistoryOpen, setStoreHistoryOpen] = useState(false);
+  const [storeRequestFormOpen, setStoreRequestFormOpen] = useState(false);
   const [expandedRequestIds, setExpandedRequestIds] = useState<string[]>([]);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [expandedSummaryDates, setExpandedSummaryDates] = useState<string[]>([]);
@@ -1294,14 +1295,31 @@ export default function StockReceivingPage() {
           {/* =========================================
               DAILY STORE STOCK REQUEST
           ========================================== */}
-          <section className="no-print rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6 space-y-5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between border-b border-slate-100 pb-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">{isArabic ? "طلب مخزون المتجر" : "Daily Store Stock Request"}</h2>
-                <p className="mt-1 text-xs sm:text-sm text-slate-500">{isArabic ? "اختر المنتجات والكميات المطلوبة وأرسلها إلى مسؤول المخزن." : "Quickly select the products and quantities the shop needs, then email the storekeeper."}</p>
+          <section className="no-print overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <button
+              type="button"
+              onClick={() => setStoreRequestFormOpen((open) => !open)}
+              aria-expanded={storeRequestFormOpen}
+              className="flex w-full items-center justify-between gap-3 p-4 text-start transition hover:bg-slate-50 sm:p-5"
+            >
+              <div className="min-w-0">
+                <h2 className="text-base font-bold text-slate-900 sm:text-lg">{isArabic ? "طلب مخزون المتجر" : "Daily Store Stock Request"}</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {storeRequestItems.length > 0
+                    ? `${storeRequestItems.length} ${isArabic ? "منتجات مضافة" : "items added"} · ${isArabic ? "إجمالي الكمية" : "Total qty"}: ${storeRequestItems.reduce((sum, item) => sum + item.quantity, 0)}`
+                    : (isArabic ? "اضغط لفتح النموذج وإضافة المنتجات" : "Tap to open the form and add products")}
+                </p>
               </div>
-              <div className="rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 self-start">To: inventory@mazajnuts.com</div>
-            </div>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xl font-bold text-slate-600">
+                {storeRequestFormOpen ? "−" : "+"}
+              </span>
+            </button>
+
+            {storeRequestFormOpen && <div className="space-y-5 border-t border-slate-200 p-4 sm:p-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between border-b border-slate-100 pb-4">
+                <p className="text-xs sm:text-sm text-slate-500">{isArabic ? "اختر المنتجات والكميات المطلوبة وأرسلها إلى مسؤول المخزن." : "Quickly select the products and quantities the shop needs, then email the storekeeper."}</p>
+                <div className="self-start rounded-xl bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700">To: inventory@mazajnuts.com</div>
+              </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <div>
@@ -1451,6 +1469,7 @@ export default function StockReceivingPage() {
               <button type="button" onClick={submitStoreRequest} disabled={storeRequestSaving || storeRequestItems.length === 0} className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 transition shadow-sm self-end">{storeRequestSaving ? (isArabic ? "جارٍ الحفظ..." : "Saving...") : (isArabic ? "حفظ وإرسال بالبريد" : "Save & Email Storekeeper")}</button>
             </div>
             <p className="text-xs text-slate-400">{isArabic ? "يُحفظ الطلب في سجل لوحة التحكم. سيفتح البريد كمسودة ويجب الضغط على إرسال." : "Each request is saved in dashboard history. The email opens as a draft; click Send to send it."}</p>
+            </div>}
           </section>
 
           {/* Collapsible store request history */}
