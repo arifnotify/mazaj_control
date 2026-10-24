@@ -204,7 +204,7 @@ export default function ProductPerformancePage() {
             if (blob.type.startsWith("image/")) {
               const data = await blobToDataUrl(blob);
               const imageId = workbook.addImage({base64:data,extension:blob.type.includes("png")?"png":"jpeg"});
-              ws.addImage(imageId,{tl:{col:0,row:row.number-1},br:{col:1,row:row.number}});
+              ws.addImage(imageId, `A${row.number}:B${row.number + 1}`);
             }
           }
         } catch { /* keep row even if image host blocks cross-origin fetch */ }
