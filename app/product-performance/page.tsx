@@ -174,7 +174,8 @@ export default function ProductPerformancePage() {
     setMessage("");
     try {
     const workbook = new ExcelJS.Workbook(); workbook.creator = "MAZAJ CONTROL";
-    const ws = workbook.addWorksheet(tabLabel(tab, tx).slice(0,31), { views:[{state:"frozen",ySplit:1}] });
+    const worksheetName = tabLabel(tab, tx).replace(/[\\/*?:\[\]]/g, "-").slice(0,31).replace(/^\'+|\'+$/g, "") || "Products";
+    const ws = workbook.addWorksheet(worksheetName, { views:[{state:"frozen",ySplit:1}] });
     ws.columns = [
       {header:tx("Image","الصورة"),key:"image",width:14},
       {header:tx("Product (English)","المنتج (إنجليزي)"),key:"nameEn",width:28},
@@ -203,11 +204,7 @@ export default function ProductPerformancePage() {
             if (blob.type.startsWith("image/")) {
               const data = await blobToDataUrl(blob);
               const imageId = workbook.addImage({base64:data,extension:blob.type.includes("png")?"png":"jpeg"});
-              const imagePos = {
-                tl: { col:0, row:row.number - 1, nativeCol:0, nativeColOff:0, nativeRow:row.number - 1, nativeRowOff:0, colOff:0, rowOff:0, ext:0 } as any,
-                br: { col:1, row:row.number, nativeCol:1, nativeColOff:0, nativeRow:row.number, nativeRowOff:0, colOff:0, rowOff:0, ext:0 } as any,
-              };
-              ws.addImage(imageId, imagePos as any);
+              ws.addImage(imageId,{tl:{col:0,row:row.number-1},br:{col:1,row:row.number}});
             }
           }
         } catch { /* keep row even if image host blocks cross-origin fetch */ }
