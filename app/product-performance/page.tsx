@@ -188,7 +188,7 @@ export default function ProductPerformancePage() {
   async function confirmRatingChange() {
     if (!ratingTarget || ratingSaving) return;
     if (!employeeId) { setError(tx("Please select an employee.", "يرجى اختيار الموظف.")); return; }
-    if (!/^\\d{3}$/.test(employeePin)) { setError(tx("Enter the 3-digit employee PIN.", "أدخل رمز PIN المكون من 3 أرقام.")); return; }
+    if (!/^\d{3}$/.test(employeePin)) { setError(tx("Enter the 3-digit employee PIN.", "أدخل رمز PIN المكون من 3 أرقام.")); return; }
     setRatingSaving(true);
     setError("");
     try {
@@ -363,12 +363,12 @@ export default function ProductPerformancePage() {
         </div>
         <div>
           <label className="mb-1 block text-xs font-bold">{tx("3-digit Employee PIN","رمز PIN للموظف (3 أرقام)")}</label>
-          <input type="password" inputMode="numeric" autoComplete="off" maxLength={3} value={employeePin} onChange={e=>{setEmployeePin(e.target.value.replace(/\\D/g,"").slice(0,3));setError("");}} placeholder="•••" className="w-full rounded-xl border border-slate-300 p-3 text-sm tracking-[0.35em]" />
+          <input type="password" inputMode="numeric" autoComplete="off" maxLength={3} value={employeePin} onChange={e=>{setEmployeePin(e.target.value.replace(/\D/g,"").slice(0,3));setError("");}} placeholder="•••" className="w-full rounded-xl border border-slate-300 p-3 text-sm tracking-[0.35em]" />
         </div>
         {error && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{error}</p>}
         <div className="flex gap-2">
           <button type="button" onClick={closeRatingDialog} disabled={ratingSaving} className="flex-1 rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold disabled:opacity-50">{tx("Cancel","إلغاء")}</button>
-          <button type="button" onClick={confirmRatingChange} disabled={ratingSaving||employeeLoading||!employeeId||!/^\\d{3}$/.test(employeePin)} className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{ratingSaving?tx("Verifying…","جارٍ التحقق…"):tx("Verify PIN & Save","تحقق واحفظ")}</button>
+          <button type="button" onClick={confirmRatingChange} disabled={ratingSaving||employeeLoading||!employeeId||!/^\d{3}$/.test(employeePin)} className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{ratingSaving?tx("Verifying…","جارٍ التحقق…"):tx("Verify PIN & Save","تحقق واحفظ")}</button>
         </div>
       </div>
     </div>}
