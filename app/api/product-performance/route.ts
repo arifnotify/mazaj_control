@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
+import { verifyEmployeePin } from "@/lib/employeePin";
+import Employee from "@/models/Employee";
 
 export const dynamic = "force-dynamic";
 const PLATFORMS = ["Snoonu", "Talabat", "Rafeeq", "Keeta"] as const;
@@ -9,6 +11,9 @@ const ProductPerformanceSchema = new mongoose.Schema({
   productId: { type: mongoose.Schema.Types.ObjectId, required: true, unique: true, index: true },
   expiryDate: { type: String, default: "" },
   rating: { type: Number, min: 0, max: 5, default: 0 },
+  ratingByEmployeeId: { type: mongoose.Schema.Types.ObjectId, default: null },
+  ratingByName: { type: String, default: "" },
+  ratingAt: { type: Date, default: null },
   note: { type: String, default: "" },
   promotions: { type: mongoose.Schema.Types.Mixed, default: {} },
   promotionDiscount: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -40,7 +45,6 @@ function cleanRecord(item: any) {
   };
   return {
     expiryDate: typeof item?.expiryDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.expiryDate) ? item.expiryDate : "",
-    rating: Math.max(0, Math.min(5, Math.round(Number(item?.rating) || 0))),
     note: typeof item?.note === "string" ? item.note.slice(0, 2000) : "",
     promotions: platformRecord(item?.promotions, "boolean"),
     promotionDiscount: platformRecord(item?.promotionDiscount, "discount"),
@@ -60,6 +64,9 @@ export async function GET() {
       data[String(record.productId)] = {
         expiryDate: record.expiryDate || "",
         rating: Math.max(0, Math.min(5, Number(record.rating ?? (record.starred ? 5 : 0)) || 0)),
+        ratingByEmployeeId: record.ratingByEmployeeId ? String(record.ratingByEmployeeId) : "",
+        ratingByName: record.ratingByName || "",
+        ratingAt: record.ratingAt || null,
         note: record.note || "",
         promotions: record.promotions || {},
         promotionDiscount: record.promotionDiscount || {},
@@ -111,6 +118,62 @@ export async function PUT(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    if (body?.action === "save-rating") {
+      const productId = typeof body.productId === "string" ? body.productId : "";
+      const employeeId = typeof body.employeeId === "string" ? body.employeeId.trim() : "";
+      const employeePin = typeof body.employeePin === "string" ? body.employeePin : "";
+      const rating = Number(body.rating);
+
+      if (!mongoose.isValidObjectId(productId)) {
+        return NextResponse.json({ success: false, message: "Invalid product ID." }, { status: 400 });
+      }
+      if (!mongoose.isValidObjectId(employeeId)) {
+        return NextResponse.json({ success: false, message: "Please select a valid employee." }, { status: 400 });
+      }
+      if (!/^\\d{3}$/.test(employeePin)) {
+        return NextResponse.json({ success: false, message: "Employee PIN must contain exactly 3 digits." }, { status: 400 });
+      }
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return NextResponse.json({ success: false, message: "Rating must be between 1 and 5." }, { status: 400 });
+      }
+
+      await connectDB();
+      const employee = await Employee.findOne({ _id: employeeId, active: { $ne: false } }).select("+pinHash");
+      if (!employee || !employee.name?.trim()) {
+        return NextResponse.json({ success: false, message: "Employee not found or inactive." }, { status: 400 });
+      }
+      if (typeof employee.pinHash !== "string" || !employee.pinHash) {
+        return NextResponse.json({ success: false, message: "This employee does not have a PIN configured." }, { status: 400 });
+      }
+      const pinIsValid = await verifyEmployeePin(employeePin, employee.pinHash);
+      if (!pinIsValid) {
+        return NextResponse.json({ success: false, message: "Incorrect employee PIN." }, { status: 401 });
+      }
+
+      const now = new Date();
+      const saved = await ProductPerformance.findOneAndUpdate(
+        { productId: new mongoose.Types.ObjectId(productId) },
+        {
+          $set: {
+            rating,
+            ratingByEmployeeId: employee._id,
+            ratingByName: employee.name.trim().slice(0, 120),
+            ratingAt: now,
+          },
+          $setOnInsert: { productId: new mongoose.Types.ObjectId(productId) },
+        },
+        { upsert: true, new: true, runValidators: true },
+      ).lean();
+
+      return NextResponse.json({
+        success: true,
+        rating: saved?.rating ?? rating,
+        ratingByName: saved?.ratingByName ?? employee.name.trim(),
+        ratingAt: saved?.ratingAt ?? now,
+      });
+    }
+
     if (body?.action !== "save-analysis") return NextResponse.json({ error: "Unknown action." }, { status: 400 });
     const periodType = body.periodType === "monthly" ? "monthly" : body.periodType === "daily" ? "daily" : null;
     const validPeriod = typeof body.period === "string" &&

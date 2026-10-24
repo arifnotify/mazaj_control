@@ -42,6 +42,8 @@ type PerformanceRecord = {
   productId: string;
   expiryDate?: string;
   rating: number;
+  ratingByName?: string;
+  ratingAt?: string | Date | null;
   note?: string;
   promotions?: string[];
   promotionDiscount?: number | string;
@@ -65,6 +67,8 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [statusTarget, setStatusTarget] = useState<Product | null>(null);
+  const [ratingTarget, setRatingTarget] = useState<Product | null>(null);
+  const [pendingRating, setPendingRating] = useState<number>(0);
   const [employeeId, setEmployeeId] = useState("");
   const [employeePin, setEmployeePin] = useState("");
   const [employeeLoading, setEmployeeLoading] = useState(false);
@@ -150,73 +154,95 @@ export default function ProductsPage() {
     }
   }
 
-  async function saveEmployerRating(product: Product, rating: number) {
+  async function openRatingDialog(product: Product, rating: number) {
+    if (ratingSavingId || actionLoading !== null) return;
+    setRatingTarget(product);
+    setPendingRating(rating);
+    setEmployeeId("");
+    setEmployeePin("");
+    setEmployees([]);
+    setEmployeeLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/employees", { cache: "no-store" });
+      const data = await readResponse(response);
+      if (!response.ok) throw new Error(data.message || data.error || "Failed to load employees");
+      const list: Employee[] = Array.isArray(data) ? data : Array.isArray(data.employees) ? data.employees : [];
+      setEmployees(list.filter((employee) => employee.active !== false && employee.name?.trim()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load employees");
+    } finally {
+      setEmployeeLoading(false);
+    }
+  }
+
+  function closeRatingDialog() {
     if (ratingSavingId) return;
+    setRatingTarget(null);
+    setPendingRating(0);
+    setEmployeeId("");
+    setEmployeePin("");
+    setEmployees([]);
+    setError("");
+  }
 
+  async function confirmRatingChange() {
+    if (!ratingTarget || ratingSavingId) return;
+    if (!employeeId) {
+      setError(message("Please select an employee.", "يرجى اختيار الموظف"));
+      return;
+    }
+    if (!/^\\d{3}$/.test(employeePin)) {
+      setError(message("Please enter a valid 3-digit employee PIN.", "أدخل رمز PIN صحيحًا مكونًا من 3 أرقام"));
+      return;
+    }
+
+    const product = ratingTarget;
     const productId = String(product._id);
-    const previousRating = Number(product.rating) || 0;
     const existing = performanceRecords.find((record) => String(record.productId) === productId);
-    const nextRecord: PerformanceRecord = {
-      ...(existing || {}),
-      productId,
-      rating,
-      expiryDate: existing?.expiryDate || "",
-      note: existing?.note || "",
-      promotions: existing?.promotions || [],
-      promotionDiscount: existing?.promotionDiscount ?? 0,
-      promotionNote: existing?.promotionNote || "",
-    };
-    const nextRecords = existing
-      ? performanceRecords.map((record) =>
-          String(record.productId) === productId ? nextRecord : record
-        )
-      : [...performanceRecords, nextRecord];
-
+    const previousRating = Number(product.rating) || 0;
     setRatingSavingId(productId);
     setRatingMessage(null);
-    setProducts((current) =>
-      current.map((item) => item._id === productId ? { ...item, rating } : item)
-    );
+    setError("");
 
     try {
       const response = await fetch("/api/product-performance", {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        // Save only the selected product. The API reports how many valid product IDs it saved.
-        body: JSON.stringify({ items: [nextRecord] }),
+        body: JSON.stringify({
+          action: "save-rating",
+          productId,
+          rating: pendingRating,
+          employeeId,
+          employeePin,
+        }),
       });
       const data = await readResponse(response);
-      if (!response.ok || data.success === false) {
-        throw new Error(data.message || data.error || "Failed to save employer rating");
-      }
-      if (Number(data.saved) < 1) {
-        throw new Error("Rating was not saved: product ID was not accepted by the API.");
-      }
+      if (!response.ok || data.success === false) throw new Error(data.message || data.error || "Failed to save rating");
 
-      // Confirm the rating is readable from the database before showing a success message.
-      const verifyResponse = await fetch("/api/product-performance", { cache: "no-store" });
-      const verifyData = await readResponse(verifyResponse);
-      if (!verifyResponse.ok || Number(verifyData?.data?.[productId]?.rating) !== rating) {
-        throw new Error("Rating save could not be verified. Please check the product ID and API response.");
-      }
-
-      setPerformanceRecords(nextRecords);
-      setRatingMessage({
+      const savedAt = data.ratingAt || new Date().toISOString();
+      const updatedRecord: PerformanceRecord = {
+        ...(existing || {}),
         productId,
-        text: message("Rating saved", "تم حفظ التقييم"),
-        ok: true,
-      });
+        rating: pendingRating,
+        ratingByName: data.ratingByName || employees.find((employee) => employee._id === employeeId)?.name || "",
+        ratingAt: savedAt,
+      };
+      setPerformanceRecords((current) => current.some((record) => String(record.productId) === productId)
+        ? current.map((record) => String(record.productId) === productId ? { ...record, ...updatedRecord } : record)
+        : [...current, updatedRecord]);
+      setProducts((current) => current.map((item) => item._id === productId ? { ...item, rating: pendingRating } : item));
+      setRatingMessage({ productId, text: message("Rating saved", "تم حفظ التقييم"), ok: true });
+      setRatingTarget(null);
+      setPendingRating(0);
+      setEmployeeId("");
+      setEmployeePin("");
+      setEmployees([]);
     } catch (err) {
       console.error("Save employer rating error:", err);
-      setProducts((current) =>
-        current.map((item) => item._id === productId ? { ...item, rating: previousRating } : item)
-      );
-      setRatingMessage({
-        productId,
-        text: err instanceof Error ? err.message : message("Could not save rating", "تعذر حفظ التقييم"),
-        ok: false,
-      });
+      setProducts((current) => current.map((item) => item._id === productId ? { ...item, rating: previousRating } : item));
+      setRatingMessage({ productId, text: err instanceof Error ? err.message : message("Could not save rating", "تعذر حفظ التقييم"), ok: false });
     } finally {
       setRatingSavingId(null);
     }
@@ -232,7 +258,7 @@ export default function ProductsPage() {
             <button
               key={star}
               type="button"
-              onClick={() => void saveEmployerRating(product, star)}
+              onClick={() => void openRatingDialog(product, star)}
               disabled={ratingSavingId !== null}
               aria-label={message(`Rate ${star} out of 5 stars`, `التقييم ${star} من 5`)}
               aria-pressed={rating === star}
@@ -246,6 +272,12 @@ export default function ProductsPage() {
           ))}
           <span className="ml-1 text-[11px] font-bold text-slate-600">{rating ? `${rating}/5` : "—"}</span>
         </div>
+        {(() => {
+          const record = performanceRecords.find((item) => String(item.productId) === String(product._id));
+          if (!record?.ratingByName) return null;
+          const dateText = record.ratingAt ? new Date(record.ratingAt).toLocaleDateString(language === "ar" ? "ar" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "";
+          return <div className="mt-0.5 max-w-[150px] truncate text-[9px] leading-3 text-slate-400" title={`${record.ratingByName}${dateText ? ` · ${dateText}` : ""}`}>{record.ratingByName}{dateText ? ` · ${dateText}` : ""}</div>;
+        })()}
         {isSaving && <p className="mt-0.5 text-[10px] text-slate-500">{message("Saving…", "جارٍ الحفظ…")}</p>}
         {ratingMessage?.productId === product._id && !isSaving && (
           <p className={`mt-0.5 max-w-[150px] break-words text-[10px] ${ratingMessage.ok ? "text-emerald-600" : "text-rose-600"}`}>
@@ -1325,6 +1357,36 @@ export default function ProductsPage() {
           </div>
         )}
       </div>
+
+      {/* Employee PIN confirmation for star rating */}
+      {ratingTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3" role="dialog" aria-modal="true" aria-label="Confirm star rating" onMouseDown={(e) => { if (e.target === e.currentTarget) closeRatingDialog(); }}>
+          <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-2xl sm:p-7" dir={isArabic ? "rtl" : "ltr"}>
+            <div>
+              <h2 className="text-lg font-black text-slate-900">{message("Confirm Star Rating", "تأكيد تقييم المنتج")}</h2>
+              <p className="mt-1 truncate text-xs font-bold text-indigo-600">{getProductName(ratingTarget)}</p>
+              <div className="mt-2 flex items-center gap-1 text-2xl text-amber-400">{[1,2,3,4,5].map((star) => <span key={star} className={star <= pendingRating ? "text-amber-400" : "text-slate-200"}>★</span>)}<span className="ml-1 text-xs font-bold text-slate-500">{pendingRating}/5</span></div>
+              <p className="mt-2 text-xs text-slate-500">{message("Select your name and enter the same 3-digit employee PIN used for product ON/OFF.", "اختر اسمك وأدخل رمز PIN المكون من 3 أرقام المستخدم لتشغيل/إيقاف المنتج.")}</p>
+            </div>
+            <div>
+              <label htmlFor="rating-employee" className="mb-1 block text-[11px] font-bold text-slate-500">{message("Employee Name *", "اسم الموظف *")}</label>
+              <select id="rating-employee" value={employeeId} onChange={(e) => { setEmployeeId(e.target.value); setError(""); }} disabled={employeeLoading || ratingSavingId !== null} className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-sm font-semibold text-slate-900">
+                <option value="">{employeeLoading ? message("Loading employees...", "جارٍ تحميل الموظفين...") : message("Select Employee", "اختر الموظف")}</option>
+                {employees.map((employee) => <option key={employee._id} value={employee._id}>{employee.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="rating-employee-pin" className="mb-1 block text-[11px] font-bold text-slate-500">{message("Employee PIN (3 digits) *", "رمز PIN للموظف (3 أرقام) *")}</label>
+              <input id="rating-employee-pin" type="password" inputMode="numeric" autoComplete="off" maxLength={3} value={employeePin} onChange={(e) => { setEmployeePin(e.target.value.replace(/\\D/g, "").slice(0, 3)); setError(""); }} onKeyDown={(e) => { if (e.key === "Enter") void confirmRatingChange(); }} placeholder={message("Enter 3-digit PIN", "أدخل 3 أرقام")} disabled={ratingSavingId !== null} className="w-full rounded-xl border border-slate-300 p-2.5 text-center font-mono text-base tracking-[0.4em] text-slate-900" />
+            </div>
+            {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{error}</div>}
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={ratingSavingId !== null} onClick={closeRatingDialog} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">{message("Cancel", "إلغاء")}</button>
+              <button type="button" disabled={!employeeId || !/^\\d{3}$/.test(employeePin) || employeeLoading || ratingSavingId !== null} onClick={() => void confirmRatingChange()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{ratingSavingId ? message("Saving...", "جارٍ الحفظ...") : message("Verify PIN & Save", "تحقق واحفظ")}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Employee PIN Confirmation Modal */}
       {statusTarget && (
