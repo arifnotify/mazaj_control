@@ -170,50 +170,51 @@ export default function ProductPerformancePage() {
   }
 
   async function exportExcel() {
-    const workbook = new ExcelJS.Workbook(); workbook.creator = "MAZAJ CONTROL";
-    const ws = workbook.addWorksheet(tabLabel(tab, tx).slice(0,31), { views:[{state:"frozen",ySplit:1}] });
-    ws.columns = [
-      {header:tx("Image","الصورة"),key:"image",width:14},
-      {header:tx("Product (English)","المنتج (إنجليزي)"),key:"nameEn",width:28},
-      {header:tx("Product (Arabic)","المنتج (عربي)"),key:"nameAr",width:28},
-      {header:tx("SKU / Barcode","رمز المنتج / باركود"),key:"sku",width:20},
-      {header:tx("Category","الفئة"),key:"category",width:22},
-      {header:tx("Employer rating (1–5 stars)","تقييم الموظف (١–٥ نجوم)"),key:"rating",width:22},
-      {header:tx("Expiry date","تاريخ الانتهاء"),key:"expiry",width:16},
-      {header:tx("Promotion platforms","منصات العروض"),key:"platforms",width:30},
-      {header:tx("Notes","ملاحظات"),key:"note",width:32},
-    ];
-    ws.getRow(1).font = {bold:true,color:{argb:"FFFFFFFF"}};
-    ws.getRow(1).fill = {type:"pattern",pattern:"solid",fgColor:{argb:"FF14532D"}};
-    for (const p of visible) {
-      const m = getMeta(p), row = ws.addRow({
-        nameEn:p.nameEn || "", nameAr:p.nameAr || "", sku:p.sku || p.barcode || "",
-        category:categoryOf(p,isArabic), rating:m.rating ? `${m.rating}/5 ${stars(m.rating)}` : "",
-        expiry:m.expiryDate, platforms:PLATFORMS.filter(k=>m.promotions[k]).join(", "), note:m.note,
-      });
-      row.height = 54;
-      const src = imageOf(p);
-      if (src) {
-        try {
-          const res = await fetch(src); if (res.ok) {
-            const blob = await res.blob();
-            if (blob.type.startsWith("image/")) {
-              const data = await blobToDataUrl(blob);
-              const imageId = workbook.addImage({base64:data,extension:blob.type.includes("png")?"png":"jpeg"});
-              const imageAnchor = {
-                tl: { col:0, row:row.number-1, nativeCol:0, nativeColOff:0, nativeRow:row.number-1, nativeRowOff:0, ext:{width:0,height:0} },
-                br: { col:1, row:row.number, nativeCol:1, nativeColOff:0, nativeRow:row.number, nativeRowOff:0, ext:{width:0,height:0} },
-              } as any;
-              ws.addImage(imageId, imageAnchor);
-            }
-          }
-        } catch { /* keep row even if image host blocks cross-origin fetch */ }
+    setError(""); setMessage("");
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "MAZAJ CONTROL";
+      const ws = workbook.addWorksheet(tabLabel(tab, tx).slice(0, 31), { views: [{ state: "frozen", ySplit: 1 }] });
+      ws.columns = [
+        { header: tx("Product (English)", "المنتج (إنجليزي)"), key: "nameEn", width: 28 },
+        { header: tx("Product (Arabic)", "المنتج (عربي)"), key: "nameAr", width: 28 },
+        { header: tx("SKU / Barcode", "رمز المنتج / باركود"), key: "sku", width: 20 },
+        { header: tx("Category", "الفئة"), key: "category", width: 22 },
+        { header: tx("Employer rating (1–5 stars)", "تقييم الموظف (١–٥ نجوم)"), key: "rating", width: 24 },
+        { header: tx("Expiry date", "تاريخ الانتهاء"), key: "expiry", width: 16 },
+        { header: tx("Promotion platforms", "منصات العروض"), key: "platforms", width: 30 },
+        { header: tx("Notes", "ملاحظات"), key: "note", width: 32 },
+      ];
+      ws.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF14532D" } };
+      for (const p of visible) {
+        const m = getMeta(p);
+        ws.addRow({
+          nameEn: p.nameEn || "", nameAr: p.nameAr || "", sku: p.sku || p.barcode || "",
+          category: categoryOf(p, isArabic), rating: m.rating ? `${m.rating}/5 ${stars(m.rating)}` : "",
+          expiry: m.expiryDate || "", platforms: PLATFORMS.filter(k => m.promotions[k]).join(", "), note: m.note || "",
+        });
       }
+      if (visible.length === 0) {
+        ws.addRow({ nameEn: tx("No products in this list", "لا توجد منتجات في هذه القائمة") });
+      }
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `product-performance-${tab}-${activePeriod}.xlsx`;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Do not revoke the object URL immediately; some browsers cancel the download.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setMessage(tx("Excel file is being downloaded.", "جارٍ تنزيل ملف Excel."));
+    } catch (e) {
+      console.error("Excel export failed:", e);
+      setError(tx("Excel export failed. Make sure exceljs is installed (npm install exceljs), then restart the dev server.", "فشل تصدير Excel. تأكد من تثبيت exceljs عبر npm install exceljs ثم أعد تشغيل الخادم."));
     }
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-    const url = URL.createObjectURL(blob), a = document.createElement("a");
-    a.href=url; a.download=`product-performance-${tab}-${activePeriod}.xlsx`; a.click(); URL.revokeObjectURL(url);
   }
 
   return <main dir={isArabic?"rtl":"ltr"} className="min-h-screen bg-slate-50 p-4 text-slate-900 sm:p-6">
@@ -234,6 +235,7 @@ export default function ProductPerformancePage() {
       </section>
       <div className="flex flex-wrap gap-2 print:hidden">{(["all","starred","slow","steady","best","expiry","promotion"] as Tab[]).map(t=><button key={t} onClick={()=>setTab(t)} className={`rounded-full px-4 py-2 text-sm font-bold ${tab===t?"bg-slate-900 text-white":"border border-slate-300 bg-white"}`}>{tabLabel(t,tx)}</button>)}</div>
       {tab==="promotion"&&<section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 print:hidden">{tx("Tick each delivery app for products you want to promote. Select one app above to create a separate app-specific list.","حدد تطبيق التوصيل الذي تريد الترويج للمنتج فيه. اختر تطبيقاً واحداً أعلاه لعرض قائمة منفصلة له.")}</section>}
+      <div className="hidden print:block print-title"><h1>MAZAJ CONTROL — {tx("Product Performance", "أداء المنتجات")}</h1><p>{tabLabel(tab,tx)} — {activePeriod}{category !== "All" ? ` · ${category}` : ""}</p></div>
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><h2 className="font-black">{tabLabel(tab,tx)} — {activePeriod}</h2><span className="text-sm text-slate-500">{visible.length} {tx("products","منتجات")}</span></div>
         {loading?<p className="p-10 text-center">{tx("Loading products…","جارٍ تحميل المنتجات…")}</p>:visible.length===0?<p className="p-10 text-center text-slate-500">{tx("No products match this list and category.","لا توجد منتجات مطابقة لهذه القائمة والفئة.")}</p>:<div className="overflow-x-auto"><table className="w-full min-w-[1200px] text-sm"><thead className="bg-slate-100 text-xs text-slate-600"><tr>{[tx("Product","المنتج"),tx("SKU / Barcode","رمز المنتج / باركود"),tx("Employer rating (1–5)","تقييم الموظف (١–٥)"),tx("Expiry date","تاريخ الانتهاء"),tx("Promote on apps","الترويج عبر التطبيقات"),tx("Discount %","الخصم %"),tx("Promotion note","ملاحظة العرض"),tx("Notes","ملاحظات")].map(h=><th key={h} className="px-3 py-3 text-start">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{visible.map(p=>{const m=getMeta(p), ex=expiryStatus(p), src=imageOf(p);return <tr key={p._id} className="align-top hover:bg-slate-50">
@@ -250,7 +252,23 @@ export default function ProductPerformancePage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm print:hidden"><h2 className="font-black">{tx("Saved daily / monthly analyses","التحليلات اليومية / الشهرية المحفوظة")}</h2>{analyses.length===0?<p className="mt-2 text-sm text-slate-500">{tx("No saved snapshots yet. Click Save analysis snapshot to save this summary.","لا توجد تحليلات محفوظة بعد. اضغط حفظ نسخة التحليل لحفظ الملخص.")}</p>:<div className="mt-3 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-slate-500"><th className="p-2 text-start">{tx("Period","الفترة")}</th><th className="p-2 text-start">{tx("Type","النوع")}</th><th className="p-2 text-start">{tx("Saved at","وقت الحفظ")}</th><th className="p-2 text-start">{tx("All","الكل")}</th><th className="p-2 text-start">{tx("Low / Steady / Best","ضعيف / متوسط / ممتاز")}</th></tr></thead><tbody>{analyses.map(a=><tr key={a._id} className="border-t border-slate-100"><td className="p-2">{a.period}</td><td className="p-2">{a.periodType==="daily"?tx("Daily","يومي"):tx("Monthly","شهري")}</td><td className="p-2">{a.createdAt?new Date(a.createdAt).toLocaleString(isArabic?"ar-QA":"en-GB"):"—"}</td><td className="p-2">{a.counts?.all??"—"}</td><td className="p-2">{a.counts?.slow??0} / {a.counts?.steady??0} / {a.counts?.best??0}</td></tr>)}</tbody></table></div>}</section>
       <p className="text-xs leading-5 text-slate-500 print:hidden">{tx("Low running = 1–2 stars, steady = 3 stars, best running = 4–5 stars. Rating is set by the employer. Units sold and stock are not shown or used. Save changes to store data in MongoDB.","ضعيف الحركة = نجمة أو نجمتان، متوسط = ٣ نجوم، الأفضل حركة = ٤ أو ٥ نجوم. الموظف يحدد التقييم. لا يتم عرض أو استخدام الوحدات المباعة أو المخزون. احفظ التغييرات لتخزين البيانات في MongoDB.")}</p>
     </div>
-    <style jsx global>{`@media print { body { background:white!important; } aside,nav,button,input,select,textarea,.print\\:hidden { display:none!important; } main { padding:0!important;background:white!important; } section { break-inside:avoid;box-shadow:none!important; } table { min-width:0!important;font-size:9px!important; } img { max-width:48px!important;max-height:48px!important; } th,td { padding:4px!important; } }`}</style>
+    <style jsx global>{`@media print {
+      @page { size: auto; margin: 10mm; }
+      body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      aside, nav, button, input, select, textarea, .print\\:hidden { display: none !important; }
+      main { display: block !important; width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important; background: white !important; }
+      main > div { display: block !important; max-width: none !important; }
+      .print-title { display: block !important; margin: 0 0 12px !important; }
+      .print-title h1 { font-size: 18pt; font-weight: 700; }
+      .print-title p { font-size: 10pt; margin-top: 4px; }
+      section { display: block !important; overflow: visible !important; break-inside: auto !important; box-shadow: none !important; border: 0 !important; padding: 0 !important; margin: 0 !important; }
+      section > div { overflow: visible !important; }
+      table { display: table !important; width: 100% !important; min-width: 0 !important; table-layout: auto !important; font-size: 8pt !important; }
+      thead { display: table-header-group !important; }
+      tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+      img { max-width: 42px !important; max-height: 42px !important; }
+      th, td { padding: 4px !important; }
+    }`}</style>
   </main>;
 }
 
