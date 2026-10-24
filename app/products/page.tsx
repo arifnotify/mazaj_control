@@ -71,7 +71,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [expandedPrices, setExpandedPrices] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [ratingFilter, setRatingFilter] = useState<number | null>(null);
+  const [ratingFilter, setRatingFilter] = useState<number | null | "unrated">(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -316,7 +316,10 @@ export default function ProductsPage() {
       const matchesCategory =
         categoryFilter === "all" || categoryKey === categoryFilter;
       const matchesRating =
-        ratingFilter === null || Number(product.rating || 0) === ratingFilter;
+        ratingFilter === null ||
+        (ratingFilter === "unrated"
+          ? Number(product.rating || 0) === 0
+          : Number(product.rating || 0) === ratingFilter);
 
       return matchesSearch && matchesStatus && matchesCategory && matchesRating;
     });
@@ -727,6 +730,15 @@ export default function ProductsPage() {
                       className={`rounded-md px-1 text-lg leading-6 transition-colors ${ratingFilter === star ? "bg-amber-100 text-amber-600 ring-1 ring-amber-400" : "text-slate-300 hover:bg-amber-50 hover:text-amber-400"}`}
                     >★</button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => setRatingFilter((current) => current === "unrated" ? null : "unrated")}
+                    aria-pressed={ratingFilter === "unrated"}
+                    className={`rounded-md px-2 py-1 text-[11px] font-bold transition-colors ${ratingFilter === "unrated" ? "bg-slate-200 text-slate-900 ring-1 ring-slate-400" : "text-slate-500 hover:bg-slate-100"}`}
+                    title={message("Show products without a rating", "عرض المنتجات بدون تقييم")}
+                  >
+                    ☆ {message("Not Rated", "بدون تقييم")}
+                  </button>
                   {ratingFilter !== null && (
                     <button type="button" onClick={() => setRatingFilter(null)} className="ml-1 rounded px-1 text-[10px] font-bold text-slate-500 hover:bg-slate-100">
                       {message("All ratings", "كل التقييمات")}
