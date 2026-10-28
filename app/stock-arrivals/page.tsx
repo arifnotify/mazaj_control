@@ -689,9 +689,9 @@ export default function StockArrivalsPage() {
 
   const inputClass =
 
-    "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 text-sm sm:text-base outline-none transition-all focus:border-slate-900 focus:ring-2 focus:ring-slate-100 shadow-2xs";
+    "min-h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-4 focus:ring-slate-100";
 
-  const cardClass = "rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs";
+  const cardClass = "rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-900/5 sm:p-6";
 
   return (
 
@@ -701,17 +701,17 @@ export default function StockArrivalsPage() {
 
       lang={language}
 
-      className="mx-auto max-w-7xl space-y-6 sm:space-y-8 p-3 sm:p-6 lg:p-8 font-sans text-slate-950 bg-slate-50 min-h-screen"
+      className="mx-auto min-h-screen w-full max-w-7xl space-y-4 bg-gradient-to-b from-slate-100 to-slate-50 px-3 py-4 pb-8 font-sans text-slate-950 sm:space-y-6 sm:p-6 lg:p-8"
 
     >
 
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl bg-white p-5 sm:p-6 shadow-xs border border-slate-200">
+      <header className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-5 text-white shadow-lg shadow-slate-900/10 sm:flex-row sm:items-center sm:justify-between sm:p-7">
 
         <div>
 
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">{copy.title}</h1>
+          <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl">{copy.title}</h1>
 
-          <p className="mt-1 text-xs sm:text-sm text-slate-500">{copy.subtitle}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">{copy.subtitle}</p>
 
         </div>
 
@@ -723,7 +723,7 @@ export default function StockArrivalsPage() {
 
           disabled={loading || saving}
 
-          className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs disabled:opacity-50 self-start sm:self-auto"
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/15 disabled:opacity-50 sm:w-auto"
 
         >
 
@@ -741,9 +741,9 @@ export default function StockArrivalsPage() {
 
       <section className={cardClass}>
 
-        <h2 className="mb-4 text-lg sm:text-xl font-bold text-slate-900">{copy.selectProducts}</h2>
+        <h2 className="mb-4 text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">{copy.selectProducts}</h2>
 
-        <label className="mb-2 block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-600" htmlFor="product-search">{copy.search}</label>
+        <label className="mb-2.5 block text-sm font-bold text-slate-700" htmlFor="product-search">{copy.search}</label>
 
         <input
 
@@ -759,7 +759,7 @@ export default function StockArrivalsPage() {
 
         />
 
-        <div className="mb-3 text-xs sm:text-sm font-semibold text-slate-500">{copy.selected}: <span className="text-slate-900 font-bold">{selected.length}</span></div>
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3.5 py-2 text-sm font-semibold text-slate-600">{copy.selected}: <span className="text-slate-900 font-bold">{selected.length}</span></div>
 
         {loading ? (
 
@@ -767,11 +767,11 @@ export default function StockArrivalsPage() {
 
         ) : (
 
-          <div className="max-h-[480px] space-y-2.5 overflow-y-auto pr-1">
+          <div className="max-h-[52vh] space-y-2.5 overflow-y-auto overscroll-contain pr-1 sm:max-h-[480px]">
 
             {filteredProducts.map((product) => (
 
-              <label key={product._id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3 hover:bg-slate-50 transition shadow-2xs">
+              <label key={product._id} className="flex min-h-[76px] cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 transition active:scale-[0.99] hover:border-slate-300 hover:bg-slate-50">
 
                 <input
 
@@ -781,25 +781,25 @@ export default function StockArrivalsPage() {
 
                   onChange={() => toggleProduct(product._id)}
 
-                  className="h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  className="h-5 w-5 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-2 focus:ring-slate-900"
 
                 />
 
                 {product.image ? (
 
-                  <img src={product.image} alt={localizedProductName(product)} className="h-12 w-12 sm:h-14 sm:w-14 rounded-lg border border-slate-200 object-cover shadow-2xs" />
+                  <img src={product.image} alt={localizedProductName(product)} className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover sm:h-16 sm:w-16" />
 
                 ) : (
 
-                  <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] text-slate-400">{copy.noImage}</div>
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-400 sm:h-16 sm:w-16">{copy.noImage}</div>
 
                 )}
 
                 <div className="min-w-0 flex-1">
 
-                  <p className="font-bold text-slate-900 text-xs sm:text-sm truncate">{localizedProductName(product)}</p>
+                  <p className="truncate text-sm font-bold leading-5 text-slate-900 sm:text-base">{localizedProductName(product)}</p>
 
-                  <p className="text-xs text-slate-400 font-mono mt-0.5">SKU: {product.sku}</p>
+                  <p className="mt-1 truncate font-mono text-xs text-slate-500">SKU: {product.sku}</p>
 
                 </div>
 
@@ -821,7 +821,7 @@ export default function StockArrivalsPage() {
 
           disabled={saving || loading || selected.length === 0}
 
-          className="mt-5 w-full sm:w-auto rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 transition shadow-sm"
+          className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-slate-900 px-6 py-3.5 text-base font-bold text-white shadow-sm transition hover:bg-slate-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
 
         >
 
@@ -835,9 +835,9 @@ export default function StockArrivalsPage() {
 
       <section className={cardClass}>
 
-        <h2 className="mb-4 text-lg sm:text-xl font-bold text-slate-900">{copy.confirmTitle}</h2>
+        <h2 className="mb-4 text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">{copy.confirmTitle}</h2>
 
-        <label htmlFor="arrival-select" className="mb-2 block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-600">{copy.pendingArrival}</label>
+        <label htmlFor="arrival-select" className="mb-2.5 block text-sm font-bold text-slate-700">{copy.pendingArrival}</label>
 
         <select
 
@@ -867,11 +867,11 @@ export default function StockArrivalsPage() {
 
         <p className="mb-4 text-xs sm:text-sm text-slate-600 font-medium">{copy.checkInstruction}</p>
 
-        <div className="mb-5 grid gap-3 sm:grid-cols-2">
+        <div className="mb-5 grid grid-cols-1 gap-3 min-[380px]:grid-cols-2">
 
           {MARKETPLACE_LIST.map(({ key, name, arabic }) => (
 
-            <label key={key} className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 hover:bg-slate-50 transition shadow-2xs">
+            <label key={key} className="flex min-h-[88px] cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50 active:scale-[0.99]">
 
               <input
 
@@ -881,7 +881,7 @@ export default function StockArrivalsPage() {
 
                 onChange={(event) => toggleMarketplace(key, event.target.checked)}
 
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                className="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-2 focus:ring-slate-900"
 
               />
 
@@ -903,7 +903,7 @@ export default function StockArrivalsPage() {
 
         </div>
 
-        <label htmlFor="employee-select" className="mb-2 block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-600">{copy.employee}</label>
+        <label htmlFor="employee-select" className="mb-2.5 block text-sm font-bold text-slate-700">{copy.employee}</label>
 
         <select
 
@@ -933,7 +933,7 @@ export default function StockArrivalsPage() {
 
         </select>
 
-        <label htmlFor="employee-pin" className="mb-2 block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-600">{copy.pin}</label>
+        <label htmlFor="employee-pin" className="mb-2.5 block text-sm font-bold text-slate-700">{copy.pin}</label>
 
         <input
 
@@ -965,7 +965,7 @@ export default function StockArrivalsPage() {
 
           disabled={saving || !activeArrival || loading}
 
-          className="w-full sm:w-auto rounded-xl bg-emerald-700 px-6 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-50 transition shadow-sm"
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-emerald-700 px-6 py-3.5 text-base font-bold text-white shadow-sm transition hover:bg-emerald-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
 
         >
 
@@ -1050,7 +1050,7 @@ function ArrivalList({
   deletingArrivalId?: string;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs">
+    <section className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-900/5 sm:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-lg sm:text-xl font-bold text-slate-900">{title}</h2>
         {collapsible && (
@@ -1104,9 +1104,9 @@ function ArrivalCard({
   const dateLocale = language === "ar" ? "ar" : "en";
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 shadow-2xs">
+    <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
-        <span className="text-xs sm:text-sm font-semibold text-slate-500">
+        <span className="text-sm font-medium text-slate-500">
           {copy.createdAt}: <span className="text-slate-800">{new Date(arrival.createdAt).toLocaleString(dateLocale)}</span>
         </span>
         <span className={`rounded-full px-3 py-1 text-xs font-bold ${isCompleted ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
@@ -1121,12 +1121,12 @@ function ArrivalCard({
           return (
             <div key={`${product.productId}-${index}`} className="flex items-center gap-3">
               {product.image ? (
-                <img src={product.image} alt={name} className="h-12 w-12 rounded-lg border border-slate-200 object-cover shadow-2xs" />
+                <img src={product.image} alt={name} className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover" />
               ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-200 text-slate-400 text-xs">📦</div>
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-500 text-xs">📦</div>
               )}
               <div className="min-w-0">
-                <p className="font-bold text-slate-900 text-xs sm:text-sm truncate">{name}</p>
+                <p className="truncate text-sm font-bold leading-5 text-slate-900 sm:text-base">{name}</p>
                 <p className="text-xs text-slate-400 font-mono">SKU: {product.sku}</p>
               </div>
             </div>
