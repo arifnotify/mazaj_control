@@ -14,6 +14,12 @@ type ProductDocument = {
   nameEn?: string;
   nameAr?: string;
   image?: string;
+  category?: unknown;
+  categoryName?: string;
+  categoryEn?: string;
+  categoryAr?: string;
+  categoryNameEn?: string;
+  categoryNameAr?: string;
 };
 
 type ArrivalProductDocument = {
@@ -23,6 +29,12 @@ type ArrivalProductDocument = {
   nameEn?: string;
   nameAr?: string;
   image?: string;
+  category?: unknown;
+  categoryName?: string;
+  categoryEn?: string;
+  categoryAr?: string;
+  categoryNameEn?: string;
+  categoryNameAr?: string;
 };
 
 type ArrivalDocument = {
@@ -31,6 +43,48 @@ type ArrivalDocument = {
   [key: string]: unknown;
 };
 
+function getCategoryNames(product: ProductDocument) {
+  const category =
+    product.category && typeof product.category === "object"
+      ? (product.category as {
+          name?: string;
+          nameEn?: string;
+          nameAr?: string;
+        })
+      : null;
+
+  const categoryString =
+    typeof product.category === "string" ? product.category.trim() : "";
+
+  const categoryEn =
+    product.categoryEn?.trim() ||
+    product.categoryNameEn?.trim() ||
+    category?.nameEn?.trim() ||
+    category?.name?.trim() ||
+    categoryString ||
+    product.categoryName?.trim() ||
+    "";
+
+  const categoryAr =
+    product.categoryAr?.trim() ||
+    product.categoryNameAr?.trim() ||
+    category?.nameAr?.trim() ||
+    category?.nameEn?.trim() ||
+    category?.name?.trim() ||
+    categoryString ||
+    product.categoryName?.trim() ||
+    "";
+
+  return {
+    category: categoryString || categoryEn,
+    categoryName: product.categoryName?.trim() || categoryEn || categoryAr,
+    categoryEn,
+    categoryAr,
+    categoryNameEn: product.categoryNameEn?.trim() || categoryEn,
+    categoryNameAr: product.categoryNameAr?.trim() || categoryAr,
+  };
+}
+
 // GET: Load products and stock arrival history.
 export async function GET() {
   try {
@@ -38,7 +92,9 @@ export async function GET() {
 
     const [products, arrivals] = await Promise.all([
       Product.find({})
-        .select("_id sku name nameEn nameAr image")
+        .select(
+          "_id sku name nameEn nameAr image category categoryName categoryEn categoryAr categoryNameEn categoryNameAr"
+        )
         .sort({ sku: 1 })
         .lean(),
       StockArrival.find({})
@@ -56,6 +112,7 @@ export async function GET() {
         nameEn: product.nameEn || "",
         nameAr: product.nameAr || "",
         image: product.image || "",
+        ...getCategoryNames(product),
       })
     );
 
@@ -177,7 +234,9 @@ export async function POST(req: NextRequest) {
     }
 
     const products = await Product.find({ _id: { $in: productIds } })
-      .select("_id sku name nameEn nameAr image")
+      .select(
+        "_id sku name nameEn nameAr image category categoryName categoryEn categoryAr categoryNameEn categoryNameAr"
+      )
       .lean();
 
     if (products.length !== productIds.length) {
@@ -195,6 +254,7 @@ export async function POST(req: NextRequest) {
       nameEn: product.nameEn || "",
       nameAr: product.nameAr || "",
       image: product.image || "",
+      ...getCategoryNames(product),
     }));
 
     const arrival = await StockArrival.create({
