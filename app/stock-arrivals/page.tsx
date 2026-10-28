@@ -23,6 +23,17 @@ type Product = {
 
   arabicName?: string;
 
+  category?: string;
+
+  categoryEn?: string;
+
+  categoryAr?: string;
+
+  categoryName?: string;
+
+  categoryNameEn?: string;
+
+  categoryNameAr?: string;
 
 };
 
@@ -154,6 +165,8 @@ export default function StockArrivalsPage() {
 
   const [search, setSearch] = useState("");
 
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
   const [employeeId, setEmployeeId] = useState("");
 
   const [pin, setPin] = useState("");
@@ -187,6 +200,12 @@ export default function StockArrivalsPage() {
         search: "Search by product name or SKU",
 
         searchPlaceholder: "Search by English, Arabic, product name or SKU...",
+
+        category: "Category",
+
+        allCategories: "All categories",
+
+        uncategorized: "Uncategorized",
 
         selected: "Selected",
 
@@ -286,6 +305,12 @@ export default function StockArrivalsPage() {
         search: "ابحث باسم المنتج أو رمز SKU",
 
         searchPlaceholder: "ابحث بالإنجليزية أو العربية أو اسم المنتج أو SKU...",
+
+        category: "الفئة",
+
+        allCategories: "كل الفئات",
+
+        uncategorized: "بدون فئة",
 
         selected: "المحدد",
 
@@ -444,13 +469,37 @@ export default function StockArrivalsPage() {
 
   }, [loadData]);
 
+  function productCategory(product: Product, currentLanguage: string = language) {
+
+    const categoryEn = product.categoryEn || product.categoryNameEn || product.category || product.categoryName;
+
+    const categoryAr = product.categoryAr || product.categoryNameAr;
+
+    return (currentLanguage === "ar" ? categoryAr || categoryEn : categoryEn || categoryAr) || copy.uncategorized;
+
+  }
+
+  const categories = useMemo(() => {
+
+    return Array.from(new Set(products.map((product) => productCategory(product)).filter(Boolean)))
+
+      .sort((a, b) => a.localeCompare(b, language));
+
+  }, [products, language, copy.uncategorized]);
+
   const filteredProducts = useMemo(() => {
 
     const term = normalizeSearch(search);
 
-    if (!term) return products;
-
     return products.filter((product) => {
+
+      const category = productCategory(product);
+
+      const matchesCategory = categoryFilter === "all" || category === categoryFilter;
+
+      if (!matchesCategory) return false;
+
+      if (!term) return true;
 
       const searchable = [
 
@@ -460,13 +509,23 @@ export default function StockArrivalsPage() {
 
         product.nameAr,
 
-
         product.englishName,
 
         product.arabicName,
 
-
         product.sku,
+
+        product.category,
+
+        product.categoryEn,
+
+        product.categoryAr,
+
+        product.categoryName,
+
+        product.categoryNameEn,
+
+        product.categoryNameAr,
 
       ]
 
@@ -478,7 +537,7 @@ export default function StockArrivalsPage() {
 
     });
 
-  }, [products, search]);
+  }, [products, search, categoryFilter, language, copy.uncategorized]);
 
   const pending = arrivals.filter((arrival) => arrival.status === "pending");
 
@@ -553,6 +612,8 @@ export default function StockArrivalsPage() {
       setSelected([]);
 
       setSearch("");
+
+      setCategoryFilter("all");
 
       await loadData();
 
@@ -743,6 +804,30 @@ export default function StockArrivalsPage() {
 
         <h2 className="mb-4 text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">{copy.selectProducts}</h2>
 
+        <label className="mb-2.5 block text-sm font-bold text-slate-700" htmlFor="product-category">{copy.category}</label>
+
+        <select
+
+          id="product-category"
+
+          value={categoryFilter}
+
+          onChange={(event) => setCategoryFilter(event.target.value)}
+
+          className={`${inputClass} mb-4 font-semibold`}
+
+        >
+
+          <option value="all">{copy.allCategories}</option>
+
+          {categories.map((category) => (
+
+            <option key={category} value={category}>{category}</option>
+
+          ))}
+
+        </select>
+
         <label className="mb-2.5 block text-sm font-bold text-slate-700" htmlFor="product-search">{copy.search}</label>
 
         <input
@@ -800,6 +885,8 @@ export default function StockArrivalsPage() {
                   <p className="truncate text-sm font-bold leading-5 text-slate-900 sm:text-base">{localizedProductName(product)}</p>
 
                   <p className="mt-1 truncate font-mono text-xs text-slate-500">SKU: {product.sku}</p>
+
+                  <p className="mt-1 truncate text-xs font-medium text-indigo-600">{copy.category}: {productCategory(product)}</p>
 
                 </div>
 
