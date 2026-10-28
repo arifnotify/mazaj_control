@@ -55,7 +55,7 @@ const menuItems = [
     labelEn: "Issues",
     labelAr: "المشاكل",
     href: "/issues",
-    icon: "⚠",
+    icon: "⚠️",
   },
   {
     key: "categories",
@@ -69,7 +69,7 @@ const menuItems = [
     labelEn: "Employees",
     labelAr: "الموظفون",
     href: "/admin/employees",
-    icon: "♙",
+    icon: "👩🏽‍🍳",
   },
 ];
 
