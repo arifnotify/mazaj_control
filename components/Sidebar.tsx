@@ -20,7 +20,7 @@ const menuItems = [
     labelEn: "Products",
     labelAr: "المنتجات",
     href: "/products",
-    icon: "□",
+    icon: "🛍️",
   },
   {
     key: "stockReceiving",
@@ -34,7 +34,7 @@ const menuItems = [
     labelEn: "Stock Arrivals",
     labelAr: "وصول المخزون",
     href: "/stock-arrivals",
-    icon: "📦",
+    icon: "📦📣",
   },
   {
     key: "purchaseCenter",
