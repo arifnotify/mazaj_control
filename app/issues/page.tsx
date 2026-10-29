@@ -503,7 +503,7 @@ export default function IssuesPage() {
               {tr("Refreshing...", "جارٍ التحديث...")}
             </span>
           ) : (
-            "{tr("Refresh Data", "تحديث البيانات")}"
+            {tr("Refresh Data", "تحديث البيانات")}
           )}
         </button>
       </div>
@@ -558,7 +558,7 @@ export default function IssuesPage() {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="{tr("Search product name or SKU...", "ابحث باسم المنتج أو رمز SKU...")}"
+            placeholder={tr("Search product name or SKU...", "ابحث باسم المنتج أو رمز SKU...")}
             className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-800 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm"
           />
           <select
@@ -592,7 +592,7 @@ export default function IssuesPage() {
             <option value="all">{tr("All Availability", "كل حالات التوفر")}</option>
             <option value="on">{tr("ON only", "المتوفر فقط")}</option>
             <option value="off">{tr("OFF only", "غير المتوفر فقط")}</option>
-            <option value="not_connected">{tr("Not {tr("Connected only", "المتصل فقط")}", "غير المتصل فقط")}</option>
+            <option value="not_connected">{tr("Not Connected", "غير متصل")}</option>
             <option value="connected">{tr("Connected only", "المتصل فقط")}</option>
           </select>
         </div>
@@ -756,7 +756,7 @@ export default function IssuesPage() {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="{tr("Search product, SKU, employee, note...", "ابحث عن المنتج أو SKU أو الموظف أو الملاحظة...")}"
+            placeholder={tr("Search product, SKU, employee, note...", "ابحث عن المنتج أو SKU أو الموظف أو الملاحظة...")}
             className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-800 outline-none focus:border-indigo-500 shadow-sm"
           />
           <select
