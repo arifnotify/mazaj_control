@@ -205,7 +205,7 @@ function MarketplaceBadge({
 }
 
 export default function IssuesPage() {
-  const { language, isArabic, t } = useLanguage();
+  const { language, isArabic } = useLanguage();
   const tr = (english: string, arabic: string) => (isArabic ? arabic : english);
   const [issues, setIssues] = useState<IssueRecord[]>([]);
   const [products, setProducts] = useState<ProductStatus[]>([]);
@@ -503,7 +503,7 @@ export default function IssuesPage() {
               {tr("Refreshing...", "جارٍ التحديث...")}
             </span>
           ) : (
-            {tr("Refresh Data", "تحديث البيانات")}
+            tr("Refresh Data", "تحديث البيانات")
           )}
         </button>
       </div>
