@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 
@@ -7,7 +6,7 @@ import Issue from "@/models/Issue";
 import Employee from "@/models/Employee";
 import "@/models/Product";
 
-const MARKETPLACES = ["Talabat", "Snoonu", "Rafeeq", "Keeta"];
+const MARKETPLACES = ["Talabat", "Snoonu", "Rafeeq", "Keeta"] as const;
 
 const ISSUE_TYPES = [
   "price",
@@ -17,17 +16,20 @@ const ISSUE_TYPES = [
   "category",
   "availability",
   "other",
-];
+] as const;
+
+// Populate the complete Product document so fields such as `image` are included
+// in the response, provided they exist in the Product schema.
+const populateIssueDetails = (query: any) =>
+  query.populate({ path: "productId" }).populate({ path: "reporterEmployeeId" });
 
 export async function GET() {
   try {
     await connectDB();
 
-    const issues = await Issue.find()
-      .populate("productId")
-      .populate("reporterEmployeeId")
-      .sort({ createdAt: -1 })
-      .lean();
+    const issues = await populateIssueDetails(
+      Issue.find().sort({ createdAt: -1 })
+    ).lean();
 
     return NextResponse.json(issues, { status: 200 });
   } catch (error) {
@@ -52,15 +54,10 @@ export async function POST(request: Request) {
       type,
       note = "",
       reporterEmployeeId,
-    } = body;
+    } = body ?? {};
 
     // Required-field validation
-    if (
-      !productId ||
-      !marketplace ||
-      !type ||
-      !reporterEmployeeId
-    ) {
+    if (!productId || !marketplace || !type || !reporterEmployeeId) {
       return NextResponse.json(
         {
           message:
@@ -82,7 +79,7 @@ export async function POST(request: Request) {
     }
 
     // Validate marketplace
-    if (!MARKETPLACES.includes(marketplace)) {
+    if (!(MARKETPLACES as readonly string[]).includes(marketplace)) {
       return NextResponse.json(
         { message: "Invalid marketplace." },
         { status: 400 }
@@ -90,14 +87,25 @@ export async function POST(request: Request) {
     }
 
     // Validate issue type
-    if (!ISSUE_TYPES.includes(type)) {
+    if (!(ISSUE_TYPES as readonly string[]).includes(type)) {
       return NextResponse.json(
         { message: "Invalid issue type." },
         { status: 400 }
       );
     }
 
-    // Check that the employee exists
+    // Check that the product exists
+    const Product = mongoose.model("Product");
+    const productExists = await Product.exists({ _id: productId });
+
+    if (!productExists) {
+      return NextResponse.json(
+        { message: "Selected product was not found." },
+        { status: 404 }
+      );
+    }
+
+    // Check that the employee exists and is active
     const employee = await Employee.findById(reporterEmployeeId)
       .select("_id name active")
       .lean();
@@ -125,22 +133,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create the issue
+    // Create the issue. Existing fields and status are preserved.
     const issue = await Issue.create({
       productId,
       marketplace,
       type,
-      note: String(note).trim(),
+      note: String(note ?? "").trim(),
       reporterName,
       reporterEmployeeId,
       status: "open",
     });
 
-    // Return the saved issue with product and employee details
-    const savedIssue = await Issue.findById(issue._id)
-      .populate("productId")
-      .populate("reporterEmployeeId")
-      .lean();
+    // Return the saved issue with full product data (including image) and employee details.
+    const savedIssue = await populateIssueDetails(
+      Issue.findById(issue._id)
+    ).lean();
 
     return NextResponse.json(savedIssue, { status: 201 });
   } catch (error) {
