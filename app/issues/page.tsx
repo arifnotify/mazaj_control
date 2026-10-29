@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useLanguage } from "@/components/LanguageProvider";
+import { useLanguage } from "../components/LanguageProvider";
 
 type MarketplaceName = "Talabat" | "Snoonu" | "Rafeeq" | "Keeta";
 
