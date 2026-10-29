@@ -13,7 +13,7 @@ export async function GET() {
     const [products, marketplaceRecords] = await Promise.all([
       Product.find()
         .select(
-          "_id sku nameEn nameAr categoryEn categoryAr"
+          "_id sku nameEn nameAr categoryEn categoryAr image"
         )
         .sort({ createdAt: -1 })
         .lean(),
@@ -60,6 +60,7 @@ export async function GET() {
         nameAr: product.nameAr || "",
         categoryEn: product.categoryEn || "",
         categoryAr: product.categoryAr || "",
+        image: typeof product.image === "string" ? product.image.trim() : "",
         marketplaces,
       };
     });
