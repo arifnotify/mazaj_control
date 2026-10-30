@@ -51,6 +51,13 @@ const menuItems = [
     icon: "📊",
   },
   {
+    key: "customerCRM",
+    labelEn: "Customer Intelligence CRM",
+    labelAr: "إدارة علاقات العملاء",
+    href: "/customers",
+    icon: "👥",
+  },
+  {
     key: "issues",
     labelEn: "Issues",
     labelAr: "المشاكل",
@@ -95,7 +102,6 @@ export default function Sidebar() {
       } ${isMinimized ? "w-20" : "w-64"}`}
       dir={isArabic ? "rtl" : "ltr"}
     >
-      {/* Logo and Header */}
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-5">
         {!isMinimized && (
           <Link href="/" className="block min-w-0 overflow-hidden">
@@ -105,7 +111,6 @@ export default function Sidebar() {
             >
               MAZAJ CONTROL
             </h1>
-
             <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">
               {text.productManagement}
             </p>
@@ -121,17 +126,12 @@ export default function Sidebar() {
         >
           <span className="text-sm font-bold">
             {isMinimized
-              ? isArabic
-                ? "◀"
-                : "▶"
-              : isArabic
-                ? "▶"
-                : "◀"}
+              ? isArabic ? "◀" : "▶"
+              : isArabic ? "▶" : "◀"}
           </span>
         </button>
       </div>
 
-      {/* Navigation */}
       <nav
         className="flex-1 space-y-1.5 overflow-y-auto p-3"
         aria-label={isArabic ? "القائمة الرئيسية" : "Main navigation"}
@@ -169,7 +169,6 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Language Switcher */}
       {!isMinimized && (
         <div className="border-t border-slate-200 bg-slate-50/50 p-3">
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -179,7 +178,6 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Admin Info */}
       {!isMinimized && (
         <div className="border-t border-slate-200 p-3">
           <div className="rounded-xl border border-slate-200/60 bg-slate-100/70 p-3">
@@ -189,7 +187,6 @@ export default function Sidebar() {
             >
               MAZAJ CONTROL
             </p>
-
             <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500">
               {text.adminPanel}
             </p>
