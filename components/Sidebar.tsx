@@ -54,7 +54,7 @@ const menuItems = [
     key: "customerCRM",
     labelEn: "Customer Intelligence CRM",
     labelAr: "إدارة علاقات العملاء",
-    href: "/customers",
+    href: "/customer-crm",
     icon: "👥",
   },
   {
@@ -82,7 +82,7 @@ const menuItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { language, isArabic } = useLanguage();
+  const { isArabic } = useLanguage();
   const [isMinimized, setIsMinimized] = useState(false);
 
   const text = {
@@ -126,8 +126,12 @@ export default function Sidebar() {
         >
           <span className="text-sm font-bold">
             {isMinimized
-              ? isArabic ? "◀" : "▶"
-              : isArabic ? "▶" : "◀"}
+              ? isArabic
+                ? "◀"
+                : "▶"
+              : isArabic
+                ? "▶"
+                : "◀"}
           </span>
         </button>
       </div>
