@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const result = customers.map((c) => {
       const data = aggregate.get(String(c._id));
       return { ...c, platforms: data ? [...data.platforms] : [], productHistory: data ? [...data.products.values()] : [] };
-    }).filter((c) => (!platform || c.platforms.includes(platform)) && (!productId || c.productHistory.some((p) => p.productId === productId)));
+    }).filter((c) => (!platform || c.platforms.includes(platform)) && (!productId || c.productHistory.some((p: { productId: string }) => p.productId === productId)));
     return NextResponse.json(result);
   } catch (error) {
     console.error("Customer GET error:", error);
