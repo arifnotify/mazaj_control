@@ -9,6 +9,7 @@ const OrderItemSchema = new Schema(
     },
     productName: { type: String, required: true },
     sku: { type: String, default: "" },
+    image: { type: String, default: "" },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true, min: 0 },
     lineTotal: { type: Number, required: true, min: 0 },

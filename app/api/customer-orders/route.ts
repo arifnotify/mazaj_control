@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
       }
 
       const product = await Product.findById(productId)
-        .select("_id name nameEn nameAr sku")
+        .select("_id name nameEn nameAr sku image")
         .lean();
 
       if (!product) {
@@ -176,6 +176,7 @@ export async function POST(request: NextRequest) {
         productId: product._id,
         productName,
         sku: product.sku || "",
+        image: product.image || "",
         quantity,
         unitPrice,
         lineTotal,
