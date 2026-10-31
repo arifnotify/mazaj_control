@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
       }
 
       const product = await Product.findById(productId)
-        .select("_id name nameEn nameAr sku image")
+        .select("_id name nameEn nameAr sku")
         .lean();
 
       if (!product) {
@@ -167,8 +167,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const productName =
-        product.nameEn || product.name || product.nameAr || "Unnamed Product";
+      const productName = body.language === "ar"
+        ? product.nameAr || product.nameEn || product.name || "منتج بلا اسم"
+        : product.nameEn || product.name || product.nameAr || "Unnamed Product";
 
       const lineTotal = quantity * unitPrice;
 
@@ -176,7 +177,6 @@ export async function POST(request: NextRequest) {
         productId: product._id,
         productName,
         sku: product.sku || "",
-        image: product.image || "",
         quantity,
         unitPrice,
         lineTotal,
