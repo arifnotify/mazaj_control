@@ -45,6 +45,7 @@ type Order = {
   status: string;
   orderTotal: number;
   items: {
+    productId?: string;
     productName: string;
     sku?: string;
     quantity: number;
@@ -759,7 +760,7 @@ export default function CustomerCRMPage() {
                           >
                             <td className="p-3">
                               <p className="font-semibold">
-                                {products.find((product) => product._id === item.productId) ? productName(products.find((product) => product._id === item.productId)!) : item.productName}
+                                {item.productId && products.find((product) => product._id === item.productId) ? productName(products.find((product) => product._id === item.productId)!) : item.productName}
                               </p>
                               <p className="text-xs text-slate-400">
                                 {item.sku}
@@ -902,7 +903,7 @@ export default function CustomerCRMPage() {
                             className="flex justify-between gap-3 text-sm"
                           >
                             <span>
-                              {products.find((product) => product._id === item.productId) ? productName(products.find((product) => product._id === item.productId)!) : item.productName} × {item.quantity}
+                              {item.productId && products.find((product) => product._id === item.productId) ? productName(products.find((product) => product._id === item.productId)!) : item.productName} × {item.quantity}
                             </span>
                             <span className="font-medium">
                               {money(item.lineTotal)}
