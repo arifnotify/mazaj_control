@@ -1,3 +1,4 @@
+
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
@@ -23,12 +24,12 @@ export default function EmployeesPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
+
   const [role, setRole] =
     useState<Employee["role"]>("employee");
 
-  const [editingId, setEditingId] = useState<string | null>(
-    null
-  );
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -71,6 +72,7 @@ export default function EmployeesPage() {
     setName("");
     setEmail("");
     setPhone("");
+    setPin("");
     setRole("employee");
     setEditingId(null);
   }
@@ -80,6 +82,7 @@ export default function EmployeesPage() {
     setName(employee.name);
     setEmail(employee.email);
     setPhone(employee.phone || "");
+    setPin("");
     setRole(employee.role);
 
     setError("");
@@ -109,6 +112,18 @@ export default function EmployeesPage() {
       return;
     }
 
+    // PIN required for new employee.
+    // When editing, PIN is optional.
+    if (!editingId && !/^\d{3}$/.test(pin)) {
+      setError("৩ ডিজিটের PIN দিন");
+      return;
+    }
+
+    if (pin && !/^\d{3}$/.test(pin)) {
+      setError("PIN অবশ্যই ৩ ডিজিটের হতে হবে");
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -118,17 +133,24 @@ export default function EmployeesPage() {
 
       const method = editingId ? "PUT" : "POST";
 
+      const payload: Record<string, unknown> = {
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        role,
+      };
+
+      // Send PIN only when entered
+      if (pin) {
+        payload.pin = pin;
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name,
-          email,
-          phone,
-          role,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -213,9 +235,7 @@ export default function EmployeesPage() {
       `Are you sure you want to delete "${employee.name}"?`
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
       setError("");
@@ -260,7 +280,6 @@ export default function EmployeesPage() {
     <main className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto max-w-7xl">
 
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
             Employees
@@ -273,14 +292,12 @@ export default function EmployeesPage() {
 
         <div className="grid gap-6 lg:grid-cols-3">
 
-          {/* Form */}
+          {/* Employee Form */}
           <div className="rounded-xl border bg-white p-6 shadow-sm">
 
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-xl font-semibold">
-                {editingId
-                  ? "Edit Employee"
-                  : "Add Employee"}
+                {editingId ? "Edit Employee" : "Add Employee"}
               </h2>
 
               {editingId && (
@@ -308,9 +325,7 @@ export default function EmployeesPage() {
                 <input
                   type="text"
                   value={name}
-                  onChange={(e) =>
-                    setName(e.target.value)
-                  }
+                  onChange={(e) => setName(e.target.value)}
                   placeholder="Employee name"
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-black"
                 />
@@ -325,9 +340,7 @@ export default function EmployeesPage() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) =>
-                    setEmail(e.target.value)
-                  }
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="employee@example.com"
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-black"
                 />
@@ -342,12 +355,42 @@ export default function EmployeesPage() {
                 <input
                   type="text"
                   value={phone}
-                  onChange={(e) =>
-                    setPhone(e.target.value)
-                  }
+                  onChange={(e) => setPhone(e.target.value)}
                   placeholder="+974..."
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-black"
                 />
+              </div>
+
+              {/* Employee PIN */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Employee PIN (3 Digits)
+                </label>
+
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  maxLength={3}
+                  value={pin}
+                  onChange={(e) =>
+                    setPin(
+                      e.target.value.replace(/\D/g, "").slice(0, 3)
+                    )
+                  }
+                  placeholder={
+                    editingId
+                      ? "Leave blank to keep current PIN"
+                      : "Enter 3-digit PIN"
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-black"
+                />
+
+                <p className="mt-1 text-xs text-gray-500">
+                  {editingId
+                    ? "Enter a new PIN only if you want to reset it."
+                    : "Set a 3-digit PIN for this employee."}
+                </p>
               </div>
 
               {/* Role */}
@@ -398,6 +441,7 @@ export default function EmployeesPage() {
                   ? "Update Employee"
                   : "Add Employee"}
               </button>
+
             </form>
           </div>
 
@@ -437,9 +481,7 @@ export default function EmployeesPage() {
                       <div className="flex items-center gap-4">
 
                         <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 font-semibold text-gray-700">
-                          {employee.name
-                            .charAt(0)
-                            .toUpperCase()}
+                          {employee.name.charAt(0).toUpperCase()}
                         </div>
 
                         <div>
@@ -470,9 +512,7 @@ export default function EmployeesPage() {
                                   : "bg-gray-100 text-gray-500"
                               }`}
                             >
-                              {employee.active
-                                ? "Active"
-                                : "Inactive"}
+                              {employee.active ? "Active" : "Inactive"}
                             </span>
 
                           </div>
@@ -484,9 +524,7 @@ export default function EmployeesPage() {
 
                         <button
                           type="button"
-                          onClick={() =>
-                            startEdit(employee)
-                          }
+                          onClick={() => startEdit(employee)}
                           className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
                         >
                           Edit
@@ -494,21 +532,15 @@ export default function EmployeesPage() {
 
                         <button
                           type="button"
-                          onClick={() =>
-                            toggleActive(employee)
-                          }
+                          onClick={() => toggleActive(employee)}
                           className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
                         >
-                          {employee.active
-                            ? "Disable"
-                            : "Enable"}
+                          {employee.active ? "Disable" : "Enable"}
                         </button>
 
                         <button
                           type="button"
-                          onClick={() =>
-                            deleteEmployee(employee)
-                          }
+                          onClick={() => deleteEmployee(employee)}
                           className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
                         >
                           Delete
@@ -520,6 +552,7 @@ export default function EmployeesPage() {
 
                 </div>
               )}
+
             </div>
           </div>
         </div>
