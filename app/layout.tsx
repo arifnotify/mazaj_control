@@ -1,30 +1,34 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import "./globals.css";
 
 import { LanguageProvider } from "./components/LanguageProvider";
 import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "Mazaj Nuts | Premium Nuts & Dry Fruits in Qatar",
-  description: "Discover premium nuts, dates and dry fruits at Mazaj Nuts Qatar.",
+  title: "Mazaj Control",
+  description: "Mazaj Product Management Dashboard",
 };
 
-export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const host = (await headers()).get("host")?.split(":")[0].toLowerCase() ?? "";
-  const isCustomerDomain = host === "mazajnuts.com" || host === "www.mazajnuts.com";
-
-  if (isCustomerDomain) {
-    return <html lang="en" dir="ltr"><body className="min-h-screen bg-[#fbfaf6] font-sans antialiased">{children}</body></html>;
-  }
-
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en" dir="ltr">
       <body className="min-h-screen bg-slate-50 font-sans antialiased">
         <LanguageProvider>
+          {/* মূল ফ্লেক্স কন্টেইনার - কোনো বাড়তি ফাঁকা জায়গা রাখবে না */}
           <div className="flex min-h-screen w-full">
+            {/* সাইডবার */}
             <Sidebar />
-            <div className="min-w-0 flex-1 bg-slate-50"><main className="min-h-screen w-full">{children}</main></div>
+
+            {/* মূল ড্যাশবোর্ড কনটেন্ট এলাকা */}
+            <div className="flex-1 min-w-0 bg-slate-50">
+              <main className="min-h-screen w-full">
+                {children}
+              </main>
+            </div>
           </div>
         </LanguageProvider>
       </body>
